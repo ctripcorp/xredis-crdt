@@ -1249,6 +1249,42 @@ int RM_ReplicateVerbatim(RedisModuleCtx *ctx) {
     return REDISMODULE_OK;
 }
 
+/* This function will replicate the command exactly as it was defined.
+ * Note that this function will not wrap the command into
+ * a MULTI/EXEC stanza, so it should not be mixed with other replication
+ * commands.
+ *
+ * Basically this form of replication is useful when you want to propagate
+ * the command to the slaves and AOF file exactly as it was defined,
+ * instead of wrapping it with a MULTI/EXEC transaction.
+ *
+ * The function always returns REDISMODULE_OK. */
+int RM_ReplicateStraightForward(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...) {
+    struct redisCommand *cmd;
+    robj **argv = NULL;
+    int argc = 0, flags = 0, j;
+    va_list ap;
+
+    cmd = lookupCommandByCString((char*)cmdname);
+    if (!cmd) return REDISMODULE_ERR;
+
+    /* Create the client and dispatch the command. */
+    va_start(ap, fmt);
+    argv = moduleCreateArgvFromUserFormat(cmdname,fmt,&argc,&flags,ap);
+    va_end(ap);
+    if (argv == NULL) return REDISMODULE_ERR;
+
+    /* Replicate! */
+    alsoPropagate(cmd,ctx->client->db->id,argv,argc,
+                  PROPAGATE_AOF|PROPAGATE_REPL);
+
+    /* Release the argv. */
+    for (j = 0; j < argc; j++) decrRefCount(argv[j]);
+    zfree(argv);
+    server.dirty++;
+    return REDISMODULE_OK;
+}
+
 /* --------------------------------------------------------------------------
  * DB and Key APIs -- Generic API
  * -------------------------------------------------------------------------- */
@@ -4037,4 +4073,5 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(DigestAddStringBuffer);
     REGISTER_API(DigestAddLongLong);
     REGISTER_API(DigestEndSequence);
+    REGISTER_API(ReplicateStraightForward);
 }
