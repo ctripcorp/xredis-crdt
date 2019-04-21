@@ -182,7 +182,7 @@ int REDISMODULE_API_FUNC(RedisModule_StringToDouble)(const RedisModuleString *st
 void REDISMODULE_API_FUNC(RedisModule_AutoMemory)(RedisModuleCtx *ctx);
 int REDISMODULE_API_FUNC(RedisModule_Replicate)(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...);
 int REDISMODULE_API_FUNC(RedisModule_ReplicateVerbatim)(RedisModuleCtx *ctx);
-int REDISMODULE_API_FUNC(RedisModule_ReplicateStraightForward)(RedisModuleCtx *ctx);
+int REDISMODULE_API_FUNC(RedisModule_ReplicateStraightForward)(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...);
 const char *REDISMODULE_API_FUNC(RedisModule_CallReplyStringPtr)(RedisModuleCallReply *reply, size_t *len);
 RedisModuleString *REDISMODULE_API_FUNC(RedisModule_CreateStringFromCallReply)(RedisModuleCallReply *reply);
 int REDISMODULE_API_FUNC(RedisModule_DeleteKey)(RedisModuleKey *key);
@@ -307,6 +307,7 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(AutoMemory);
     REDISMODULE_GET_API(Replicate);
     REDISMODULE_GET_API(ReplicateVerbatim);
+    REDISMODULE_GET_API(ReplicateStraightForward);
     REDISMODULE_GET_API(DeleteKey);
     REDISMODULE_GET_API(UnlinkKey);
     REDISMODULE_GET_API(StringSet);
