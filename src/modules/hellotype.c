@@ -131,7 +131,8 @@ int HelloTypeInsert_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, 
     HelloTypeInsert(hto,value);
 
     RedisModule_ReplyWithLongLong(ctx,hto->len);
-    RedisModule_ReplicateVerbatim(ctx);
+//    RedisModule_ReplicateVerbatim(ctx);
+    RedisModule_ReplicateStraightForward(ctx, "HELLOTYPE.INSERT", "ss", argv[1], argv[2]);
     return REDISMODULE_OK;
 }
 
@@ -254,7 +255,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) 
     REDISMODULE_NOT_USED(argv);
     REDISMODULE_NOT_USED(argc);
 
-    if (RedisModule_Init(ctx,"hellotype",1,REDISMODULE_APIVER_1)
+    if (RedisModule_Init(ctx,"hellotype",1,3)
         == REDISMODULE_ERR) return REDISMODULE_ERR;
 
     RedisModuleTypeMethods tm = {
