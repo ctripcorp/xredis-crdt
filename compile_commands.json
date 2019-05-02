@@ -21,6 +21,59 @@
   "file": "cluster.c"
  }, 
  {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "lstrlib.o", 
+   "lstrlib.c"
+  ], 
+  "file": "lstrlib.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/src", 
+  "arguments": [
+   "cc", 
+   "-std=c99", 
+   "-pedantic", 
+   "-DREDIS_STATIC=", 
+   "-Wall", 
+   "-W", 
+   "-Wno-missing-field-initializers", 
+   "-O2", 
+   "-g", 
+   "-ggdb", 
+   "-I../deps/hiredis", 
+   "-I../deps/linenoise", 
+   "-I../deps/lua/src", 
+   "-c", 
+   "setproctitle.c"
+  ], 
+  "file": "setproctitle.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "ltm.o", 
+   "ltm.c"
+  ], 
+  "file": "ltm.c"
+ }, 
+ {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
   "arguments": [
    "cc", 
@@ -84,6 +137,22 @@
   "file": "quicklist.c"
  }, 
  {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "lstring.o", 
+   "lstring.c"
+  ], 
+  "file": "lstring.c"
+ }, 
+ {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
   "arguments": [
    "cc", 
@@ -103,6 +172,22 @@
    "expire.c"
   ], 
   "file": "expire.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "lgc.o", 
+   "lgc.c"
+  ], 
+  "file": "lgc.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
@@ -231,6 +316,22 @@
   "file": "release.c"
  }, 
  {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "lopcodes.o", 
+   "lopcodes.c"
+  ], 
+  "file": "lopcodes.c"
+ }, 
+ {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
   "arguments": [
    "cc", 
@@ -271,6 +372,38 @@
    "crc64.c"
   ], 
   "file": "crc64.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "ldebug.o", 
+   "ldebug.c"
+  ], 
+  "file": "ldebug.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "ltable.o", 
+   "ltable.c"
+  ], 
+  "file": "ltable.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
@@ -357,6 +490,22 @@
   "file": "redis-check-rdb.c"
  }, 
  {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "lmem.o", 
+   "lmem.c"
+  ], 
+  "file": "lmem.c"
+ }, 
+ {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
   "arguments": [
    "cc", 
@@ -373,9 +522,9 @@
    "-I../deps/linenoise", 
    "-I../deps/lua/src", 
    "-c", 
-   "multi.c"
+   "sparkline.c"
   ], 
-  "file": "multi.c"
+  "file": "sparkline.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
@@ -441,6 +590,25 @@
   "file": "server.c"
  }, 
  {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/hiredis", 
+  "arguments": [
+   "cc", 
+   "-std=c99", 
+   "-pedantic", 
+   "-c", 
+   "-O3", 
+   "-fPIC", 
+   "-Wall", 
+   "-W", 
+   "-Wstrict-prototypes", 
+   "-Wwrite-strings", 
+   "-g", 
+   "-ggdb", 
+   "read.c"
+  ], 
+  "file": "read.c"
+ }, 
+ {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
   "arguments": [
    "cc", 
@@ -460,6 +628,59 @@
    "geohash.c"
   ], 
   "file": "geohash.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "luac.o", 
+   "luac.c"
+  ], 
+  "file": "luac.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/src", 
+  "arguments": [
+   "cc", 
+   "-std=c99", 
+   "-pedantic", 
+   "-DREDIS_STATIC=", 
+   "-Wall", 
+   "-W", 
+   "-Wno-missing-field-initializers", 
+   "-O2", 
+   "-g", 
+   "-ggdb", 
+   "-I../deps/hiredis", 
+   "-I../deps/linenoise", 
+   "-I../deps/lua/src", 
+   "-c", 
+   "t_string.c"
+  ], 
+  "file": "t_string.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "lobject.o", 
+   "lobject.c"
+  ], 
+  "file": "lobject.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
@@ -546,25 +767,52 @@
   "file": "siphash.c"
  }, 
  {
-  "directory": "/Users/zhuchen/Develop/c/redis/src", 
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
   "arguments": [
    "cc", 
-   "-std=c99", 
-   "-pedantic", 
-   "-DREDIS_STATIC=", 
-   "-Wall", 
-   "-W", 
-   "-Wno-missing-field-initializers", 
    "-O2", 
-   "-g", 
-   "-ggdb", 
-   "-I../deps/hiredis", 
-   "-I../deps/linenoise", 
-   "-I../deps/lua/src", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
    "-c", 
-   "sparkline.c"
+   "-o", 
+   "loadlib.o", 
+   "loadlib.c"
   ], 
-  "file": "sparkline.c"
+  "file": "loadlib.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "lua_bit.o", 
+   "lua_bit.c"
+  ], 
+  "file": "lua_bit.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "lstate.o", 
+   "lstate.c"
+  ], 
+  "file": "lstate.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
@@ -609,6 +857,22 @@
   "file": "rio.c"
  }, 
  {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "liolib.o", 
+   "liolib.c"
+  ], 
+  "file": "liolib.c"
+ }, 
+ {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
   "arguments": [
    "cc", 
@@ -628,6 +892,22 @@
    "sentinel.c"
   ], 
   "file": "sentinel.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "lua_cjson.o", 
+   "lua_cjson.c"
+  ], 
+  "file": "lua_cjson.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
@@ -651,6 +931,25 @@
   "file": "lzf_d.c"
  }, 
  {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/hiredis", 
+  "arguments": [
+   "cc", 
+   "-std=c99", 
+   "-pedantic", 
+   "-c", 
+   "-O3", 
+   "-fPIC", 
+   "-Wall", 
+   "-W", 
+   "-Wstrict-prototypes", 
+   "-Wwrite-strings", 
+   "-g", 
+   "-ggdb", 
+   "hiredis.c"
+  ], 
+  "file": "hiredis.c"
+ }, 
+ {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
   "arguments": [
    "cc", 
@@ -670,6 +969,22 @@
    "sds.c"
   ], 
   "file": "sds.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "lzio.o", 
+   "lzio.c"
+  ], 
+  "file": "lzio.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
@@ -693,25 +1008,23 @@
   "file": "notify.c"
  }, 
  {
-  "directory": "/Users/zhuchen/Develop/c/redis/src", 
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/hiredis", 
   "arguments": [
    "cc", 
    "-std=c99", 
    "-pedantic", 
-   "-DREDIS_STATIC=", 
+   "-c", 
+   "-O3", 
+   "-fPIC", 
    "-Wall", 
    "-W", 
-   "-Wno-missing-field-initializers", 
-   "-O2", 
+   "-Wstrict-prototypes", 
+   "-Wwrite-strings", 
    "-g", 
    "-ggdb", 
-   "-I../deps/hiredis", 
-   "-I../deps/linenoise", 
-   "-I../deps/lua/src", 
-   "-c", 
-   "t_string.c"
+   "net.c"
   ], 
-  "file": "t_string.c"
+  "file": "net.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
@@ -819,6 +1132,25 @@
   "file": "adlist.c"
  }, 
  {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/hiredis", 
+  "arguments": [
+   "cc", 
+   "-std=c99", 
+   "-pedantic", 
+   "-c", 
+   "-O3", 
+   "-fPIC", 
+   "-Wall", 
+   "-W", 
+   "-Wstrict-prototypes", 
+   "-Wwrite-strings", 
+   "-g", 
+   "-ggdb", 
+   "async.c"
+  ], 
+  "file": "async.c"
+ }, 
+ {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
   "arguments": [
    "cc", 
@@ -859,6 +1191,22 @@
    "sort.c"
   ], 
   "file": "sort.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "ldblib.o", 
+   "ldblib.c"
+  ], 
+  "file": "ldblib.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
@@ -924,6 +1272,22 @@
   "file": "config.c"
  }, 
  {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "lmathlib.o", 
+   "lmathlib.c"
+  ], 
+  "file": "lmathlib.c"
+ }, 
+ {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
   "arguments": [
    "cc", 
@@ -943,6 +1307,54 @@
    "geohash_helper.c"
   ], 
   "file": "geohash_helper.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "lvm.o", 
+   "lvm.c"
+  ], 
+  "file": "lvm.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "lfunc.o", 
+   "lfunc.c"
+  ], 
+  "file": "lfunc.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "lbaselib.o", 
+   "lbaselib.c"
+  ], 
+  "file": "lbaselib.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
@@ -987,6 +1399,34 @@
   "file": "rdb.c"
  }, 
  {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "lundump.o", 
+   "lundump.c"
+  ], 
+  "file": "lundump.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/linenoise", 
+  "arguments": [
+   "cc", 
+   "-Wall", 
+   "-Os", 
+   "-g", 
+   "-c", 
+   "linenoise.c"
+  ], 
+  "file": "linenoise.c"
+ }, 
+ {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
   "arguments": [
    "cc", 
@@ -1029,6 +1469,22 @@
   "file": "t_list.c"
  }, 
  {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "strbuf.o", 
+   "strbuf.c"
+  ], 
+  "file": "strbuf.c"
+ }, 
+ {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
   "arguments": [
    "cc", 
@@ -1048,6 +1504,38 @@
    "lzf_c.c"
   ], 
   "file": "lzf_c.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "print.o", 
+   "print.c"
+  ], 
+  "file": "print.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "fpconv.o", 
+   "fpconv.c"
+  ], 
+  "file": "fpconv.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
@@ -1071,6 +1559,54 @@
   "file": "anet.c"
  }, 
  {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "loslib.o", 
+   "loslib.c"
+  ], 
+  "file": "loslib.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "llex.o", 
+   "llex.c"
+  ], 
+  "file": "llex.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "linit.o", 
+   "linit.c"
+  ], 
+  "file": "linit.c"
+ }, 
+ {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
   "arguments": [
    "cc", 
@@ -1090,6 +1626,22 @@
    "latency.c"
   ], 
   "file": "latency.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "lua_struct.o", 
+   "lua_struct.c"
+  ], 
+  "file": "lua_struct.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
@@ -1155,6 +1707,38 @@
   "file": "rax.c"
  }, 
  {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "ltablib.o", 
+   "ltablib.c"
+  ], 
+  "file": "ltablib.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "lua_cmsgpack.o", 
+   "lua_cmsgpack.c"
+  ], 
+  "file": "lua_cmsgpack.c"
+ }, 
+ {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
   "arguments": [
    "cc", 
@@ -1197,6 +1781,22 @@
   "file": "util.c"
  }, 
  {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "lcode.o", 
+   "lcode.c"
+  ], 
+  "file": "lcode.c"
+ }, 
+ {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
   "arguments": [
    "cc", 
@@ -1234,9 +1834,9 @@
    "-I../deps/linenoise", 
    "-I../deps/lua/src", 
    "-c", 
-   "setproctitle.c"
+   "multi.c"
   ], 
-  "file": "setproctitle.c"
+  "file": "multi.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
@@ -1258,6 +1858,38 @@
    "zipmap.c"
   ], 
   "file": "zipmap.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "lparser.o", 
+   "lparser.c"
+  ], 
+  "file": "lparser.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "lapi.o", 
+   "lapi.c"
+  ], 
+  "file": "lapi.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
@@ -1386,6 +2018,57 @@
   "file": "ziplist.c"
  }, 
  {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "lua.o", 
+   "lua.c"
+  ], 
+  "file": "lua.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "ldo.o", 
+   "ldo.c"
+  ], 
+  "file": "ldo.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/hiredis", 
+  "arguments": [
+   "cc", 
+   "-std=c99", 
+   "-pedantic", 
+   "-c", 
+   "-O3", 
+   "-fPIC", 
+   "-Wall", 
+   "-W", 
+   "-Wstrict-prototypes", 
+   "-Wwrite-strings", 
+   "-g", 
+   "-ggdb", 
+   "sds.c"
+  ], 
+  "file": "sds.c"
+ }, 
+ {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
   "arguments": [
    "cc", 
@@ -1407,6 +2090,22 @@
   "file": "pqsort.c"
  }, 
  {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "ldump.o", 
+   "ldump.c"
+  ], 
+  "file": "ldump.c"
+ }, 
+ {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
   "arguments": [
    "cc", 
@@ -1426,5 +2125,21 @@
    "blocked.c"
   ], 
   "file": "blocked.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "lauxlib.o", 
+   "lauxlib.c"
+  ], 
+  "file": "lauxlib.c"
  }
 ]

@@ -1412,8 +1412,10 @@ void *RM_OpenKey(RedisModuleCtx *ctx, robj *keyname, int mode) {
     robj *value;
 
     if (mode & REDISMODULE_WRITE) {
+        serverLog(LL_WARNING, "before open write key");
         value = lookupKeyWrite(ctx->client->db,keyname);
     } else {
+        serverLog(LL_WARNING, "before open read key");
         value = lookupKeyRead(ctx->client->db,keyname);
         if (value == NULL) {
             return NULL;
@@ -3820,6 +3822,7 @@ void moduleUnregisterCommands(struct RedisModule *module) {
 /* Load a module and initialize it. On success C_OK is returned, otherwise
  * C_ERR is returned. */
 int moduleLoad(const char *path, void **module_argv, int module_argc) {
+    serverLog(LL_WARNING, "Module %s begin to load", path);
     int (*onload)(void *, void **, int);
     void *handle;
     RedisModuleCtx ctx = REDISMODULE_CTX_INIT;
@@ -3829,6 +3832,7 @@ int moduleLoad(const char *path, void **module_argv, int module_argc) {
         serverLog(LL_WARNING, "Module %s failed to load: %s", path, dlerror());
         return C_ERR;
     }
+    serverLog(LL_WARNING, "Module %s before dynamic link", path);
     onload = (int (*)(void *, void **, int))(unsigned long) dlsym(handle,"RedisModule_OnLoad");
     if (onload == NULL) {
         serverLog(LL_WARNING,
