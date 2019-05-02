@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CLionExternalBuildManager">
+    <target id="49f09831-434a-4458-9b20-fa04f1feaa71" name="redis" projectName="redis">
+      <configuration id="6883e6c2-43b4-4495-bba0-f8b673897fa2" name="redis" toolchainName="Default">
+        <build type="TOOL">
+          <tool actionId="Tool_External Tools_build_with_make" />
+        </build>
+        <clean type="TOOL">
+          <tool actionId="Tool_External Tools_clean_with_make" />
+        </clean>
+      </configuration>
+    </target>
+  </component>
+</project>

@@ -35,3 +35,21 @@ deps/lua/src/liblua.a
 .prerequisites
 *.dSYM
 Makefile.dep
+
+*.o
+*.so
+*.pyc
+*.a
+.vscode/
+__pycache__
+.cproject
+.project
+.pydevproject
+.settings/
+venv/
+.idea/
+.DS_Store
+ tests/.cache/
+cmake-build-debug/
+compile_commands.json
+~                       
