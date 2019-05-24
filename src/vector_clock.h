@@ -33,4 +33,36 @@
 #ifndef REDIS_VECTOR_CLOCK_H
 #define REDIS_VECTOR_CLOCK_H
 
+#include "sds.h"
+
+// "<gid>:<clock>;<gid>:<clock>"
+#define VECTOR_CLOCK_SEPARATOR ";"
+#define VECTOR_CLOCK_UNIT_SEPARATOR ":"
+
+#define min(x, y) x > y ? y : x
+
+#define max(x, y) x > y ? x : y
+
+typedef struct VectorClockUnit {
+    long long gid;
+    long long logic_time;
+}VectorClockUnit;
+
+typedef struct VectorClock {
+    VectorClockUnit *clocks;
+    int length;
+}VectorClock;
+
+VectorClock *newVectorClock(int numVcUnits);
+void freeVectorClock(VectorClock *vc);
+void addVectorClockUnit(VectorClock *vc, long long gid, long long logic_time);
+VectorClock *dupVectorClock(VectorClock *vc);
+
+VectorClock *convertSdsToVectorClock(sds vcStr);
+sds convertVectorClockToSds(VectorClock *vc);
+
+void sortVectorClock(VectorClock *vc);
+VectorClock *mergeVectorClock(VectorClock *vc1, VectorClock *vc2);
+
+
 #endif //REDIS_VECTOR_CLOCK_H
