@@ -51,5 +51,4 @@ venv/
 .DS_Store
  tests/.cache/
 cmake-build-debug/
-compile_commands.json
-~                       
+compile_commands.json                       
