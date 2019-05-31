@@ -33,53 +33,53 @@
 /* Open a child-parent channel used in order to move information about the
  * RDB / AOF saving process from the child to the parent (for instance
  * the amount of copy on write memory used) */
-void openChildInfoPipe(void) {
-    if (pipe(server.child_info_pipe) == -1) {
+void openChildInfoPipe(struct redisServer s) {
+    if (pipe(s.child_info_pipe) == -1) {
         /* On error our two file descriptors should be still set to -1,
          * but we call anyway cloesChildInfoPipe() since can't hurt. */
-        closeChildInfoPipe();
-    } else if (anetNonBlock(NULL,server.child_info_pipe[0]) != ANET_OK) {
-        closeChildInfoPipe();
+        closeChildInfoPipe(s);
+    } else if (anetNonBlock(NULL,s.child_info_pipe[0]) != ANET_OK) {
+        closeChildInfoPipe(s);
     } else {
-        memset(&server.child_info_data,0,sizeof(server.child_info_data));
+        memset(&s.child_info_data,0,sizeof(s.child_info_data));
     }
 }
 
 /* Close the pipes opened with openChildInfoPipe(). */
-void closeChildInfoPipe(void) {
-    if (server.child_info_pipe[0] != -1 ||
-        server.child_info_pipe[1] != -1)
+void closeChildInfoPipe(struct redisServer s) {
+    if (s.child_info_pipe[0] != -1 ||
+        s.child_info_pipe[1] != -1)
     {
-        close(server.child_info_pipe[0]);
-        close(server.child_info_pipe[1]);
-        server.child_info_pipe[0] = -1;
-        server.child_info_pipe[1] = -1;
+        close(s.child_info_pipe[0]);
+        close(s.child_info_pipe[1]);
+        s.child_info_pipe[0] = -1;
+        s.child_info_pipe[1] = -1;
     }
 }
 
 /* Send COW data to parent. The child should call this function after populating
  * the corresponding fields it want to sent (according to the process type). */
-void sendChildInfo(int ptype) {
-    if (server.child_info_pipe[1] == -1) return;
-    server.child_info_data.magic = CHILD_INFO_MAGIC;
-    server.child_info_data.process_type = ptype;
-    ssize_t wlen = sizeof(server.child_info_data);
-    if (write(server.child_info_pipe[1],&server.child_info_data,wlen) != wlen) {
+void sendChildInfo(int process_type, struct redisServer s) {
+    if (s.child_info_pipe[1] == -1) return;
+    s.child_info_data.magic = CHILD_INFO_MAGIC;
+    s.child_info_data.process_type = process_type;
+    ssize_t wlen = sizeof(s.child_info_data);
+    if (write(s.child_info_pipe[1],&s.child_info_data,wlen) != wlen) {
         /* Nothing to do on error, this will be detected by the other side. */
     }
 }
 
 /* Receive COW data from parent. */
-void receiveChildInfo(void) {
-    if (server.child_info_pipe[0] == -1) return;
-    ssize_t wlen = sizeof(server.child_info_data);
-    if (read(server.child_info_pipe[0],&server.child_info_data,wlen) == wlen &&
-        server.child_info_data.magic == CHILD_INFO_MAGIC)
+void receiveChildInfo(struct redisServer s) {
+    if (s.child_info_pipe[0] == -1) return;
+    ssize_t wlen = sizeof(s.child_info_data);
+    if (read(s.child_info_pipe[0],&s.child_info_data,wlen) == wlen &&
+        s.child_info_data.magic == CHILD_INFO_MAGIC)
     {
-        if (server.child_info_data.process_type == CHILD_INFO_TYPE_RDB) {
-            server.stat_rdb_cow_bytes = server.child_info_data.cow_size;
-        } else if (server.child_info_data.process_type == CHILD_INFO_TYPE_AOF) {
-            server.stat_aof_cow_bytes = server.child_info_data.cow_size;
+        if (s.child_info_data.process_type == CHILD_INFO_TYPE_RDB) {
+            s.stat_rdb_cow_bytes = s.child_info_data.cow_size;
+        } else if (s.child_info_data.process_type == CHILD_INFO_TYPE_AOF) {
+            s.stat_aof_cow_bytes = s.child_info_data.cow_size;
         }
     }
 }

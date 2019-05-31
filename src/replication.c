@@ -398,8 +398,8 @@ long long addReplyReplicationBacklog(client *c, long long offset) {
  * from the slave. The returned value is only valid immediately after
  * the BGSAVE process started and before executing any other command
  * from clients. */
-long long getPsyncInitialOffset(void) {
-    return server.master_repl_offset;
+long long getPsyncInitialOffset(struct redisServer s) {
+    return s.master_repl_offset;
 }
 
 /* Send a FULLRESYNC reply in the specific case of a full resynchronization,
@@ -615,7 +615,7 @@ int startBgsaveForReplication(int mincapa) {
 
             if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) {
                     replicationSetupSlaveForFullResync(slave,
-                            getPsyncInitialOffset());
+                            getPsyncInitialOffset(server));
             }
         }
     }
