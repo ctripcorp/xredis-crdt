@@ -72,6 +72,7 @@ typedef long long mstime_t; /* millisecond time type. */
 #include "sha1.h"
 #include "endianconv.h"
 #include "crc64.h"
+#include "vector_clock.h"
 
 
 /* Error codes */
@@ -250,6 +251,8 @@ typedef long long mstime_t; /* millisecond time type. */
 #define CLIENT_LUA_DEBUG (1<<25)  /* Run EVAL in debug mode. */
 #define CLIENT_LUA_DEBUG_SYNC (1<<26)  /* EVAL debugging without fork() */
 #define CLIENT_MODULE (1<<27) /* Non connected client used by some module. */
+#define CLIENT_CRDT_SLAVE (1<<28) /*Client is acting as a CRDT Slave to sync data from me*/
+#define CLIENT_CRDT_MASTER (1<<29) /*Client is acting as a CRDT Master that I receive data from it*/
 
 /* Client block type (btype field in client structure)
  * if CLIENT_BLOCKED flag is set. */
@@ -268,7 +271,10 @@ typedef long long mstime_t; /* millisecond time type. */
 #define CLIENT_TYPE_SLAVE 1  /* Slaves. */
 #define CLIENT_TYPE_PUBSUB 2 /* Clients subscribed to PubSub channels. */
 #define CLIENT_TYPE_MASTER 3 /* Master. */
-#define CLIENT_TYPE_OBUF_COUNT 3 /* Number of clients to expose to output
+
+#define CLIENT_TYPE_CRDT_SLAVE 4 /* A CRDT Slave. */
+#define CLIENT_TYPE_CRDT_MASTER 5 /* A CRDT Master. */
+#define CLIENT_TYPE_OBUF_COUNT 5 /* Number of clients to expose to output
                                     buffer configuration. Just the first
                                     three: normal, slave, pubsub. */
 
@@ -408,6 +414,7 @@ typedef long long mstime_t; /* millisecond time type. */
 #define PROPAGATE_NONE 0
 #define PROPAGATE_AOF 1
 #define PROPAGATE_REPL 2
+#define PROPAGATE_CRDT_REPL (1<<2)
 
 /* RDB active child save type. */
 #define RDB_CHILD_TYPE_NONE 0
@@ -489,6 +496,8 @@ typedef void (*moduleTypeRewriteFunc)(struct RedisModuleIO *io, struct redisObje
 typedef void (*moduleTypeDigestFunc)(struct RedisModuleDigest *digest, void *value);
 typedef size_t (*moduleTypeMemUsageFunc)(const void *value);
 typedef void (*moduleTypeFreeFunc)(void *value);
+typedef size_t (*moduleTypeCrdtMergableFunc)(sds vectorClock, const void *value);
+typedef void (*moduleTypeCrdtMergeFunc)(struct redisObject *key, void *value);
 
 /* The module type, which is referenced in each value of a given type, defines
  * the methods and links to the module exporting the type. */
@@ -501,6 +510,8 @@ typedef struct RedisModuleType {
     moduleTypeMemUsageFunc mem_usage;
     moduleTypeDigestFunc digest;
     moduleTypeFreeFunc free;
+    moduleTypeCrdtMergableFunc is_mergable;
+    moduleTypeCrdtMergeFunc crdt_mergeFunc;
     char name[10]; /* 9 bytes name + null term. Charset: A-Z a-z 0-9 _- */
 } moduleType;
 
@@ -1203,6 +1214,12 @@ struct redisServer {
     pthread_mutex_t lruclock_mutex;
     pthread_mutex_t next_client_id_mutex;
     pthread_mutex_t unixtime_mutex;
+
+    /*crdt stuff*/
+    long long crdt_gid;
+    VectorClock *vectorClock;
+    VectorClockUnit *localVcu;
+    struct CRDT_Server_Replication *crdt_repl_server;
 };
 
 typedef struct pubsubPattern {
@@ -1290,6 +1307,7 @@ typedef struct {
  *----------------------------------------------------------------------------*/
 
 extern struct redisServer server;
+extern struct redisServer crdtServer;
 extern struct sharedObjectsStruct shared;
 extern dictType objectKeyPointerValueDictType;
 extern dictType setDictType;
@@ -1503,13 +1521,16 @@ int replicationCountAcksByOffset(long long offset);
 void replicationSendNewlineToMaster(void);
 long long replicationGetSlaveOffset(void);
 char *replicationGetSlaveName(client *c);
-long long getPsyncInitialOffset(void);
+long long getPsyncInitialOffset(struct redisServer s);
 int replicationSetupSlaveForFullResync(client *slave, long long offset);
 void changeReplicationId(void);
 void clearReplicationId2(void);
 void chopReplicationBacklog(void);
 void replicationCacheMasterUsingMyself(void);
 void feedReplicationBacklog(void *ptr, size_t len);
+
+/* CRDT Replications */
+void crdtReplicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc);
 
 /* Generic persistence functions */
 void startLoading(FILE *fp);
@@ -1534,10 +1555,10 @@ unsigned long aofRewriteBufferSize(void);
 ssize_t aofReadDiffFromParent(void);
 
 /* Child info */
-void openChildInfoPipe(void);
-void closeChildInfoPipe(void);
-void sendChildInfo(int process_type);
-void receiveChildInfo(void);
+void openChildInfoPipe(struct redisServer s);
+void closeChildInfoPipe(struct redisServer s);
+void sendChildInfo(int process_type, struct redisServer s);
+void receiveChildInfo(struct redisServer s);
 
 /* Sorted sets data type */
 
