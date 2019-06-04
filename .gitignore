@@ -1,4 +1,5 @@
 Debug
+compile_commands.json
 *.tar.gz
 .cproject
 .project
@@ -51,4 +52,3 @@ venv/
 .DS_Store
  tests/.cache/
 cmake-build-debug/
-compile_commands.json                       
