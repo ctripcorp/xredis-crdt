@@ -33,4 +33,42 @@
 #ifndef REDIS_CRDT_RDB_H
 #define REDIS_CRDT_RDB_H
 
+#include "server.h"
+
+typedef struct crdtRdbSaveInfo {
+    /* Used saving and loading. */
+    int repl_stream_db;  /* DB to select in server.master client. */
+
+    /* Used only loading. */
+    int repl_id_is_set;  /* True if repl_id field is set. */
+    char repl_id[CONFIG_RUN_ID_SIZE+1];     /* Replication ID. */
+    long long repl_offset;                  /* Replication offset. */
+
+    /* CRDT Specialized param */
+    VectorClock *vc;
+} crdtRdbSaveInfo;
+
+#define RDB_SAVE_INFO_INIT {-1,0,"000000000000000000000000000000",-1}
+
+
+void
+crdtMergeCommand(client *c);
+
+int
+crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi);
+
+int
+crdtRdbSaveKeyValuePair(rio *rdb, robj *key, robj *val, long long expiretime);
+
+int
+crdtRdbSaveObject(rio *rdb, robj *val);
+
+int
+rdbSaveToCrdtSlavesSockets(crdtRdbSaveInfo *rsi);
+
+int
+rdbSaveRioWithCrdtMerge(rio *rdb, int *error, crdtRdbSaveInfo *rsi);
+
+
+
 #endif //REDIS_CRDT_RDB_H
