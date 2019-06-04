@@ -33,6 +33,7 @@
 #include "bio.h"
 #include "latency.h"
 #include "atomicvar.h"
+#include "crdt_replication.h"
 
 #include <time.h>
 #include <signal.h>
@@ -56,6 +57,7 @@
 #include <locale.h>
 #include <sys/socket.h>
 
+
 /* Our shared "common" objects */
 
 struct sharedObjectsStruct shared;
@@ -70,6 +72,7 @@ double R_Zero, R_PosInf, R_NegInf, R_Nan;
 
 /* Global vars */
 struct redisServer server; /* Server global state */
+struct redisServer crdtServer;
 volatile unsigned long lru_clock; /* Server global current LRU time. */
 
 /* Our command table.
@@ -306,8 +309,23 @@ struct redisCommand redisCommandTable[] = {
     {"pfdebug",pfdebugCommand,-3,"w",0,NULL,0,0,0,0,0},
     {"post",securityWarningCommand,-1,"lt",0,NULL,0,0,0,0,0},
     {"host:",securityWarningCommand,-1,"lt",0,NULL,0,0,0,0,0},
-    {"latency",latencyCommand,-2,"aslt",0,NULL,0,0,0,0,0}
+    {"latency",latencyCommand,-2,"aslt",0,NULL,0,0,0,0,0},
+    {"crdt.psync",crdtPSyncCommand,3,"ars",0,NULL,0,0,0,0,0},
+    {"crdt.replconf",crdtReplconfCommand,3,"ars",0,NULL,0,0,0,0,0}
+
 };
+
+/*============================ CRDT functions ============================ */
+
+VectorClockUnit*
+getLocalVcUnit() {
+    return crdtServer.localVcu;
+}
+
+void
+incrLocalVcUnit(long delta) {
+    crdtServer.localVcu->logic_time += delta;
+}
 
 /*============================ Utility functions ============================ */
 
@@ -1065,10 +1083,10 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
                     (int) server.aof_child_pid);
             } else if (pid == server.rdb_child_pid) {
                 backgroundSaveDoneHandler(exitcode,bysignal);
-                if (!bysignal && exitcode == 0) receiveChildInfo();
+                if (!bysignal && exitcode == 0) receiveChildInfo(server);
             } else if (pid == server.aof_child_pid) {
                 backgroundRewriteDoneHandler(exitcode,bysignal);
-                if (!bysignal && exitcode == 0) receiveChildInfo();
+                if (!bysignal && exitcode == 0) receiveChildInfo(server);
             } else {
                 if (!ldbRemoveChild(pid)) {
                     serverLog(LL_WARNING,
@@ -1077,7 +1095,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
                 }
             }
             updateDictResizePolicy();
-            closeChildInfoPipe();
+            closeChildInfoPipe(server);
         }
     } else {
         /* If there is not a background saving/rewrite in progress check if
@@ -1911,6 +1929,8 @@ void initServer(void) {
     server.aof_last_write_status = C_OK;
     server.aof_last_write_errno = 0;
     server.repl_good_slaves_count = 0;
+
+    crdtInitServer();
     updateCachedTime();
 
     /* Create the timer callback, this is our way to process many background
@@ -2112,6 +2132,8 @@ void propagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
         feedAppendOnlyFile(cmd,dbid,argv,argc);
     if (flags & PROPAGATE_REPL)
         replicationFeedSlaves(server.slaves,dbid,argv,argc);
+    if (flags & PROPAGATE_CRDT_REPL)
+        crdtReplicationFeedSlaves(server.crdt_repl_server->slaves, dbid, argv, argc);
 }
 
 /* Used inside commands to schedule the propagation of additional commands

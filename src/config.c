@@ -95,7 +95,9 @@ configEnum aof_fsync_enum[] = {
 clientBufferLimitsConfig clientBufferLimitsDefaults[CLIENT_TYPE_OBUF_COUNT] = {
     {0, 0, 0}, /* normal */
     {1024*1024*256, 1024*1024*64, 60}, /* slave */
-    {1024*1024*32, 1024*1024*8, 60}  /* pubsub */
+    {1024*1024*32, 1024*1024*8, 60},  /* pubsub */
+    {0, 0, 0}, /* escape master */
+    {1024*1024*256, 1024*1024*64, 60}, /* crdt slave */
 };
 
 /*-----------------------------------------------------------------------------
@@ -730,6 +732,12 @@ void loadServerConfigFromString(char *config) {
                 err = sentinelHandleConfiguration(argv+1,argc-1);
                 if (err) goto loaderr;
             }
+        } else if (!strcasecmp(argv[0],"crdt.gid")) {
+            // server.crdt_gid is used for crdt module
+            server.crdt_gid = atoll(argv[1]);
+            if (server.crdt_gid < 0) {
+                err = "Invalid value for crdt_gid."; goto loaderr;
+            }
         } else {
             err = "Bad directive or wrong number of arguments"; goto loaderr;
         }
@@ -1098,6 +1106,8 @@ void configSetCommand(client *c) {
     } config_set_numerical_field(
       "repl-backlog-ttl",server.repl_backlog_time_limit,0,LLONG_MAX) {
     } config_set_numerical_field(
+      "crdt.gid",server.crdt_gid,0,LLONG_MAX) {
+    }config_set_numerical_field(
       "repl-diskless-sync-delay",server.repl_diskless_sync_delay,0,LLONG_MAX) {
     } config_set_numerical_field(
       "slave-priority",server.slave_priority,0,LLONG_MAX) {
@@ -1109,7 +1119,7 @@ void configSetCommand(client *c) {
     } config_set_numerical_field(
       "min-slaves-max-lag",server.repl_min_slaves_max_lag,0,LLONG_MAX) {
         refreshGoodSlavesCount();
-    } config_set_numerical_field(
+    }  config_set_numerical_field(
       "cluster-node-timeout",server.cluster_node_timeout,0,LLONG_MAX) {
     } config_set_numerical_field(
       "cluster-announce-port",server.cluster_announce_port,0,65535) {
@@ -1292,6 +1302,8 @@ void configGetCommand(client *c) {
     config_get_numerical_field("cluster-slave-validity-factor",server.cluster_slave_validity_factor);
     config_get_numerical_field("repl-diskless-sync-delay",server.repl_diskless_sync_delay);
     config_get_numerical_field("tcp-keepalive",server.tcpkeepalive);
+    // server.crdt_gid
+    config_get_numerical_field("crdt.gid", server.crdt_gid);
 
     /* Bool (yes/no) values */
     config_get_bool_field("cluster-require-full-coverage",

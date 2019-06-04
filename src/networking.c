@@ -1848,6 +1848,8 @@ int getClientTypeByName(char *name) {
     else if (!strcasecmp(name,"slave")) return CLIENT_TYPE_SLAVE;
     else if (!strcasecmp(name,"pubsub")) return CLIENT_TYPE_PUBSUB;
     else if (!strcasecmp(name,"master")) return CLIENT_TYPE_MASTER;
+    else if (!strcasecmp(name,"crdt.slave")) return CLIENT_TYPE_CRDT_SLAVE;
+    else if (!strcasecmp(name,"crdt.master")) return CLIENT_TYPE_CRDT_MASTER;
     else return -1;
 }
 
@@ -1857,6 +1859,8 @@ char *getClientTypeName(int class) {
     case CLIENT_TYPE_SLAVE:  return "slave";
     case CLIENT_TYPE_PUBSUB: return "pubsub";
     case CLIENT_TYPE_MASTER: return "master";
+    case CLIENT_TYPE_CRDT_SLAVE: return "crdt.slave";
+    case CLIENT_TYPE_CRDT_MASTER: return "crdt.master";
     default:                       return NULL;
     }
 }

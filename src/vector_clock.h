@@ -53,16 +53,40 @@ typedef struct VectorClock {
     int length;
 }VectorClock;
 
-VectorClock *newVectorClock(int numVcUnits);
-void freeVectorClock(VectorClock *vc);
-void addVectorClockUnit(VectorClock *vc, long long gid, long long logic_time);
-VectorClock *dupVectorClock(VectorClock *vc);
+/**------------------------Vector Clock Lifecycle--------------------------------------*/
+VectorClock*
+newVectorClock(int numVcUnits);
 
-VectorClock *convertSdsToVectorClock(sds vcStr);
-sds convertVectorClockToSds(VectorClock *vc);
+void
+freeVectorClock(VectorClock *vc);
 
-void sortVectorClock(VectorClock *vc);
-VectorClock *mergeVectorClock(VectorClock *vc1, VectorClock *vc2);
+void
+addVectorClockUnit(VectorClock *vc, long long gid, long long logic_time);
 
+VectorClock*
+dupVectorClock(VectorClock *vc);
+
+/**------------------------Vector Clock & sds convertion--------------------------------------*/
+VectorClock*
+convertSdsToVectorClock(sds vcStr);
+
+sds
+convertVectorClockToSds(VectorClock *vc);
+
+/**------------------------Vector Clock Util--------------------------------------*/
+void
+sortVectorClock(VectorClock *vc);
+
+VectorClock*
+mergeVectorClock(VectorClock *vc1, VectorClock *vc2);
+
+VectorClockUnit*
+getVectorClockUnit(VectorClock *vc, long long gid);
+
+VectorClockUnit*
+getLocalVcUnit();
+
+void
+incrLocalVcUnit(long delta);
 
 #endif //REDIS_VECTOR_CLOCK_H
