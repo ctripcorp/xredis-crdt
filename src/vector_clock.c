@@ -160,7 +160,8 @@ getVectorClockUnit(VectorClock *vc, long long gid) {
     return NULL;
 }
 
-VectorClock *mergeVectorClock(VectorClock *vc1, VectorClock *vc2) {
+VectorClock*
+mergeVectorClock(VectorClock *vc1, VectorClock *vc2) {
     VectorClock *result = dupVectorClock(vc1);
     for(int i = 0; i < vc2->length; i++) {
         VectorClockUnit *target;
@@ -174,13 +175,15 @@ VectorClock *mergeVectorClock(VectorClock *vc1, VectorClock *vc2) {
 }
 
 
+
+
+
 #if defined(VECTOR_CLOCK_TEST_MAIN)
 #include <stdio.h>
 #include <stdlib.h>
 #include "testhelp.h"
 #include "limits.h"
 
-#define UNUSED(x) (void)(x)
 
 int testSdsConvert2VectorClockUnit(void) {
     printf("========[testSdsConvert2VectorClockUnit]==========\r\n");
