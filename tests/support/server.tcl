@@ -158,6 +158,7 @@ proc start_server {options {code undefined}} {
 
     # setup defaults
     set baseconfig "default.conf"
+    set module ""
     set overrides {}
     set tags {}
 
@@ -171,6 +172,8 @@ proc start_server {options {code undefined}} {
             "tags" {
                 set tags $value
                 set ::tags [concat $::tags $value] }
+            "module" {
+                set module $value }
             default {
                 error "Unknown option $option" }
         }
@@ -185,6 +188,14 @@ proc start_server {options {code undefined}} {
             set arguments [lrange $elements 1 end]
             dict set config $directive $arguments
         }
+    }
+
+    #add redis module
+    if {$module ne ""} {
+        set module_path [exec pwd]
+        append module_path "/tests/assets/"
+        append module_path $module
+        dict set config loadmodule $module_path
     }
 
     # use a different directory every time a server is started
