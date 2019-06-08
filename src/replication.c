@@ -126,34 +126,34 @@ void freeReplicationBacklog(void) {
  * This function also increments the global replication offset stored at
  * server.master_repl_offset, because there is no case where we want to feed
  * the backlog without incrementing the offset. */
-void feedReplicationBacklog(void *ptr, size_t len) {
+void feedReplicationBacklog(struct redisServer *srv, void *ptr, size_t len) {
     unsigned char *p = ptr;
 
-    server.master_repl_offset += len;
+    srv->master_repl_offset += len;
 
     /* This is a circular buffer, so write as much data we can at every
      * iteration and rewind the "idx" index if we reach the limit. */
     while(len) {
-        size_t thislen = server.repl_backlog_size - server.repl_backlog_idx;
+        size_t thislen = srv->repl_backlog_size - srv->repl_backlog_idx;
         if (thislen > len) thislen = len;
-        memcpy(server.repl_backlog+server.repl_backlog_idx,p,thislen);
-        server.repl_backlog_idx += thislen;
-        if (server.repl_backlog_idx == server.repl_backlog_size)
-            server.repl_backlog_idx = 0;
+        memcpy(srv->repl_backlog+srv->repl_backlog_idx,p,thislen);
+        srv->repl_backlog_idx += thislen;
+        if (srv->repl_backlog_idx == srv->repl_backlog_size)
+            srv->repl_backlog_idx = 0;
         len -= thislen;
         p += thislen;
-        server.repl_backlog_histlen += thislen;
+        srv->repl_backlog_histlen += thislen;
     }
-    if (server.repl_backlog_histlen > server.repl_backlog_size)
-        server.repl_backlog_histlen = server.repl_backlog_size;
+    if (srv->repl_backlog_histlen > srv->repl_backlog_size)
+        srv->repl_backlog_histlen = srv->repl_backlog_size;
     /* Set the offset of the first byte we have in the backlog. */
-    server.repl_backlog_off = server.master_repl_offset -
-                              server.repl_backlog_histlen + 1;
+    srv->repl_backlog_off = srv->master_repl_offset -
+                              srv->repl_backlog_histlen + 1;
 }
 
 /* Wrapper for feedReplicationBacklog() that takes Redis string objects
  * as input. */
-void feedReplicationBacklogWithObject(robj *o) {
+void feedReplicationBacklogWithObject(struct redisServer *srv, robj *o) {
     char llstr[LONG_STR_SIZE];
     void *p;
     size_t len;
@@ -165,7 +165,7 @@ void feedReplicationBacklogWithObject(robj *o) {
         len = sdslen(o->ptr);
         p = o->ptr;
     }
-    feedReplicationBacklog(p,len);
+    feedReplicationBacklog(srv, p,len);
 }
 
 /* Propagate write commands to slaves, and populate the replication backlog
@@ -173,28 +173,30 @@ void feedReplicationBacklogWithObject(robj *o) {
  * the commands received by our clients in order to create the replication
  * stream. Instead if the instance is a slave and has sub-slaves attached,
  * we use replicationFeedSlavesFromMaster() */
-void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
+void replicationFeedSlaves(struct redisServer *srv, list *slaves, int dictid, robj **argv, int argc) {
     listNode *ln;
     listIter li;
     int j, len;
     char llstr[LONG_STR_SIZE];
 
-    /* If the instance is not a top level master, return ASAP: we'll just proxy
-     * the stream of data we receive from our master instead, in order to
-     * propagate *identical* replication stream. In this way this slave can
-     * advertise the same replication ID as the master (since it shares the
-     * master replication history and has the same backlog and offsets). */
-    if (server.masterhost != NULL && !server.repl_slave_repl_all) return;
+    if(srv == &server) {
+        /* If the instance is not a top level master, return ASAP: we'll just proxy
+         * the stream of data we receive from our master instead, in order to
+         * propagate *identical* replication stream. In this way this slave can
+         * advertise the same replication ID as the master (since it shares the
+         * master replication history and has the same backlog and offsets). */
+        if (srv->masterhost != NULL && !srv->repl_slave_repl_all) return;
+    }
 
     /* If there aren't slaves, and there is no backlog buffer to populate,
      * we can return ASAP. */
-    if (server.repl_backlog == NULL && listLength(slaves) == 0) return;
+    if (srv->repl_backlog == NULL && listLength(slaves) == 0) return;
 
     /* We can't have slaves attached and no backlog. */
-    serverAssert(!(listLength(slaves) != 0 && server.repl_backlog == NULL));
+    serverAssert(!(listLength(slaves) != 0 && srv->repl_backlog == NULL));
 
     /* Send SELECT command to every slave if needed. */
-    if (server.slaveseldb != dictid) {
+    if (srv->slaveseldb != dictid) {
         robj *selectcmd;
 
         /* For a few DBs we have pre-computed SELECT command. */
@@ -211,7 +213,7 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
         }
 
         /* Add the SELECT command into the backlog. */
-        if (server.repl_backlog) feedReplicationBacklogWithObject(selectcmd);
+        if (srv->repl_backlog) feedReplicationBacklogWithObject(srv, selectcmd);
 
         /* Send it to slaves. */
         listRewind(slaves,&li);
@@ -224,10 +226,10 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
         if (dictid < 0 || dictid >= PROTO_SHARED_SELECT_CMDS)
             decrRefCount(selectcmd);
     }
-    server.slaveseldb = dictid;
+    srv->slaveseldb = dictid;
 
     /* Write the command to the replication backlog if any. */
-    if (server.repl_backlog) {
+    if (srv->repl_backlog) {
         char aux[LONG_STR_SIZE+3];
 
         /* Add the multi bulk reply length. */
@@ -235,7 +237,7 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
         len = ll2string(aux+1,sizeof(aux)-1,argc);
         aux[len+1] = '\r';
         aux[len+2] = '\n';
-        feedReplicationBacklog(aux,len+3);
+        feedReplicationBacklog(srv, aux,len+3);
 
         for (j = 0; j < argc; j++) {
             long objlen = stringObjectLen(argv[j]);
@@ -247,9 +249,9 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
             len = ll2string(aux+1,sizeof(aux)-1,objlen);
             aux[len+1] = '\r';
             aux[len+2] = '\n';
-            feedReplicationBacklog(aux,len+3);
-            feedReplicationBacklogWithObject(argv[j]);
-            feedReplicationBacklog(aux+len+1,2);
+            feedReplicationBacklog(srv, aux,len+3);
+            feedReplicationBacklogWithObject(srv, argv[j]);
+            feedReplicationBacklog(srv, aux+len+1,2);
         }
     }
 
@@ -292,7 +294,7 @@ void replicationFeedSlavesFromMasterStream(list *slaves, char *buf, size_t bufle
         printf("\n");
     }
 
-    if (server.repl_backlog) feedReplicationBacklog(buf,buflen);
+    if (server.repl_backlog) feedReplicationBacklog(&server, buf,buflen);
     listRewind(slaves,&li);
     while((ln = listNext(&li))) {
         client *slave = ln->value;
@@ -398,8 +400,8 @@ long long addReplyReplicationBacklog(client *c, long long offset) {
  * from the slave. The returned value is only valid immediately after
  * the BGSAVE process started and before executing any other command
  * from clients. */
-long long getPsyncInitialOffset(struct redisServer s) {
-    return s.master_repl_offset;
+long long getPsyncInitialOffset(struct redisServer *s) {
+    return s->master_repl_offset;
 }
 
 /* Send a FULLRESYNC reply in the specific case of a full resynchronization,
@@ -578,7 +580,7 @@ int startBgsaveForReplication(int mincapa) {
      * otherwise slave will miss repl-stream-db. */
     if (rsiptr) {
         if (socket_target)
-            retval = rdbSaveToSlavesSockets(rsiptr);
+            retval = rdbSaveToSlavesSockets(rsiptr, &server);
         else
             retval = rdbSaveBackground(server.rdb_filename,rsiptr);
     } else {
@@ -615,7 +617,7 @@ int startBgsaveForReplication(int mincapa) {
 
             if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) {
                     replicationSetupSlaveForFullResync(slave,
-                            getPsyncInitialOffset(server));
+                            getPsyncInitialOffset(&server));
             }
         }
     }
@@ -2563,7 +2565,7 @@ void replicationCron(void) {
         listLength(server.slaves))
     {
         ping_argv[0] = createStringObject("PING",4);
-        replicationFeedSlaves(server.slaves, server.slaveseldb,
+        replicationFeedSlaves(&server, server.slaves, server.slaveseldb,
             ping_argv, 1);
         decrRefCount(ping_argv[0]);
     }

@@ -30,7 +30,7 @@
 // Created by zhuchen on 2019-05-10.
 //
 
-#include "vector_clock.h"
+#include "ctrip_vector_clock.h"
 #include "sds.h"
 #include "util.h"
 #include "zmalloc.h"
@@ -74,11 +74,11 @@ dupVectorClock(VectorClock *vc) {
 }
 
 void
-convertSdsToVectorClockUnit(sds vcUnitStr, VectorClockUnit *vcUnit);
+sdsToVectorClockUnit(sds vcUnitStr, VectorClockUnit *vcUnit);
 
 // "<gid>:<clock>;<gid>:<clock>"
 VectorClock*
-convertSdsToVectorClock(sds vcStr) {
+sdsToVectorClock(sds vcStr) {
     int numVcUnits;
     sds *vcUnits = sdssplitlen(vcStr, sdslen(vcStr), VECTOR_CLOCK_SEPARATOR, 1, &numVcUnits);
     if(numVcUnits <= 0 || !vcUnits) {
@@ -90,7 +90,7 @@ convertSdsToVectorClock(sds vcStr) {
     }
     VectorClock *result = newVectorClock(numVcUnits);
     for(int i = 0; i < numVcUnits; i++) {
-        convertSdsToVectorClockUnit(vcUnits[i], &(result->clocks[i]));
+        sdsToVectorClockUnit(vcUnits[i], &(result->clocks[i]));
     }
 
     //clean up
@@ -101,7 +101,7 @@ convertSdsToVectorClock(sds vcStr) {
 }
 
 void
-convertSdsToVectorClockUnit(sds vcUnitStr, VectorClockUnit *vcUnit) {
+sdsToVectorClockUnit(sds vcUnitStr, VectorClockUnit *vcUnit) {
     int numElements;
     sds *vcUnits = sdssplitlen(vcUnitStr, sdslen(vcUnitStr), VECTOR_CLOCK_UNIT_SEPARATOR, 1, &numElements);
     if(!vcUnits || numElements != 2) {
@@ -119,7 +119,7 @@ convertSdsToVectorClockUnit(sds vcUnitStr, VectorClockUnit *vcUnit) {
 
 
 sds
-convertVectorClockToSds(VectorClock *vc) {
+vectorClockToSds(VectorClock *vc) {
     if(!vc || vc->length < 1) {
         return sdsempty();
     }
@@ -161,7 +161,7 @@ getVectorClockUnit(VectorClock *vc, long long gid) {
 }
 
 VectorClock*
-mergeVectorClock(VectorClock *vc1, VectorClock *vc2) {
+vectorClockMerge(VectorClock *vc1, VectorClock *vc2) {
     VectorClock *result = dupVectorClock(vc1);
     for(int i = 0; i < vc2->length; i++) {
         VectorClockUnit *target;
@@ -174,6 +174,21 @@ mergeVectorClock(VectorClock *vc1, VectorClock *vc2) {
     return result;
 }
 
+size_t
+vectorClockCmp(VectorClock *vc1, VectorClock *vc2, long long gid) {
+    VectorClockUnit *vcu1 = getVectorClockUnit(vc1, gid);
+    VectorClockUnit *vcu2 = getVectorClockUnit(vc2, gid);
+    if(vcu1 == NULL && vcu2 == NULL) {
+        return 0;
+    }
+    if(vcu1 != NULL && vcu2 == NULL) {
+        return 1;
+    } else if(vcu1 == NULL) {
+        return -1;
+    }
+    return vcu1->logic_time - vcu2->logic_time;
+
+}
 
 
 
@@ -189,7 +204,7 @@ int testSdsConvert2VectorClockUnit(void) {
     printf("========[testSdsConvert2VectorClockUnit]==========\r\n");
     sds vcStr = sdsnew("1:123");
     VectorClockUnit *unit = zmalloc(sizeof(VectorClockUnit));
-    convertSdsToVectorClockUnit(vcStr, unit);
+    sdsToVectorClockUnit(vcStr, unit);
 
     test_cond("sds to vcu", 1 == unit->gid);
     test_cond("sds to vcu", 123 ==unit->logic_time);
@@ -199,7 +214,7 @@ int testSdsConvert2VectorClockUnit(void) {
 int testSdsConvert2VectorClock(void) {
     printf("========[testSdsConvert2VectorClock]==========\r\n");
     sds vcStr = sdsnew("1:123;2:234;3:345");
-    VectorClock *vc = convertSdsToVectorClock(vcStr);
+    VectorClock *vc = sdsToVectorClock(vcStr);
     test_cond("[first vc]gid equals", 1 == vc->clocks[0].gid);
     test_cond("[first vc]logic_time equals", 123 == vc->clocks[0].logic_time);
 
@@ -210,13 +225,13 @@ int testSdsConvert2VectorClock(void) {
     test_cond("[third vc]logic_time equals", 345 == vc->clocks[2].logic_time);
 
     vcStr = sdsnew("1:123");
-    vc = convertSdsToVectorClock(vcStr);
+    vc = sdsToVectorClock(vcStr);
     test_cond("[one clock unit]length", 1 == vc->length);
     test_cond("[one clock unit]", 1 == vc->clocks[0].gid);
     test_cond("[one clock unit]", 123 == vc->clocks[0].logic_time);
 
     vcStr = sdsnew("1:123;");
-    vc = convertSdsToVectorClock(vcStr);
+    vc = sdsToVectorClock(vcStr);
     test_cond("[one clock unit;]length", 1 == vc->length);
     test_cond("[one clock unit;]gid equals", 1 == vc->clocks[0].gid);
     test_cond("[one clock unit;]logic_time equals", 123 == vc->clocks[0].logic_time);
@@ -226,18 +241,18 @@ int testSdsConvert2VectorClock(void) {
 int testFreeVectorClock(void) {
     printf("========[testFreeVectorClock]==========\r\n");
     sds vcStr = sdsnew("1:123;2:234;3:345");
-    VectorClock *vc = convertSdsToVectorClock(vcStr);
+    VectorClock *vc = sdsToVectorClock(vcStr);
     freeVectorClock(vc);
     return 0;
 }
 
-int testConvertVectorClockToSds(void) {
-    printf("========[testConvertVectorClockToSds]==========\r\n");
+int testvectorClockToSds(void) {
+    printf("========[testvectorClockToSds]==========\r\n");
     sds vcStr = sdsnew("1:123;2:234;3:345");
-    VectorClock *vc = convertSdsToVectorClock(vcStr);
-    sds dup = convertVectorClockToSds(vc);
+    VectorClock *vc = sdsToVectorClock(vcStr);
+    sds dup = vectorClockToSds(vc);
     printf("expected: %s, actual: %s \r\n", vcStr, dup);
-    test_cond("[testConvertVectorClockToSds]", sdscmp(vcStr, dup) == 0);
+    test_cond("[testvectorClockToSds]", sdscmp(vcStr, dup) == 0);
     freeVectorClock(vc);
     return 0;
 }
@@ -245,21 +260,21 @@ int testConvertVectorClockToSds(void) {
 int testSortVectorClock(void) {
     printf("========[testSortVectorClock]==========\r\n");
     sds vcStr = sdsnew("1:123;2:234;3:345");
-    VectorClock *vc = convertSdsToVectorClock(vcStr);
+    VectorClock *vc = sdsToVectorClock(vcStr);
     sortVectorClock(vc);
-    sds dup = convertVectorClockToSds(vc);
+    sds dup = vectorClockToSds(vc);
     test_cond("[testSortVectorClock][positive-case]", sdscmp(vcStr, dup) == 0);
 
     sds vcStr2 = sdsnew("2:234;3:345;1:123");
-    vc = convertSdsToVectorClock(vcStr2);
+    vc = sdsToVectorClock(vcStr2);
     sortVectorClock(vc);
-    dup = convertVectorClockToSds(vc);
+    dup = vectorClockToSds(vc);
     test_cond("[testSortVectorClock][real-sort-case]", sdscmp(vcStr, dup) == 0);
 
     sds vcStr3 = sdsnew("3:345;1:123;2:234");
-    vc = convertSdsToVectorClock(vcStr3);
+    vc = sdsToVectorClock(vcStr3);
     sortVectorClock(vc);
-    dup = convertVectorClockToSds(vc);
+    dup = vectorClockToSds(vc);
     test_cond("[testSortVectorClock][real-sort-case]", sdscmp(sdsnew("1:123;2:234;3:345"), dup) == 0);
 
     return 0;
@@ -268,9 +283,9 @@ int testSortVectorClock(void) {
 int testDupVectorClock(void) {
     printf("========[testDupVectorClock]==========\r\n");
     sds vcStr = sdsnew("1:123;2:234;3:345");
-    VectorClock *vc = convertSdsToVectorClock(vcStr);
+    VectorClock *vc = sdsToVectorClock(vcStr);
     VectorClock *dup = dupVectorClock(vc);
-    sds dupSds = convertVectorClockToSds(dup);
+    sds dupSds = vectorClockToSds(dup);
 
     test_cond("[testDupVectorClock]", sdscmp(vcStr, dupSds) == 0);
     return 0;
@@ -279,23 +294,23 @@ int testDupVectorClock(void) {
 int testAddVectorClockUnit(void) {
     printf("========[testAddVectorClockUnit]==========\r\n");
     sds vcStr = sdsnew("1:123;2:234;3:345");
-    VectorClock *vc = convertSdsToVectorClock(vcStr);
+    VectorClock *vc = sdsToVectorClock(vcStr);
     addVectorClockUnit(vc, 100, 50);
 
-    printf("result: %s\r\n", convertVectorClockToSds(vc));
-    test_cond("[testAddVectorClockUnit]", sdscmp(sdsnew("1:123;2:234;3:345;100:50"), convertVectorClockToSds(vc)) == 0);
+    printf("result: %s\r\n", vectorClockToSds(vc));
+    test_cond("[testAddVectorClockUnit]", sdscmp(sdsnew("1:123;2:234;3:345;100:50"), vectorClockToSds(vc)) == 0);
     return 0;
 }
 
-int testMergeVectorClock(void) {
-    VectorClock *vc = mergeVectorClock(convertSdsToVectorClock(sdsnew("1:100;2:200;3:300")), convertSdsToVectorClock(sdsnew("1:200;2:500;3:100")));
-    test_cond("[testMergeVectorClock][merge-only]", sdscmp(sdsnew("1:200;2:500;3:300"), convertVectorClockToSds(vc)) == 0);
+int testvectorClockMerge(void) {
+    VectorClock *vc = vectorClockMerge(sdsToVectorClock(sdsnew("1:100;2:200;3:300")), sdsToVectorClock(sdsnew("1:200;2:500;3:100")));
+    test_cond("[testvectorClockMerge][merge-only]", sdscmp(sdsnew("1:200;2:500;3:300"), vectorClockToSds(vc)) == 0);
 
-    vc = mergeVectorClock(convertSdsToVectorClock(sdsnew("1:100;2:200;3:300")), convertSdsToVectorClock(sdsnew("1:99")));
-    test_cond("[testMergeVectorClock][add]", sdscmp(sdsnew("1:100;2:200;3:300"), convertVectorClockToSds(vc)) == 0);
+    vc = vectorClockMerge(sdsToVectorClock(sdsnew("1:100;2:200;3:300")), sdsToVectorClock(sdsnew("1:99")));
+    test_cond("[testvectorClockMerge][add]", sdscmp(sdsnew("1:100;2:200;3:300"), vectorClockToSds(vc)) == 0);
 
-    vc = mergeVectorClock(convertSdsToVectorClock(sdsnew("1:100;2:200;3:300")), convertSdsToVectorClock(sdsnew("1:200;3:100;4:400")));
-    test_cond("[testMergeVectorClock][add-merge]", sdscmp(sdsnew("1:200;2:200;3:300;4:400"), convertVectorClockToSds(vc)) == 0);
+    vc = vectorClockMerge(sdsToVectorClock(sdsnew("1:100;2:200;3:300")), sdsToVectorClock(sdsnew("1:200;3:100;4:400")));
+    test_cond("[testvectorClockMerge][add-merge]", sdscmp(sdsnew("1:200;2:200;3:300;4:400"), vectorClockToSds(vc)) == 0);
 
     return 0;
 }
@@ -306,11 +321,11 @@ int vectorClockTest(void) {
         result |= testSdsConvert2VectorClockUnit();
         result |= testSdsConvert2VectorClock();
         result |= testFreeVectorClock();
-        result |= testConvertVectorClockToSds();
+        result |= testvectorClockToSds();
         result |= testSortVectorClock();
         result |= testDupVectorClock();
         result |= testAddVectorClockUnit();
-        result |= testMergeVectorClock();
+        result |= testvectorClockMerge();
     }
     test_report();
     return result;
