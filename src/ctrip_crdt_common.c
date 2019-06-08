@@ -27,48 +27,62 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 //
-// Created by zhuchen on 2019-05-24.
+// Created by zhuchen on 2019-06-07.
 //
 
-#ifndef REDIS_CRDT_RDB_H
-#define REDIS_CRDT_RDB_H
+#include "ctrip_crdt_common.h"
+#include "zmalloc.h"
+#include "sds.h"
 
-#include "server.h"
-
-typedef struct crdtRdbSaveInfo {
-    /* Used saving and loading. */
-    int repl_stream_db;  /* DB to select in server.master client. */
-
-    /* Used only loading. */
-    int repl_id_is_set;  /* True if repl_id field is set. */
-    char repl_id[CONFIG_RUN_ID_SIZE+1];     /* Replication ID. */
-    long long repl_offset;                  /* Replication offset. */
-
-    /* CRDT Specialized param */
-    VectorClock *vc;
-} crdtRdbSaveInfo;
-
-#define RDB_SAVE_INFO_INIT {-1,0,"000000000000000000000000000000",-1}
+#include <stdlib.h>
 
 
-void
-crdtMergeCommand(client *c);
+#if defined(CRDT_COMMON_TEST_MAIN)
+#include <stdio.h>
+#include "testhelp.h"
+#include "limits.h"
 
-int
-crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi);
+#define UNUSED(x) (void)(x)
+typedef struct nickObject {
+    CrdtCommon common;
+    sds content;
+}nickObject;
 
-int
-crdtRdbSaveKeyValuePair(rio *rdb, robj *key, robj *val, long long expiretime);
+void*
+mergeFunc (const void *value) {
+    if(value == NULL) {
+        return NULL;
+    }
+    void *dup = zmalloc(1);
+    return dup;
+}
 
-int
-crdtRdbSaveObject(rio *rdb, robj *val);
+nickObject
+*createNickObject() {
+    nickObject *obj = zmalloc(sizeof(nickObject));
+    printf("[nickObject]%lu\r\n", sizeof(nickObject));
+    obj->content = sdsnew("hello");
 
-int
-rdbSaveToCrdtSlavesSockets(crdtRdbSaveInfo *rsi);
+    obj->common.vectorClock = sdsnew("1:200");
+    obj->common.merge = mergeFunc;
+    return obj;
+}
 
-int
-rdbSaveRioWithCrdtMerge(rio *rdb, int *error, crdtRdbSaveInfo *rsi);
+int crdtCommonTest(void) {
+    nickObject *obj = createNickObject();
+    CrdtCommon *common = (CrdtCommon *) obj;
+    test_cond("[crdtCommonTest]", sdscmp(sdsnew("1:200"), common->vectorClock) == 0);
+    test_cond("[crdtCommonTest]", sdscmp(sdsnew("hello"), obj->content) == 0);
+    test_report();
+    return 0;
+}
+#endif
+
+#ifdef CRDT_COMMON_TEST_MAIN
+int main(void) {
+    return crdtCommonTest();
+}
+#endif
 
 
 
-#endif //REDIS_CRDT_RDB_H

@@ -34,6 +34,7 @@
 #include "config.h"
 #include "solarisfixes.h"
 #include "rio.h"
+#include "ctrip_crdt_common.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -72,7 +73,7 @@ typedef long long mstime_t; /* millisecond time type. */
 #include "sha1.h"
 #include "endianconv.h"
 #include "crc64.h"
-#include "vector_clock.h"
+#include "ctrip_vector_clock.h"
 
 
 /* Error codes */
@@ -496,8 +497,6 @@ typedef void (*moduleTypeRewriteFunc)(struct RedisModuleIO *io, struct redisObje
 typedef void (*moduleTypeDigestFunc)(struct RedisModuleDigest *digest, void *value);
 typedef size_t (*moduleTypeMemUsageFunc)(const void *value);
 typedef void (*moduleTypeFreeFunc)(void *value);
-typedef size_t (*moduleTypeCrdtMergableFunc)(sds vectorClock, const void *value);
-typedef void (*moduleTypeCrdtMergeFunc)(struct redisObject *key, void *value);
 
 /* The module type, which is referenced in each value of a given type, defines
  * the methods and links to the module exporting the type. */
@@ -510,8 +509,7 @@ typedef struct RedisModuleType {
     moduleTypeMemUsageFunc mem_usage;
     moduleTypeDigestFunc digest;
     moduleTypeFreeFunc free;
-    moduleTypeCrdtMergableFunc is_mergable;
-    moduleTypeCrdtMergeFunc crdt_mergeFunc;
+
     char name[10]; /* 9 bytes name + null term. Charset: A-Z a-z 0-9 _- */
 } moduleType;
 
@@ -614,6 +612,25 @@ typedef struct redisObject {
     _var.encoding = OBJ_ENCODING_RAW; \
     _var.ptr = _ptr; \
 } while(0)
+
+/* Macro to initialize an IO context. Note that the 'ver' field is populated
+ * inside rdb.c according to the version of the value to load. */
+inline size_t isModuleCrdt(robj *obj) {
+    if(obj->type != OBJ_MODULE) {
+        return C_ERR;
+    }
+    moduleValue *mv = obj->ptr;
+    if(strncmp(CRDT_MODULE_OBJECT_PREFIX, mv->type->name, 4) == 0) {
+        return C_OK;
+    }
+    return C_ERR;
+}
+
+#define retrieveCrdtCommon(val, common) do { \
+    moduleValue *mv = val->ptr;\
+    void *moduleValue = mv->value;\
+    *common = (CrdtCommon *) moduleValue;\
+}while(0);
 
 struct evictionPoolEntry; /* Defined in evict.c */
 
@@ -1220,7 +1237,7 @@ struct redisServer {
     VectorClock *vectorClock;
     VectorClockUnit *localVcu;
     struct CRDT_Server_Replication *crdt_repl_server;
-};
+}redisServer;
 
 typedef struct pubsubPattern {
     client *client;
@@ -1499,7 +1516,7 @@ ssize_t syncRead(int fd, char *ptr, ssize_t size, long long timeout);
 ssize_t syncReadLine(int fd, char *ptr, ssize_t size, long long timeout);
 
 /* Replication */
-void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc);
+void replicationFeedSlaves(struct redisServer *srv, list *slaves, int dictid, robj **argv, int argc);
 void replicationFeedSlavesFromMasterStream(list *slaves, char *buf, size_t buflen);
 void replicationFeedMonitors(client *c, list *monitors, int dictid, robj **argv, int argc);
 void updateSlavesWaitingBgsave(int bgsaveerr, int type);
@@ -1521,16 +1538,15 @@ int replicationCountAcksByOffset(long long offset);
 void replicationSendNewlineToMaster(void);
 long long replicationGetSlaveOffset(void);
 char *replicationGetSlaveName(client *c);
-long long getPsyncInitialOffset(struct redisServer s);
+long long getPsyncInitialOffset(struct redisServer *s);
 int replicationSetupSlaveForFullResync(client *slave, long long offset);
 void changeReplicationId(void);
 void clearReplicationId2(void);
 void chopReplicationBacklog(void);
 void replicationCacheMasterUsingMyself(void);
-void feedReplicationBacklog(void *ptr, size_t len);
+void feedReplicationBacklog(struct redisServer *srv, void *ptr, size_t len);
 
 /* CRDT Replications */
-void crdtReplicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc);
 
 /* Generic persistence functions */
 void startLoading(FILE *fp);

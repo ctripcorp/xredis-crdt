@@ -157,4 +157,7 @@ void initClientCrdtIfNeeded(client *c);
 
 void crdtInitServer(void);
 
+
+void crdtCancelReplicationHandshake(client *peer);
+
 #endif //REDIS_CRDT_REPLICATION_H

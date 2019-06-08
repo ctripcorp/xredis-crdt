@@ -27,66 +27,51 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 //
-// Created by zhuchen on 2019-05-10.
+// Created by zhuchen on 2019-05-24.
 //
 
-#ifndef REDIS_VECTOR_CLOCK_H
-#define REDIS_VECTOR_CLOCK_H
+#ifndef REDIS_CRDT_RDB_H
+#define REDIS_CRDT_RDB_H
 
-#include "sds.h"
+#include "server.h"
 
-// "<gid>:<clock>;<gid>:<clock>"
-#define VECTOR_CLOCK_SEPARATOR ";"
-#define VECTOR_CLOCK_UNIT_SEPARATOR ":"
+typedef struct crdtRdbSaveInfo {
+    /* Used saving and loading. */
+    int repl_stream_db;  /* DB to select in server.master client. */
 
-#define min(x, y) x > y ? y : x
+    /* Used only loading. */
+    int repl_id_is_set;  /* True if repl_id field is set. */
+    char repl_id[CONFIG_RUN_ID_SIZE+1];     /* Replication ID. */
+    long long repl_offset;                  /* Replication offset. */
 
-#define max(x, y) x > y ? x : y
+    /* CRDT Specialized param */
+    VectorClock *vc;
+} crdtRdbSaveInfo;
 
-typedef struct VectorClockUnit {
-    long long gid;
-    long long logic_time;
-}VectorClockUnit;
+#define RDB_SAVE_INFO_INIT {-1,0,"000000000000000000000000000000",-1}
 
-typedef struct VectorClock {
-    VectorClockUnit *clocks;
-    int length;
-}VectorClock;
-
-/**------------------------Vector Clock Lifecycle--------------------------------------*/
-VectorClock*
-newVectorClock(int numVcUnits);
 
 void
-freeVectorClock(VectorClock *vc);
+crdtMergeCommand(client *c);
 
 void
-addVectorClockUnit(VectorClock *vc, long long gid, long long logic_time);
-
-VectorClock*
-dupVectorClock(VectorClock *vc);
-
-/**------------------------Vector Clock & sds convertion--------------------------------------*/
-VectorClock*
-convertSdsToVectorClock(sds vcStr);
-
-sds
-convertVectorClockToSds(VectorClock *vc);
-
-/**------------------------Vector Clock Util--------------------------------------*/
-void
-sortVectorClock(VectorClock *vc);
-
-VectorClock*
-mergeVectorClock(VectorClock *vc1, VectorClock *vc2);
-
-VectorClockUnit*
-getVectorClockUnit(VectorClock *vc, long long gid);
-
-VectorClockUnit*
-getLocalVcUnit();
+crdtMergeStartCommand(client *c);
 
 void
-incrLocalVcUnit(long delta);
+crdtMergeEndCommand(client *c);
 
-#endif //REDIS_VECTOR_CLOCK_H
+int
+crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi);
+
+int
+crdtRdbSaveKeyValuePair(rio *rdb, robj *key, robj *val, long long expiretime);
+
+int
+crdtRdbSaveObject(rio *rdb, robj *val);
+
+int
+rdbSaveRioWithCrdtMerge(rio *rdb, int *error, void *rsi);
+
+
+
+#endif //REDIS_CRDT_RDB_H

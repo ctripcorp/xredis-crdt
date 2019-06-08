@@ -348,6 +348,27 @@
    "-I../deps/linenoise", 
    "-I../deps/lua/src", 
    "-c", 
+   "ctrip_crdt_rdb.c"
+  ], 
+  "file": "ctrip_crdt_rdb.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/src", 
+  "arguments": [
+   "cc", 
+   "-std=c99", 
+   "-pedantic", 
+   "-DREDIS_STATIC=", 
+   "-Wall", 
+   "-W", 
+   "-Wno-missing-field-initializers", 
+   "-O2", 
+   "-g", 
+   "-ggdb", 
+   "-I../deps/hiredis", 
+   "-I../deps/linenoise", 
+   "-I../deps/lua/src", 
+   "-c", 
    "crc16.c"
   ], 
   "file": "crc16.c"
@@ -720,27 +741,6 @@
    "-I../deps/linenoise", 
    "-I../deps/lua/src", 
    "-c", 
-   "crdt_replication.c"
-  ], 
-  "file": "crdt_replication.c"
- }, 
- {
-  "directory": "/Users/zhuchen/Develop/c/redis/src", 
-  "arguments": [
-   "cc", 
-   "-std=c99", 
-   "-pedantic", 
-   "-DREDIS_STATIC=", 
-   "-Wall", 
-   "-W", 
-   "-Wno-missing-field-initializers", 
-   "-O2", 
-   "-g", 
-   "-ggdb", 
-   "-I../deps/hiredis", 
-   "-I../deps/linenoise", 
-   "-I../deps/lua/src", 
-   "-c", 
    "ctrip.c"
   ], 
   "file": "ctrip.c"
@@ -892,6 +892,27 @@
    "liolib.c"
   ], 
   "file": "liolib.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/redis/src", 
+  "arguments": [
+   "cc", 
+   "-std=c99", 
+   "-pedantic", 
+   "-DREDIS_STATIC=", 
+   "-Wall", 
+   "-W", 
+   "-Wno-missing-field-initializers", 
+   "-O2", 
+   "-g", 
+   "-ggdb", 
+   "-I../deps/hiredis", 
+   "-I../deps/linenoise", 
+   "-I../deps/lua/src", 
+   "-c", 
+   "ctrip_vector_clock.c"
+  ], 
+  "file": "ctrip_vector_clock.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
@@ -1881,27 +1902,6 @@
   "file": "zipmap.c"
  }, 
  {
-  "directory": "/Users/zhuchen/Develop/c/redis/src", 
-  "arguments": [
-   "cc", 
-   "-std=c99", 
-   "-pedantic", 
-   "-DREDIS_STATIC=", 
-   "-Wall", 
-   "-W", 
-   "-Wno-missing-field-initializers", 
-   "-O2", 
-   "-g", 
-   "-ggdb", 
-   "-I../deps/hiredis", 
-   "-I../deps/linenoise", 
-   "-I../deps/lua/src", 
-   "-c", 
-   "vector_clock.c"
-  ], 
-  "file": "vector_clock.c"
- }, 
- {
   "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
   "arguments": [
    "cc", 
@@ -2167,27 +2167,6 @@
    "blocked.c"
   ], 
   "file": "blocked.c"
- }, 
- {
-  "directory": "/Users/zhuchen/Develop/c/redis/src", 
-  "arguments": [
-   "cc", 
-   "-std=c99", 
-   "-pedantic", 
-   "-DREDIS_STATIC=", 
-   "-Wall", 
-   "-W", 
-   "-Wno-missing-field-initializers", 
-   "-O2", 
-   "-g", 
-   "-ggdb", 
-   "-I../deps/hiredis", 
-   "-I../deps/linenoise", 
-   "-I../deps/lua/src", 
-   "-c", 
-   "crdt_rdb.c"
-  ], 
-  "file": "crdt_rdb.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 

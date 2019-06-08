@@ -33,7 +33,7 @@
 #include "bio.h"
 #include "latency.h"
 #include "atomicvar.h"
-#include "crdt_replication.h"
+#include "ctrip_crdt_replication.h"
 
 #include <time.h>
 #include <signal.h>
@@ -129,8 +129,8 @@ volatile unsigned long lru_clock; /* Server global current LRU time. */
  */
 struct redisCommand redisCommandTable[] = {
     {"module",moduleCommand,-2,"as",0,NULL,0,0,0,0,0},
-//    {"get",getCommand,2,"rF",0,NULL,1,1,1,0,0},
-//    {"set",setCommand,-3,"wm",0,NULL,1,1,1,0,0},
+    {"get",getCommand,2,"rF",0,NULL,1,1,1,0,0},
+    {"set",setCommand,-3,"wm",0,NULL,1,1,1,0,0},
     {"setnx",setnxCommand,3,"wmF",0,NULL,1,1,1,0,0},
     {"setex",setexCommand,4,"wm",0,NULL,1,1,1,0,0},
     {"psetex",psetexCommand,4,"wm",0,NULL,1,1,1,0,0},
@@ -310,8 +310,8 @@ struct redisCommand redisCommandTable[] = {
     {"post",securityWarningCommand,-1,"lt",0,NULL,0,0,0,0,0},
     {"host:",securityWarningCommand,-1,"lt",0,NULL,0,0,0,0,0},
     {"latency",latencyCommand,-2,"aslt",0,NULL,0,0,0,0,0},
-    {"crdt.psync",crdtPSyncCommand,3,"ars",0,NULL,0,0,0,0,0},
-    {"crdt.replconf",crdtReplconfCommand,3,"ars",0,NULL,0,0,0,0,0}
+//    {"crdt.psync",crdtPSyncCommand,3,"ars",0,NULL,0,0,0,0,0},
+//    {"crdt.replconf",crdtReplconfCommand,3,"ars",0,NULL,0,0,0,0,0}
 
 };
 
@@ -1225,7 +1225,7 @@ void beforeSleep(struct aeEventLoop *eventLoop) {
         argv[0] = createStringObject("REPLCONF",8);
         argv[1] = createStringObject("GETACK",6);
         argv[2] = createStringObject("*",1); /* Not used argument. */
-        replicationFeedSlaves(server.slaves, server.slaveseldb, argv, 3);
+        replicationFeedSlaves(&server, server.slaves, server.slaveseldb, argv, 3);
         decrRefCount(argv[0]);
         decrRefCount(argv[1]);
         decrRefCount(argv[2]);
@@ -1930,7 +1930,6 @@ void initServer(void) {
     server.aof_last_write_errno = 0;
     server.repl_good_slaves_count = 0;
 
-    crdtInitServer();
     updateCachedTime();
 
     /* Create the timer callback, this is our way to process many background
@@ -2131,9 +2130,9 @@ void propagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
     if (server.aof_state != AOF_OFF && flags & PROPAGATE_AOF)
         feedAppendOnlyFile(cmd,dbid,argv,argc);
     if (flags & PROPAGATE_REPL)
-        replicationFeedSlaves(server.slaves,dbid,argv,argc);
+        replicationFeedSlaves(&server, server.slaves,dbid,argv,argc);
     if (flags & PROPAGATE_CRDT_REPL)
-        crdtReplicationFeedSlaves(server.crdt_repl_server->slaves, dbid, argv, argc);
+        replicationFeedSlaves(&crdtServer, crdtServer.slaves, dbid, argv, argc);
 }
 
 /* Used inside commands to schedule the propagation of additional commands

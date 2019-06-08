@@ -30,8 +30,8 @@
 // Created by zhuchen on 2019-05-05.
 //
 
-#include "server.h"
-#include "crdt_replication.h"
+//#include "server.h"
+#include "ctrip_crdt_replication.h"
 
 #include <sys/time.h>
 #include <unistd.h>

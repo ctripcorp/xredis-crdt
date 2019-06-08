@@ -1838,7 +1838,10 @@ void backgroundSaveDoneHandler(int exitcode, int bysignal) {
 
 /* Spawn an RDB child that writes the RDB to the sockets of the slaves
  * that are currently in SLAVE_STATE_WAIT_BGSAVE_START state. */
-int rdbSaveToSlavesSockets(rdbSaveInfo *rsi) {
+#include "ctrip_crdt_rdb.h"
+/* Spawn an RDB child that writes the RDB to the sockets of the slaves
+ * that are currently in SLAVE_STATE_WAIT_BGSAVE_START state. */
+int rdbSaveToSlavesSockets(rdbSaveInfo *rsi, struct redisServer *svr) {
     int *fds;
     uint64_t *clientids;
     int numfds;
@@ -1848,42 +1851,42 @@ int rdbSaveToSlavesSockets(rdbSaveInfo *rsi) {
     long long start;
     int pipefds[2];
 
-    if (server.aof_child_pid != -1 || server.rdb_child_pid != -1) return C_ERR;
+    if (svr->aof_child_pid != -1 || svr->rdb_child_pid != -1) return C_ERR;
 
     /* Before to fork, create a pipe that will be used in order to
      * send back to the parent the IDs of the slaves that successfully
      * received all the writes. */
     if (pipe(pipefds) == -1) return C_ERR;
-    server.rdb_pipe_read_result_from_child = pipefds[0];
-    server.rdb_pipe_write_result_to_parent = pipefds[1];
+    svr->rdb_pipe_read_result_from_child = pipefds[0];
+    svr->rdb_pipe_write_result_to_parent = pipefds[1];
 
     /* Collect the file descriptors of the slaves we want to transfer
      * the RDB to, which are i WAIT_BGSAVE_START state. */
-    fds = zmalloc(sizeof(int)*listLength(server.slaves));
+    fds = zmalloc(sizeof(int)*listLength(svr->slaves));
     /* We also allocate an array of corresponding client IDs. This will
      * be useful for the child process in order to build the report
      * (sent via unix pipe) that will be sent to the parent. */
-    clientids = zmalloc(sizeof(uint64_t)*listLength(server.slaves));
+    clientids = zmalloc(sizeof(uint64_t)*listLength(svr->slaves));
     numfds = 0;
 
-    listRewind(server.slaves,&li);
+    listRewind(svr->slaves,&li);
     while((ln = listNext(&li))) {
         client *slave = ln->value;
 
         if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) {
             clientids[numfds] = slave->id;
             fds[numfds++] = slave->fd;
-            replicationSetupSlaveForFullResync(slave,getPsyncInitialOffset(server));
+            replicationSetupSlaveForFullResync(slave, getPsyncInitialOffset(svr));
             /* Put the socket in blocking mode to simplify RDB transfer.
              * We'll restore it when the children returns (since duped socket
              * will share the O_NONBLOCK attribute with the parent). */
             anetBlock(NULL,slave->fd);
-            anetSendTimeout(NULL,slave->fd,server.repl_timeout*1000);
+            anetSendTimeout(NULL,slave->fd,svr->repl_timeout*1000);
         }
     }
 
     /* Create the child process. */
-    openChildInfoPipe(server);
+    openChildInfoPipe(*svr);
     start = ustime();
     if ((childpid = fork()) == 0) {
         /* Child */
@@ -1896,7 +1899,13 @@ int rdbSaveToSlavesSockets(rdbSaveInfo *rsi) {
         closeListeningSockets(0);
         redisSetProcTitle("redis-rdb-to-slaves");
 
-        retval = rdbSaveRioWithEOFMark(&slave_sockets,NULL,rsi);
+
+
+        if(svr == &server) {
+            retval = rdbSaveRioWithEOFMark(&slave_sockets, NULL, rsi);
+        } else if (svr == &crdtServer) {
+            retval = rdbSaveRioWithCrdtMerge(&slave_sockets, NULL, rsi);
+        }
         if (retval == C_OK && rioFlush(&slave_sockets) == 0)
             retval = C_ERR;
 
@@ -1905,12 +1914,12 @@ int rdbSaveToSlavesSockets(rdbSaveInfo *rsi) {
 
             if (private_dirty) {
                 serverLog(LL_NOTICE,
-                    "RDB: %zu MB of memory used by copy-on-write",
-                    private_dirty/(1024*1024));
+                          "RDB: %zu MB of memory used by copy-on-write",
+                          private_dirty/(1024*1024));
             }
 
-            server.child_info_data.cow_size = private_dirty;
-            sendChildInfo(CHILD_INFO_TYPE_RDB, server);
+            svr->child_info_data.cow_size = private_dirty;
+            sendChildInfo(CHILD_INFO_TYPE_RDB, *svr);
 
             /* If we are returning OK, at least one slave was served
              * with the RDB file as expected, so we need to send a report
@@ -1944,7 +1953,7 @@ int rdbSaveToSlavesSockets(rdbSaveInfo *rsi) {
              * process with all the childre that were waiting. */
             msglen = sizeof(uint64_t)*(1+2*numfds);
             if (*len == 0 ||
-                write(server.rdb_pipe_write_result_to_parent,msg,msglen)
+                write(svr->rdb_pipe_write_result_to_parent,msg,msglen)
                 != msglen)
             {
                 retval = C_ERR;
@@ -1958,12 +1967,12 @@ int rdbSaveToSlavesSockets(rdbSaveInfo *rsi) {
         /* Parent */
         if (childpid == -1) {
             serverLog(LL_WARNING,"Can't save in background: fork: %s",
-                strerror(errno));
+                      strerror(errno));
 
             /* Undo the state change. The caller will perform cleanup on
              * all the slaves in BGSAVE_START state, but an early call to
              * replicationSetupSlaveForFullResync() turned it into BGSAVE_END */
-            listRewind(server.slaves,&li);
+            listRewind(svr->slaves,&li);
             while((ln = listNext(&li))) {
                 client *slave = ln->value;
                 int j;
@@ -1977,17 +1986,17 @@ int rdbSaveToSlavesSockets(rdbSaveInfo *rsi) {
             }
             close(pipefds[0]);
             close(pipefds[1]);
-            closeChildInfoPipe(server);
+            closeChildInfoPipe(*svr);
         } else {
-            server.stat_fork_time = ustime()-start;
-            server.stat_fork_rate = (double) zmalloc_used_memory() * 1000000 / server.stat_fork_time / (1024*1024*1024); /* GB per second. */
-            latencyAddSampleIfNeeded("fork",server.stat_fork_time/1000);
+            svr->stat_fork_time = ustime()-start;
+            svr->stat_fork_rate = (double) zmalloc_used_memory() * 1000000 / svr->stat_fork_time / (1024*1024*1024); /* GB per second. */
+            latencyAddSampleIfNeeded("fork",svr->stat_fork_time/1000);
 
             serverLog(LL_NOTICE,"Background RDB transfer started by pid %d",
-                childpid);
-            server.rdb_save_time_start = time(NULL);
-            server.rdb_child_pid = childpid;
-            server.rdb_child_type = RDB_CHILD_TYPE_SOCKET;
+                      childpid);
+            svr->rdb_save_time_start = time(NULL);
+            svr->rdb_child_pid = childpid;
+            svr->rdb_child_type = RDB_CHILD_TYPE_SOCKET;
             updateDictResizePolicy();
         }
         zfree(clientids);
