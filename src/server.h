@@ -1575,13 +1575,13 @@ void feedReplicationBacklog(struct redisServer *srv, void *ptr, size_t len);
 int masterTryPartialResynchronization(struct redisServer *srv, client *c);
 
 /* CRDT Replications */
-
 int listMatchCrdtMaster(void *a, void *b);
 void crdtReplicationCron(void);
 void crdtMergeCommand(client *c);
 void crdtMergeStartCommand(client *c);
 void crdtMergeEndCommand(client *c);
-
+void peerofCommand(client *c);
+void crdtReplicationSetMaster(long long gid, char *ip, int port);
 
 /* Macro to initialize an IO context. Note that the 'ver' field is populated
  * inside rdb.c according to the version of the value to load. */

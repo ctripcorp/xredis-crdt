@@ -59,7 +59,80 @@ void freePeerMaster(CRDT_Master_Instance *masterInstance) {
     zfree(masterInstance);
 }
 
+CRDT_Master_Instance *getPeerMaster(long long gid) {
+    listIter li;
+    listNode *ln;
+    CRDT_Master_Instance *peerMaster = NULL;
 
+    listRewind(crdtServer.crdtMasters, &li);
+    while((ln = listNext(&li)) != NULL) {
+        CRDT_Master_Instance *crdtMaster = ln->value;
+        if (crdtMaster->gid == gid) {
+            peerMaster = crdtMaster;
+            break;
+        }
+    }
+    return peerMaster;
+}
+
+// peerof <gid> <ip> <port>
+//  0       1    2    3
+void peerofCommand(client *c) {
+    /* SLAVEOF is not allowed in cluster mode as replication is automatically
+    * configured using the current address of the master node. */
+    if (server.cluster_enabled) {
+        addReplyError(c,"PEEROF not allowed in cluster mode.");
+        return;
+    }
+
+
+    long port;
+    long long gid;
+    if ((getLongLongFromObjectOrReply(c, c->argv[1], &gid, NULL) != C_OK))
+        return;
+
+    if ((getLongFromObjectOrReply(c, c->argv[3], &port, NULL) != C_OK))
+        return;
+
+    /* Check if we are already attached to the specified master */
+    CRDT_Master_Instance *peerMaster = getPeerMaster(gid);
+    if(peerMaster && !strcasecmp(peerMaster->masterhost, c->argv[2]->ptr)
+       && peerMaster->masterport == port) {
+        serverLog(LL_NOTICE,"PEER OF would result into synchronization with the master we are already connected with. No operation performed.");
+        addReplySds(c,sdsnew("+OK Already connected to specified master\r\n"));
+        return;
+    }
+
+
+    /* There was no previous master or the user specified a different one,
+     * we can continue. */
+    crdtReplicationSetMaster(gid, c->argv[1]->ptr, port);
+    peerMaster = getPeerMaster(gid);
+    sds client = catClientInfoString(sdsempty(),c);
+    serverLog(LL_NOTICE,"PEER OF %s:%d enabled (user request from '%s')",
+              peerMaster->masterhost, peerMaster->masterport, client);
+    sdsfree(client);
+
+    addReply(c,shared.ok);
+}
+
+void crdtReplicationSetMaster(long long gid, char *ip, int port) {
+
+    CRDT_Master_Instance *peerMaster = getPeerMaster(gid);
+    if (!peerMaster) {
+        peerMaster = createPeerMaster(NULL, gid);
+    }
+
+    sdsfree(peerMaster->masterhost);
+    peerMaster->masterhost = sdsnew(ip);
+    peerMaster->masterport = port;
+    if (peerMaster->master) {
+        freeClient(peerMaster->master);
+    }
+
+    peerMaster->repl_state = REPL_STATE_CONNECT;
+    peerMaster->repl_down_since = 0;
+}
 
 /**---------------------------CRDT RDB Start/End Mark--------------------------------*/
 
@@ -81,10 +154,7 @@ void crdtCancelReplicationHandshake(client *peer) {
 //        undoConnectWithMaster();
         server.repl_state = REPL_STATE_CONNECT;
     }
-//    else {
-//        return 0;
-//    }
-//    return 1;
+
 }
 
 int listMatchCrdtMaster(void *a, void *b) {
@@ -96,22 +166,14 @@ int listMatchCrdtMaster(void *a, void *b) {
 //CRDT.START_MERGE <gid> <vector-clock> <repl_id>
 void
 crdtMergeStartCommand(client *c) {
-    listIter li;
-    listNode *ln;
-    CRDT_Master_Instance *peerMaster = NULL;
     long long sourceGid;
     if (getLongLongFromObjectOrReply(c, c->argv[1], &sourceGid, NULL) != C_OK) return;
-    listRewind(crdtServer.crdtMasters, &li);
-    while((ln = listNext(&li)) != NULL) {
-        CRDT_Master_Instance *crdtMaster = ln->value;
-        if (crdtMaster->gid == sourceGid) {
-            peerMaster = crdtMaster;
-            break;
-        }
-    }
+
+    CRDT_Master_Instance *peerMaster = getPeerMaster(sourceGid);
     if (!peerMaster) {
         peerMaster = createPeerMaster(c, sourceGid);
     }
+    peerMaster->master = c;
     memcpy(peerMaster->master_replid, c->argv[3]->ptr, sizeof(peerMaster->master_replid));
 }
 
@@ -119,21 +181,10 @@ crdtMergeStartCommand(client *c) {
 // 0               1        2            3          4
 void
 crdtMergeEndCommand(client *c) {
-    listIter li;
-    listNode *ln;
-    CRDT_Master_Instance *peerMaster = NULL;
-
     long long sourceGid, offset;
     if (getLongLongFromObjectOrReply(c, c->argv[1], &sourceGid, NULL) != C_OK) return;
 
-    listRewind(crdtServer.crdtMasters, &li);
-    while((ln = listNext(&li)) != NULL) {
-        CRDT_Master_Instance *crdtMaster = ln->value;
-        if (crdtMaster->gid == sourceGid) {
-            peerMaster = crdtMaster;
-            break;
-        }
-    }
+    CRDT_Master_Instance *peerMaster = getPeerMaster(sourceGid);
     if (!peerMaster) goto err;
 
     peerMaster->vectorClock = sdsToVectorClock(c->argv[2]->ptr);
@@ -362,7 +413,7 @@ void crdtReplicationCron(void) {
             clearReplicationId2(&crdtServer);
             freeReplicationBacklog(&crdtServer);
             serverLog(LL_NOTICE,
-                      "Replication backlog freed after %d seconds "
+                      "Crdt Replication backlog freed after %d seconds "
                       "without connected slaves.",
                       (int) crdtServer.repl_backlog_time_limit);
         }
@@ -377,8 +428,7 @@ void crdtReplicationCron(void) {
     if (crdtServer.rdb_child_pid == -1 && crdtServer.aof_child_pid == -1) {
         time_t idle, max_idle = 0;
         int slaves_waiting = 0;
-        int mincapa = -1;
-        listNode *ln;
+        listNode *ln = NULL;
         listIter li;
 
         listRewind(crdtServer.slaves,&li);
@@ -388,15 +438,10 @@ void crdtReplicationCron(void) {
                 idle = crdtServer.unixtime - slave->lastinteraction;
                 if (idle > max_idle) max_idle = idle;
                 slaves_waiting++;
-                mincapa = (mincapa == -1) ? slave->slave_capa :
-                          (mincapa & slave->slave_capa);
             }
         }
 
-        if (slaves_waiting &&
-            (!crdtServer.repl_diskless_sync ||
-             max_idle > crdtServer.repl_diskless_sync_delay))
-        {
+        if (slaves_waiting > 0 && max_idle > crdtServer.repl_diskless_sync_delay) {
             /* Start the BGSAVE. The called function may start a
              * BGSAVE with socket target or disk target depending on the
              * configuration and slaves capabilities. */
