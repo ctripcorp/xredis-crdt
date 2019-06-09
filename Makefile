@@ -10,8 +10,8 @@ install:
 
 # unit tests
 CRDT_UNIT_TESTS=test-vc test-crdt-common
-crdt-test:
+crdt-ut:
 	cd src && $(MAKE) $(CRDT_UNIT_TESTS)
-.PHONY: crdt-test
+.PHONY: crdt-ut
 
 .PHONY: install
