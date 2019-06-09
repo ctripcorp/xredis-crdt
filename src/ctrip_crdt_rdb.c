@@ -275,7 +275,7 @@ crdtMergeCommand(client *c) {
     return;
 
 error:
-    crdtCancelReplicationHandshake(c);
+//    crdtCancelReplicationHandshake(c);
     return;
 
 }

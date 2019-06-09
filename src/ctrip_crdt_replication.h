@@ -33,8 +33,6 @@
 #ifndef REDIS_CRDT_REPLICATION_H
 #define REDIS_CRDT_REPLICATION_H
 
-#include "server.h"
-
 /* Slave replication state. Used in server.repl_state for slaves to remember
  * what to do next. */
 #define CRDT_REPL_STATE_NONE 0 /* No active replication */
@@ -67,60 +65,7 @@
 #define CRDT_SLAVE_STATE_SEND_BULK 8 /* Sending RDB file to slave. */
 #define CRDT_SLAVE_STATE_ONLINE 9 /* RDB file transmitted, sending just updates. */
 
-typedef struct CRDT_Master_Instance {
-    char *masterauth;               /* AUTH with this password with master -- keeper it for further use */
-    char *masterhost;               /* Hostname of master */
-    int masterport;                 /* Port of master */
-    client *master;     /* current crdt master as I'm acting as a slave */
-    client *cached_master; /* Cached master to be reused for CRDT.PSYNC. */
-    int repl_syncio_timeout; /* Timeout for synchronous I/O calls. psync, or others etc */
-    int repl_state;          /* Replication status if the instance is acting as a slave */
-    /* The following two fields is where we store crdt peer(as a master) CRDT.PSYNC replid/offset
-     * while the PSYNC is in progress. At the end we'll copy the fields into
-     * the master client structure. */
-    char master_replid[CONFIG_RUN_ID_SIZE+1];  /* Master PSYNC repl_id. */
-    long long master_initial_offset;           /* Master PSYNC offset. used for the full sync*/
-}CRDT_Master_Instance;
-
-typedef struct CRDT_Server_Replication {
-
-    /**========================= CRDT Replication (master) ==============================*/
-    char replid[CONFIG_RUN_ID_SIZE+1];  /* My current replication ID. */
-    char replid2[CONFIG_RUN_ID_SIZE+1]; /* replid inherited from master*/
-    long long master_repl_offset;   /* My current replication offset */
-    long long second_replid_offset; /* Accept offsets up to this for replid2. */
-    int slaveseldb;                 /* Last SELECTed DB in replication output */
-    int repl_ping_slave_period;     /* Master pings the slave every N seconds */
-
-    pid_t rdb_child_pid;            /* PID of RDB saving child */
-    int repl_diskless_sync_delay;   /* Seconds we delay the crdt.fullresync process, so that more peer slaves could join */
-
-    list *slaves; /*slaves of this master*/
-    char *repl_backlog;             /* Replication backlog for partial syncs */
-    long long repl_backlog_size;    /* Backlog circular buffer size */
-    long long repl_backlog_histlen; /* Backlog actual data length */
-    long long repl_backlog_idx;     /* Backlog circular buffer current offset,
-                                       that is the next byte will'll write to.*/
-    long long repl_backlog_off;     /* Replication "master offset" of first
-                                       byte in the replication backlog buffer.*/
-
-    int repl_min_slaves_max_lag;    /* Max lag of <count> slaves to write. */
-    int repl_good_slaves_count;     /* Number of slaves with lag <= max_lag. */
-
-    long long stat_sync_full;       /* Number of full resyncs with slaves. */
-    long long stat_sync_partial_ok; /* Number of accepted PSYNC requests. */
-    long long stat_sync_partial_err;/* Number of unaccepted PSYNC requests. */
-
-
-    /**========================= CRDT Replication (slave) ==============================*/
-
-    int repl_timeout;               /* Timeout after N seconds of master idle */
-    int slave_announce_port;        /* Give the master this listening port. */
-    char *slave_announce_ip;        /* Give the master this ip address. */
-
-    list *masters;
-
-}CRDT_Server_Replication;
+#include "server.h"
 
 
 typedef struct CRDT_Client_Replication {
@@ -155,9 +100,8 @@ void crdtReplconfCommand(client *c);
 
 void initClientCrdtIfNeeded(client *c);
 
-void crdtInitServer(void);
-
 
 void crdtCancelReplicationHandshake(client *peer);
+
 
 #endif //REDIS_CRDT_REPLICATION_H

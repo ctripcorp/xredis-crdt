@@ -97,7 +97,7 @@ clientBufferLimitsConfig clientBufferLimitsDefaults[CLIENT_TYPE_OBUF_COUNT] = {
     {1024*1024*256, 1024*1024*64, 60}, /* slave */
     {1024*1024*32, 1024*1024*8, 60},  /* pubsub */
     {0, 0, 0}, /* escape master */
-    {1024*1024*256, 1024*1024*64, 60}, /* crdt slave */
+    {1024*1024*1024, 1024*1024*512, 60}, /* crdt slave */
 };
 
 /*-----------------------------------------------------------------------------
@@ -383,7 +383,7 @@ void loadServerConfigFromString(char *config) {
                 err = "repl-backlog-size must be 1 or greater.";
                 goto loaderr;
             }
-            resizeReplicationBacklog(size);
+            resizeReplicationBacklog(&server, size);
         } else if (!strcasecmp(argv[0],"repl-backlog-ttl") && argc == 2) {
             server.repl_backlog_time_limit = atoi(argv[1]);
             if (server.repl_backlog_time_limit < 0) {
@@ -1156,7 +1156,7 @@ void configSetCommand(client *c) {
     } config_set_memory_field(
       "client-query-buffer-limit",server.client_max_querybuf_len) {
     } config_set_memory_field("repl-backlog-size",ll) {
-        resizeReplicationBacklog(ll);
+            resizeReplicationBacklog(&server, ll);
     } config_set_memory_field("auto-aof-rewrite-min-size",ll) {
         server.aof_rewrite_min_size = ll;
 
@@ -2108,7 +2108,7 @@ void configCommand(client *c) {
         configGetCommand(c);
     } else if (!strcasecmp(c->argv[1]->ptr,"resetstat")) {
         if (c->argc != 2) goto badarity;
-        resetServerStats();
+        resetServerStats(&server);
         resetCommandTableStats();
         addReply(c,shared.ok);
     } else if (!strcasecmp(c->argv[1]->ptr,"rewrite")) {

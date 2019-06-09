@@ -613,25 +613,6 @@ typedef struct redisObject {
     _var.ptr = _ptr; \
 } while(0)
 
-/* Macro to initialize an IO context. Note that the 'ver' field is populated
- * inside rdb.c according to the version of the value to load. */
-inline size_t isModuleCrdt(robj *obj) {
-    if(obj->type != OBJ_MODULE) {
-        return C_ERR;
-    }
-    moduleValue *mv = obj->ptr;
-    if(strncmp(CRDT_MODULE_OBJECT_PREFIX, mv->type->name, 4) == 0) {
-        return C_OK;
-    }
-    return C_ERR;
-}
-
-#define retrieveCrdtCommon(val, common) do { \
-    moduleValue *mv = val->ptr;\
-    void *moduleValue = mv->value;\
-    *common = (CrdtCommon *) moduleValue;\
-}while(0);
-
 struct evictionPoolEntry; /* Defined in evict.c */
 
 /* Redis database representation. There are multiple databases identified
@@ -883,6 +864,45 @@ typedef struct rdbSaveInfo {
 } rdbSaveInfo;
 
 #define RDB_SAVE_INFO_INIT {-1,0,"000000000000000000000000000000",-1}
+
+/*-----------------------------------------------------------------------------
+ * CRDT Master Instance (One Redis Server could've several masters)
+ *----------------------------------------------------------------------------*/
+
+typedef struct CRDT_Master_Instance {
+    long long gid;
+    /* Replication (slave) */
+    char *masterauth;               /* AUTH with this password with master -- keeper it for further use */
+    char *masterhost;               /* Hostname of master */
+    int masterport;                 /* Port of master */
+    int repl_timeout;               /* Timeout after N seconds of master idle */
+    client *master;     /* current crdt master as I'm acting as a slave */
+    client *cached_master; /* Cached master to be reused for CRDT.PSYNC. */
+    int repl_syncio_timeout; /* Timeout for synchronous I/O calls. psync, or others etc */
+    int repl_state;          /* Replication status if the instance is acting as a slave */
+    off_t repl_transfer_size; /* Size of RDB to read from master during sync. */
+    off_t repl_transfer_read; /* Amount of RDB read from master during sync. */
+    off_t repl_transfer_last_fsync_off; /* Offset when we fsync-ed last time. */
+    int repl_transfer_s;     /* Slave -> Master SYNC socket */
+    int repl_transfer_fd;    /* Slave -> Master SYNC temp file descriptor */
+    char *repl_transfer_tmpfile; /* Slave-> master SYNC temp file name */
+    time_t repl_transfer_lastio; /* Unix time of the latest read, for timeout */
+    int repl_serve_stale_data; /* Serve stale data when link is down? */
+    int repl_slave_ro;          /* Slave is read only? */
+    int repl_slave_repl_all;          /* Slave is replicate all commands to its slave? */
+    time_t repl_down_since; /* Unix time at which link with master went down */
+    int repl_disable_tcp_nodelay;   /* Disable TCP_NODELAY after SYNC? */
+    int slave_priority;             /* Reported in INFO and used by Sentinel. */
+    int slave_announce_port;        /* Give the master this listening port. */
+    char *slave_announce_ip;        /* Give the master this ip address. */
+    /* The following two fields is where we store crdt peer(as a master) CRDT.PSYNC replid/offset
+     * while the PSYNC is in progress. At the end we'll copy the fields into
+     * the master client structure. */
+    char master_replid[CONFIG_RUN_ID_SIZE+1];  /* Master PSYNC repl_id. */
+    long long master_initial_offset;           /* Master PSYNC offset. used for the full sync*/
+    int repl_slave_lazy_flush;          /* Lazy FLUSHALL before loading DB? */
+
+} CRDT_Master_Instance;
 
 /*-----------------------------------------------------------------------------
  * Global server state
@@ -1236,7 +1256,7 @@ struct redisServer {
     long long crdt_gid;
     VectorClock *vectorClock;
     VectorClockUnit *localVcu;
-    struct CRDT_Server_Replication *crdt_repl_server;
+    list *crdtMasters;
 }redisServer;
 
 typedef struct pubsubPattern {
@@ -1521,10 +1541,10 @@ void replicationFeedSlavesFromMasterStream(list *slaves, char *buf, size_t bufle
 void replicationFeedMonitors(client *c, list *monitors, int dictid, robj **argv, int argc);
 void updateSlavesWaitingBgsave(int bgsaveerr, int type);
 void replicationCron(void);
-void freeReplicationBacklog(void);
+void freeReplicationBacklog(struct redisServer *srv);
 void replicationHandleMasterDisconnection(void);
 void replicationCacheMaster(client *c);
-void resizeReplicationBacklog(long long newsize);
+void resizeReplicationBacklog(struct redisServer *srv, long long newsize);
 void replicationSetMaster(char *ip, int port);
 void replicationUnsetMaster(void);
 void refreshGoodSlavesCount(void);
@@ -1540,13 +1560,28 @@ long long replicationGetSlaveOffset(void);
 char *replicationGetSlaveName(client *c);
 long long getPsyncInitialOffset(struct redisServer *s);
 int replicationSetupSlaveForFullResync(client *slave, long long offset);
-void changeReplicationId(void);
-void clearReplicationId2(void);
+void changeReplicationId(struct redisServer *srv);
+void clearReplicationId2(struct redisServer *srv);
 void chopReplicationBacklog(void);
 void replicationCacheMasterUsingMyself(void);
 void feedReplicationBacklog(struct redisServer *srv, void *ptr, size_t len);
 
 /* CRDT Replications */
+int listMatchCrdtMaster(void *a, void *b);
+
+/* Macro to initialize an IO context. Note that the 'ver' field is populated
+ * inside rdb.c according to the version of the value to load. */
+inline size_t isModuleCrdt(robj *obj) {
+    if(obj->type != OBJ_MODULE) {
+        return C_ERR;
+    }
+    moduleValue *mv = obj->ptr;
+    if(strncmp(CRDT_MODULE_OBJECT_PREFIX, mv->type->name, 4) == 0) {
+        return C_OK;
+    }
+    return C_ERR;
+}
+
 
 /* Generic persistence functions */
 void startLoading(FILE *fp);
@@ -1669,8 +1704,8 @@ void populateCommandTable(void);
 void resetCommandTableStats(void);
 void adjustOpenFilesLimit(void);
 void closeListeningSockets(int unlink_unix_socket);
-void updateCachedTime(void);
-void resetServerStats(void);
+void updateCachedTime(struct redisServer *srv);
+void resetServerStats(struct redisServer *srv);
 void activeDefragCycle(void);
 unsigned int getLRUClock(void);
 unsigned int LRU_CLOCK(void);
