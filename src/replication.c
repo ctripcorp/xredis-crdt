@@ -40,7 +40,6 @@
 void replicationDiscardCachedMaster(void);
 void replicationResurrectCachedMaster(int newfd);
 void replicationSendAck(void);
-void putSlaveOnline(client *slave);
 int cancelReplicationHandshake(void);
 
 /* --------------------------- Utility functions ---------------------------- */
@@ -868,6 +867,25 @@ void replconfCommand(client *c) {
             c->vectorClock = sdsToVectorClock(c->argv[j+1]->ptr);
             return;
         }
+        else if (!strcasecmp(c->argv[j]->ptr,"ack-vc")) {
+            /* REPLCONF ACK is used by slave to inform the master the amount
+             * of replication stream that it processed so far. It is an
+             * internal only command that normal clients should never use. */
+
+            if (!(c->flags & CLIENT_CRDT_SLAVE)) return;
+            if (c->vectorClock) {
+                freeVectorClock(c->vectorClock);
+            }
+            c->vectorClock = sdsToVectorClock(c->argv[j+1]->ptr);
+            c->repl_ack_time = server.unixtime;
+            /* If this was a diskless replication, we need to really put
+             * the slave online when the first ACK is received (which
+             * confirms slave is online and ready to get more data). */
+            if (c->repl_put_online_on_ack && c->replstate == SLAVE_STATE_ONLINE)
+                putSlaveOnline(c);
+            /* Note: this command does not reply anything! */
+            return;
+        }
         else {
             addReplyErrorFormat(c,"Unrecognized REPLCONF option: %s",
                 (char*)c->argv[j]->ptr);
@@ -1485,7 +1503,7 @@ int slaveTryPartialResynchronization(int fd, int read_reply) {
         }
 
         /* Issue the PSYNC command */
-        reply = sendSynchronousCommand(SYNC_CMD_WRITE,fd,"PSYNC",psync_replid,psync_offset,NULL);
+        reply = sendSynchronousCommand(SYNC_CMD_WRITE, fd, "PSYNC", psync_replid, psync_offset, NULL);
         if (reply != NULL) {
             serverLog(LL_WARNING,"Unable to send PSYNC to master: %s",reply);
             sdsfree(reply);
@@ -1496,7 +1514,7 @@ int slaveTryPartialResynchronization(int fd, int read_reply) {
     }
 
     /* Reading half */
-    reply = sendSynchronousCommand(SYNC_CMD_READ,fd,NULL);
+    reply = sendSynchronousCommand(SYNC_CMD_READ, fd, NULL);
     if (sdslen(reply) == 0) {
         /* The master may send empty newlines after it receives PSYNC
          * and before to reply, just to keep the connection alive. */
@@ -1654,14 +1672,14 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
         server.repl_state = REPL_STATE_RECEIVE_PONG;
         /* Send the PING, don't check for errors at all, we have the timeout
          * that will take care about this. */
-        err = sendSynchronousCommand(SYNC_CMD_WRITE,fd,"PING",NULL);
+        err = sendSynchronousCommand(SYNC_CMD_WRITE, fd, "PING", NULL);
         if (err) goto write_error;
         return;
     }
 
     /* Receive the PONG command. */
     if (server.repl_state == REPL_STATE_RECEIVE_PONG) {
-        err = sendSynchronousCommand(SYNC_CMD_READ,fd,NULL);
+        err = sendSynchronousCommand(SYNC_CMD_READ, fd, NULL);
 
         /* We accept only two replies as valid, a positive +PONG reply
          * (we just check for "+") or an authentication error.
@@ -1686,7 +1704,7 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
     /* AUTH with the master if required. */
     if (server.repl_state == REPL_STATE_SEND_AUTH) {
         if (server.masterauth) {
-            err = sendSynchronousCommand(SYNC_CMD_WRITE,fd,"AUTH",server.masterauth,NULL);
+            err = sendSynchronousCommand(SYNC_CMD_WRITE, fd, "AUTH", server.masterauth, NULL);
             if (err) goto write_error;
             server.repl_state = REPL_STATE_RECEIVE_AUTH;
             return;
@@ -1697,7 +1715,7 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
 
     /* Receive AUTH reply. */
     if (server.repl_state == REPL_STATE_RECEIVE_AUTH) {
-        err = sendSynchronousCommand(SYNC_CMD_READ,fd,NULL);
+        err = sendSynchronousCommand(SYNC_CMD_READ, fd, NULL);
         if (err[0] == '-') {
             serverLog(LL_WARNING,"Unable to AUTH to MASTER: %s",err);
             sdsfree(err);
@@ -1712,8 +1730,8 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
     if (server.repl_state == REPL_STATE_SEND_PORT) {
         sds port = sdsfromlonglong(server.slave_announce_port ?
             server.slave_announce_port : server.port);
-        err = sendSynchronousCommand(SYNC_CMD_WRITE,fd,"REPLCONF",
-                "listening-port",port, NULL);
+        err = sendSynchronousCommand(SYNC_CMD_WRITE, fd, "REPLCONF",
+                                         "listening-port", port, NULL);
         sdsfree(port);
         if (err) goto write_error;
         sdsfree(err);
@@ -1723,7 +1741,7 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
 
     /* Receive REPLCONF listening-port reply. */
     if (server.repl_state == REPL_STATE_RECEIVE_PORT) {
-        err = sendSynchronousCommand(SYNC_CMD_READ,fd,NULL);
+        err = sendSynchronousCommand(SYNC_CMD_READ, fd, NULL);
         /* Ignore the error if any, not all the Redis versions support
          * REPLCONF listening-port. */
         if (err[0] == '-') {
@@ -1744,8 +1762,8 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
     /* Set the slave ip, so that Master's INFO command can list the
      * slave IP address port correctly in case of port forwarding or NAT. */
     if (server.repl_state == REPL_STATE_SEND_IP) {
-        err = sendSynchronousCommand(SYNC_CMD_WRITE,fd,"REPLCONF",
-                "ip-address",server.slave_announce_ip, NULL);
+        err = sendSynchronousCommand(SYNC_CMD_WRITE, fd, "REPLCONF",
+                                         "ip-address", server.slave_announce_ip, NULL);
         if (err) goto write_error;
         sdsfree(err);
         server.repl_state = REPL_STATE_RECEIVE_IP;
@@ -1754,7 +1772,7 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
 
     /* Receive REPLCONF ip-address reply. */
     if (server.repl_state == REPL_STATE_RECEIVE_IP) {
-        err = sendSynchronousCommand(SYNC_CMD_READ,fd,NULL);
+        err = sendSynchronousCommand(SYNC_CMD_READ, fd, NULL);
         /* Ignore the error if any, not all the Redis versions support
          * REPLCONF listening-port. */
         if (err[0] == '-') {
@@ -1772,8 +1790,8 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
      *
      * The master will ignore capabilities it does not understand. */
     if (server.repl_state == REPL_STATE_SEND_CAPA) {
-        err = sendSynchronousCommand(SYNC_CMD_WRITE,fd,"REPLCONF",
-                "capa","eof","capa","psync2",NULL);
+        err = sendSynchronousCommand(SYNC_CMD_WRITE, fd, "REPLCONF",
+                                         "capa", "eof", "capa", "psync2", NULL);
         if (err) goto write_error;
         sdsfree(err);
         server.repl_state = REPL_STATE_RECEIVE_CAPA;
@@ -1782,7 +1800,7 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
 
     /* Receive CAPA reply. */
     if (server.repl_state == REPL_STATE_RECEIVE_CAPA) {
-        err = sendSynchronousCommand(SYNC_CMD_READ,fd,NULL);
+        err = sendSynchronousCommand(SYNC_CMD_READ, fd, NULL);
         /* Ignore the error if any, not all the Redis versions support
          * REPLCONF capa. */
         if (err[0] == '-') {

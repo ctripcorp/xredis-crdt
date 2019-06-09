@@ -34,6 +34,7 @@
 #include "ctrip_crdt_rdb.h"
 #include "rdb.h"
 #include "rio.h"
+#include "server.h"
 #include "ctrip_crdt_replication.h"
 
 
@@ -263,7 +264,7 @@ crdtMergeCommand(client *c) {
     return;
 
 error:
-    crdtCancelReplicationHandshake(c);
+    crdtCancelReplicationHandshake(sourceGid);
     return;
 
 }
