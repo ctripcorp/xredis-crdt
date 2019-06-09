@@ -294,11 +294,14 @@ typedef long long mstime_t; /* millisecond time type. */
 #define REPL_STATE_RECEIVE_IP 9 /* Wait for REPLCONF reply */
 #define REPL_STATE_SEND_CAPA 10 /* Send REPLCONF capa */
 #define REPL_STATE_RECEIVE_CAPA 11 /* Wait for REPLCONF reply */
-#define REPL_STATE_SEND_PSYNC 12 /* Send PSYNC */
-#define REPL_STATE_RECEIVE_PSYNC 13 /* Wait for PSYNC reply */
+#define REPL_STATE_SEND_VC 12 /* Send Vector Clock */
+#define REPL_STATE_RECEIVE_VC 13 /* Wait for Vector Clock reply */
+#define REPL_STATE_SEND_PSYNC 14 /* Send PSYNC */
+#define REPL_STATE_RECEIVE_PSYNC 15 /* Wait for PSYNC reply */
+
 /* --- End of handshake states --- */
-#define REPL_STATE_TRANSFER 14 /* Receiving .rdb from master */
-#define REPL_STATE_CONNECTED 15 /* Connected to master */
+#define REPL_STATE_TRANSFER 16 /* Receiving .rdb from master */
+#define REPL_STATE_CONNECTED 17 /* Connected to master */
 
 /* State of slaves from the POV of the master. Used in client->replstate.
  * In SEND_BULK and ONLINE state the slave receives new updates
@@ -880,26 +883,19 @@ typedef struct CRDT_Master_Instance {
     char *masterauth;               /* AUTH with this password with master -- keeper it for further use */
     char *masterhost;               /* Hostname of master */
     int masterport;                 /* Port of master */
-    int repl_timeout;               /* Timeout after N seconds of master idle */
     client *master;     /* current crdt master as I'm acting as a slave */
     client *cached_master; /* Cached master to be reused for CRDT.PSYNC. */
-    int repl_syncio_timeout; /* Timeout for synchronous I/O calls. psync, or others etc */
     int repl_state;          /* Replication status if the instance is acting as a slave */
     off_t repl_transfer_size; /* Size of RDB to read from master during sync. */
     off_t repl_transfer_read; /* Amount of RDB read from master during sync. */
     off_t repl_transfer_last_fsync_off; /* Offset when we fsync-ed last time. */
     int repl_transfer_s;     /* Slave -> Master SYNC socket */
-    int repl_transfer_fd;    /* Slave -> Master SYNC temp file descriptor */
-    char *repl_transfer_tmpfile; /* Slave-> master SYNC temp file name */
     time_t repl_transfer_lastio; /* Unix time of the latest read, for timeout */
     int repl_serve_stale_data; /* Serve stale data when link is down? */
     int repl_slave_ro;          /* Slave is read only? */
     int repl_slave_repl_all;          /* Slave is replicate all commands to its slave? */
     time_t repl_down_since; /* Unix time at which link with master went down */
     int repl_disable_tcp_nodelay;   /* Disable TCP_NODELAY after SYNC? */
-    int slave_priority;             /* Reported in INFO and used by Sentinel. */
-    int slave_announce_port;        /* Give the master this listening port. */
-    char *slave_announce_ip;        /* Give the master this ip address. */
     /* The following two fields is where we store crdt peer(as a master) CRDT.PSYNC replid/offset
      * while the PSYNC is in progress. At the end we'll copy the fields into
      * the master client structure. */
@@ -1573,6 +1569,8 @@ void chopReplicationBacklog(void);
 void replicationCacheMasterUsingMyself(void);
 void feedReplicationBacklog(struct redisServer *srv, void *ptr, size_t len);
 int masterTryPartialResynchronization(struct redisServer *srv, client *c);
+void putSlaveOnline(client *slave);
+void createReplicationBacklog(struct redisServer *srv);
 
 /* CRDT Replications */
 int listMatchCrdtMaster(void *a, void *b);

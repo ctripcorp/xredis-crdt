@@ -68,34 +68,7 @@
 #include "server.h"
 
 
-typedef struct CRDT_Client_Replication {
-
-    int authenticated;      /* When requirepass is non-NULL. for further use*/
-    int replstate;          /* Replication state if this is a slave. */
-    int repl_put_online_on_ack; /* Install slave write handler on ACK. */
-    int repldbfd;           /* Replication DB file descriptor. */
-    off_t repldboff;        /* Replication DB file offset. */
-    off_t repldbsize;       /* Replication DB file size. */
-    sds replpreamble;       /* Replication DB preamble. */
-
-    /**========================= CRDT Replication Client (master) ==============================*/
-    long long read_reploff; /* Read offset represents the offset we current read from master's socket, some are not implied yet */
-    long long reploff;      /* Applied replication offset */
-
-    /**========================= CRDT Replication Client (slave) ==============================*/
-    long long repl_ack_off; /* Replication ack offset, if this is a slave. */
-    long long repl_ack_time;/* Replication ack time, if this is a slave. */
-    long long psync_initial_offset; /* CRDT FULLRESYNC reply offset other slaves
-                                       copying this slave output buffer
-                                       should use. */
-    char replid[CONFIG_RUN_ID_SIZE+1]; /* Master replication ID (if master). */
-    int slave_listening_port; /* As configured with: SLAVECONF listening-port */
-    char slave_ip[NET_IP_STR_LEN]; /* Optionally given by REPLCONF ip-address */
-
-}CRDT_Client_Replication;
-
-
-void crdtCancelReplicationHandshake(client *peer);
+void crdtCancelReplicationHandshake(long long gid);
 
 
 #endif //REDIS_CRDT_REPLICATION_H
