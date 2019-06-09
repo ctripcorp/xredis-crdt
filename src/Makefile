@@ -241,6 +241,12 @@ distclean: clean
 test: $(REDIS_SERVER_NAME) $(REDIS_CHECK_AOF_NAME)
 	@(cd ..; ./runtest)
 
+integration-test: $(REDIS_SERVER_NAME) $(REDIS_CHECK_AOF_NAME)
+	@(cd ..; ./runtest-integration)
+
+crdt-test: $(REDIS_SERVER_NAME) $(REDIS_CHECK_AOF_NAME)
+	@(cd ..; ./runtest-crdt)
+
 test-sentinel: $(REDIS_SENTINEL_NAME)
 	@(cd ..; ./runtest-sentinel)
 
