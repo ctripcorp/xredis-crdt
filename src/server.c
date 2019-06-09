@@ -313,8 +313,8 @@ struct redisCommand redisCommandTable[] = {
     {"crdt.merge_start", crdtMergeStartCommand,-1,"ars",0,NULL,0,0,0,0,0},
     {"crdt.merge",crdtMergeCommand,-1,"ars",0,NULL,0,0,0,0,0},
     {"crdt.merge_end",crdtMergeEndCommand,-1,"ars",0,NULL,0,0,0,0,0},
-    {"crdt.replconf",replconfCommand,-1,"aslt",0,NULL,0,0,0,0,0}
-
+    {"crdt.replconf",replconfCommand,-1,"aslt",0,NULL,0,0,0,0,0},
+    {"peerof",peerofCommand,4,"ast",0,NULL,0,0,0,0,0},
 };
 
 /*============================ CRDT functions ============================ */
@@ -1164,6 +1164,10 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     /* Replication cron function -- used to reconnect to master,
      * detect transfer failures, start background RDB transfers and so forth. */
     run_with_period(1000) replicationCron();
+
+    /* Crdt Replication cron function -- used to reconnect to master,
+     * detect transfer failures, start background RDB transfers and so forth. */
+    run_with_period(1000) crdtReplicationCron();
 
     /* Run the Redis Cluster cron. */
     run_with_period(100) {
