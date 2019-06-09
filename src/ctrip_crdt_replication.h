@@ -94,12 +94,6 @@ typedef struct CRDT_Client_Replication {
 
 }CRDT_Client_Replication;
 
-void crdtPSyncCommand(client *c);
-
-void crdtReplconfCommand(client *c);
-
-void initClientCrdtIfNeeded(client *c);
-
 
 void crdtCancelReplicationHandshake(client *peer);
 

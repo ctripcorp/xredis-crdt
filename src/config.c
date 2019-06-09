@@ -151,10 +151,10 @@ void appendServerSaveParams(time_t seconds, int changes) {
     server.saveparamslen++;
 }
 
-void resetServerSaveParams(void) {
-    zfree(server.saveparams);
-    server.saveparams = NULL;
-    server.saveparamslen = 0;
+void resetServerSaveParams(struct redisServer *srv) {
+    zfree(srv->saveparams);
+    srv->saveparams = NULL;
+    srv->saveparamslen = 0;
 }
 
 void queueLoadModule(sds path, sds *argv, int argc) {
@@ -254,7 +254,7 @@ void loadServerConfigFromString(char *config) {
                 }
                 appendServerSaveParams(seconds,changes);
             } else if (argc == 2 && !strcasecmp(argv[1],"")) {
-                resetServerSaveParams();
+                resetServerSaveParams(&server);
             }
         } else if (!strcasecmp(argv[0],"dir") && argc == 2) {
             if (chdir(argv[1]) == -1) {
@@ -925,7 +925,7 @@ void configSetCommand(client *c) {
             }
         }
         /* Finally set the new config */
-        resetServerSaveParams();
+        resetServerSaveParams(&server);
         for (j = 0; j < vlen; j += 2) {
             time_t seconds;
             int changes;
@@ -1115,10 +1115,10 @@ void configSetCommand(client *c) {
       "slave-announce-port",server.slave_announce_port,0,65535) {
     } config_set_numerical_field(
       "min-slaves-to-write",server.repl_min_slaves_to_write,0,LLONG_MAX) {
-        refreshGoodSlavesCount();
+        refreshGoodSlavesCount(&server);
     } config_set_numerical_field(
       "min-slaves-max-lag",server.repl_min_slaves_max_lag,0,LLONG_MAX) {
-        refreshGoodSlavesCount();
+        refreshGoodSlavesCount(&server);
     }  config_set_numerical_field(
       "cluster-node-timeout",server.cluster_node_timeout,0,LLONG_MAX) {
     } config_set_numerical_field(

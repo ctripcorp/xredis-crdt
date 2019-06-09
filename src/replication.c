@@ -420,7 +420,7 @@ long long getPsyncInitialOffset(struct redisServer *s) {
  * Normally this function should be called immediately after a successful
  * BGSAVE for replication was started, or when there is one already in
  * progress that we attached our slave to. */
-int replicationSetupSlaveForFullResync(client *slave, long long offset) {
+int replicationSetupSlaveForFullResync(struct redisServer *srv, client *slave, long long offset) {
     char buf[128];
     int buflen;
 
@@ -429,13 +429,13 @@ int replicationSetupSlaveForFullResync(client *slave, long long offset) {
     /* We are going to accumulate the incremental changes for this
      * slave as well. Set slaveseldb to -1 in order to force to re-emit
      * a SELECT statement in the replication stream. */
-    server.slaveseldb = -1;
+    srv->slaveseldb = -1;
 
     /* Don't send this reply to slaves that approached us with
      * the old SYNC command. */
     if (!(slave->flags & CLIENT_PRE_PSYNC)) {
         buflen = snprintf(buf,sizeof(buf),"+FULLRESYNC %s %lld\r\n",
-                          server.replid,offset);
+                          srv->replid,offset);
         if (write(slave->fd,buf,buflen) != buflen) {
             freeClientAsync(slave);
             return C_ERR;
@@ -449,7 +449,7 @@ int replicationSetupSlaveForFullResync(client *slave, long long offset) {
  *
  * On success return C_OK, otherwise C_ERR is returned and we proceed
  * with the usual full resync. */
-int masterTryPartialResynchronization(client *c) {
+int masterTryPartialResynchronization(struct redisServer *srv, client *c) {
     long long psync_offset, psync_len;
     char *master_replid = c->argv[1]->ptr;
     char buf[128];
@@ -467,23 +467,23 @@ int masterTryPartialResynchronization(client *c) {
      *
      * Note that there are two potentially valid replication IDs: the ID1
      * and the ID2. The ID2 however is only valid up to a specific offset. */
-    if (strcasecmp(master_replid, server.replid) &&
-        (strcasecmp(master_replid, server.replid2) ||
-         psync_offset > server.second_replid_offset))
+    if (strcasecmp(master_replid, srv->replid) &&
+        (strcasecmp(master_replid, srv->replid2) ||
+         psync_offset > srv->second_replid_offset))
     {
         /* Run id "?" is used by slaves that want to force a full resync. */
         if (master_replid[0] != '?') {
-            if (strcasecmp(master_replid, server.replid) &&
-                strcasecmp(master_replid, server.replid2))
+            if (strcasecmp(master_replid, srv->replid) &&
+                strcasecmp(master_replid, srv->replid2))
             {
                 serverLog(LL_NOTICE,"Partial resynchronization not accepted: "
                     "Replication ID mismatch (Slave asked for '%s', my "
                     "replication IDs are '%s' and '%s')",
-                    master_replid, server.replid, server.replid2);
+                    master_replid, srv->replid, srv->replid2);
             } else {
                 serverLog(LL_NOTICE,"Partial resynchronization not accepted: "
                     "Requested offset for second ID was %lld, but I can reply "
-                    "up to %lld", psync_offset, server.second_replid_offset);
+                    "up to %lld", psync_offset, srv->second_replid_offset);
             }
         } else {
             serverLog(LL_NOTICE,"Full resync requested by slave %s",
@@ -493,15 +493,15 @@ int masterTryPartialResynchronization(client *c) {
     }
 
     /* We still have the data our slave is asking for? */
-    if (!server.repl_backlog ||
-        psync_offset < server.repl_backlog_off ||
-        psync_offset > (server.repl_backlog_off + server.repl_backlog_histlen))
+    if (!srv->repl_backlog ||
+        psync_offset < srv->repl_backlog_off ||
+        psync_offset > (srv->repl_backlog_off + srv->repl_backlog_histlen))
     {
         serverLog(LL_NOTICE,
             "Unable to partial resync with slave %s for lack of backlog (Slave request was: %lld).", replicationGetSlaveName(c), psync_offset);
-        if (psync_offset > server.master_repl_offset) {
+        if (psync_offset > srv->master_repl_offset) {
             serverLog(LL_WARNING,
-                "Warning: slave %s tried to PSYNC with an offset that is greater than the master replication offset(%lld).", replicationGetSlaveName(c), server.master_repl_offset);
+                "Warning: slave %s tried to PSYNC with an offset that is greater than the master replication offset(%lld).", replicationGetSlaveName(c), srv->master_repl_offset);
         }
         goto need_full_resync;
     }
@@ -512,14 +512,14 @@ int masterTryPartialResynchronization(client *c) {
      * 3) Send the backlog data (from the offset to the end) to the slave. */
     c->flags |= CLIENT_SLAVE;
     c->replstate = SLAVE_STATE_ONLINE;
-    c->repl_ack_time = server.unixtime;
+    c->repl_ack_time = srv->unixtime;
     c->repl_put_online_on_ack = 0;
-    listAddNodeTail(server.slaves,c);
+    listAddNodeTail(srv->slaves,c);
     /* We can't use the connection buffers since they are used to accumulate
      * new commands at this stage. But we are sure the socket send buffer is
      * empty so this write will never fail actually. */
     if (c->slave_capa & SLAVE_CAPA_PSYNC2) {
-        buflen = snprintf(buf,sizeof(buf),"+CONTINUE %s\r\n", server.replid);
+        buflen = snprintf(buf,sizeof(buf),"+CONTINUE %s\r\n", srv->replid);
     } else {
         buflen = snprintf(buf,sizeof(buf),"+CONTINUE\r\n");
     }
@@ -532,11 +532,11 @@ int masterTryPartialResynchronization(client *c) {
         "Partial resynchronization request from %s accepted. Sending %lld bytes of backlog starting from offset %lld.",
             replicationGetSlaveName(c),
             psync_len, psync_offset);
-    /* Note that we don't need to set the selected DB at server.slaveseldb
+    /* Note that we don't need to set the selected DB at srv->slaveseldb
      * to -1 to force the master to emit SELECT, since the slave already
      * has this state from the previous connection with the master. */
 
-    refreshGoodSlavesCount();
+    refreshGoodSlavesCount(&server);
     return C_OK; /* The caller can return, no full resync needed. */
 
 need_full_resync:
@@ -616,7 +616,7 @@ int startBgsaveForReplication(int mincapa) {
             client *slave = ln->value;
 
             if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) {
-                    replicationSetupSlaveForFullResync(slave,
+                    replicationSetupSlaveForFullResync(&server, slave,
                             getPsyncInitialOffset(&server));
             }
         }
@@ -628,10 +628,103 @@ int startBgsaveForReplication(int mincapa) {
     return retval;
 }
 
+
+//Support for syncCommand
+void refullSyncWithSlaves(struct redisServer *srv, client *c) {
+    /* Full resynchronization. */
+    srv->stat_sync_full++;
+
+    /* Setup the slave as one waiting for BGSAVE to start. The following code
+     * paths will change the state if we handle the slave differently. */
+    c->replstate = SLAVE_STATE_WAIT_BGSAVE_START;
+    if (srv->repl_disable_tcp_nodelay)
+        anetDisableTcpNoDelay(NULL, c->fd); /* Non critical if it fails. */
+    c->repldbfd = -1;
+
+    if(srv == &server) {
+        c->flags |= CLIENT_SLAVE;
+    } else if (srv == &crdtServer) {
+        c->flags |= CLIENT_CRDT_SLAVE;
+    }
+
+    listAddNodeTail(srv->slaves,c);
+
+    /* Create the replication backlog if needed. */
+    if (listLength(srv->slaves) == 1 && srv->repl_backlog == NULL) {
+        /* When we create the backlog from scratch, we always use a new
+         * replication ID and clear the ID2, since there is no valid
+         * past history. */
+        changeReplicationId(srv);
+        clearReplicationId2(srv);
+        createReplicationBacklog(srv);
+    }
+
+    /* CASE 1: BGSAVE is in progress, with disk target. */
+    if (srv->rdb_child_pid != -1 &&
+        srv->rdb_child_type == RDB_CHILD_TYPE_DISK)
+    {
+        /* Ok a background save is in progress. Let's check if it is a good
+         * one for replication, i.e. if there is another slave that is
+         * registering differences since the server forked to save. */
+        client *slave;
+        listNode *ln;
+        listIter li;
+
+        listRewind(srv->slaves,&li);
+        while((ln = listNext(&li))) {
+            slave = ln->value;
+            if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_END) break;
+        }
+        /* To attach this slave, we check that it has at least all the
+         * capabilities of the slave that triggered the current BGSAVE. */
+        if (ln && ((c->slave_capa & slave->slave_capa) == slave->slave_capa)) {
+            /* Perfect, the server is already registering differences for
+             * another slave. Set the right state, and copy the buffer. */
+            copyClientOutputBuffer(c,slave);
+            replicationSetupSlaveForFullResync(&server, c,slave->psync_initial_offset);
+            serverLog(LL_NOTICE,"Waiting for end of BGSAVE for SYNC");
+        } else {
+            /* No way, we need to wait for the next BGSAVE in order to
+             * register differences. */
+            serverLog(LL_NOTICE,"Can't attach the slave to the current BGSAVE. Waiting for next BGSAVE for SYNC");
+        }
+
+        /* CASE 2: BGSAVE is in progress, with socket target. */
+    } else if (srv->rdb_child_pid != -1 &&
+               srv->rdb_child_type == RDB_CHILD_TYPE_SOCKET)
+    {
+        /* There is an RDB child process but it is writing directly to
+         * children sockets. We need to wait for the next BGSAVE
+         * in order to synchronize. */
+        serverLog(LL_NOTICE,"Current BGSAVE has socket target. Waiting for next BGSAVE for SYNC");
+
+        /* CASE 3: There is no BGSAVE is progress. */
+    } else {
+        if (srv->repl_diskless_sync && (c->slave_capa & SLAVE_CAPA_EOF)) {
+            /* Diskless replication RDB child is created inside
+             * replicationCron() since we want to delay its start a
+             * few seconds to wait for more slaves to arrive. */
+            if (srv->repl_diskless_sync_delay)
+                serverLog(LL_NOTICE,"Delay next BGSAVE for diskless SYNC");
+        } else {
+            /* Target is disk (or the slave is not capable of supporting
+             * diskless replication) and we don't have a BGSAVE in progress,
+             * let's start one. */
+            if (srv->aof_child_pid == -1) {
+                startBgsaveForReplication(c->slave_capa);
+            } else {
+                serverLog(LL_NOTICE,
+                          "No BGSAVE in progress, but an AOF rewrite is active. "
+                          "BGSAVE for replication delayed");
+            }
+        }
+    }
+    return;
+}
 /* SYNC and PSYNC command implemenation. */
 void syncCommand(client *c) {
     /* ignore SYNC if already slave or in monitor mode */
-    if (c->flags & CLIENT_SLAVE) return;
+    if (c->flags & CLIENT_SLAVE || c->flags & CLIENT_CRDT_SLAVE) return;
 
     /* Refuse SYNC requests if we are a slave but the link with our master
      * is not ok... */
@@ -650,7 +743,7 @@ void syncCommand(client *c) {
     }
 
     serverLog(LL_NOTICE,"Slave %s asks for synchronization",
-        replicationGetSlaveName(c));
+              replicationGetSlaveName(c));
 
     /* Try a partial resynchronization if this is a PSYNC command.
      * If it fails, we continue with usual full resynchronization, however
@@ -662,7 +755,7 @@ void syncCommand(client *c) {
      * So the slave knows the new replid and offset to try a PSYNC later
      * if the connection with the master is lost. */
     if (!strcasecmp(c->argv[0]->ptr,"psync")) {
-        if (masterTryPartialResynchronization(c) == C_OK) {
+        if (masterTryPartialResynchronization(&server, c) == C_OK) {
             server.stat_sync_partial_ok++;
             return; /* No full resync needed, return. */
         } else {
@@ -674,6 +767,22 @@ void syncCommand(client *c) {
              * resync. */
             if (master_replid[0] != '?') server.stat_sync_partial_err++;
         }
+    } else if (!strcasecmp(c->argv[0]->ptr,"crdt.psync")) {
+        if (masterTryPartialResynchronization(&crdtServer, c) == C_OK) {
+            crdtServer.stat_sync_partial_ok++;
+            return; /* No full resync needed, return. */
+        } else {
+            char *master_replid = c->argv[1]->ptr;
+
+            /* Increment stats for failed CRDT.PSYNCs, but only if the
+             * replid is not "?", as this is used by slaves to force a full
+             * resync on purpose when they are not albe to partially
+             * resync. */
+            if (master_replid[0] != '?') crdtServer.stat_sync_partial_err++;
+
+            refullSyncWithSlaves(&crdtServer, c);
+            return;
+        }
     } else {
         /* If a slave uses SYNC, we are dealing with an old implementation
          * of the replication protocol (like redis-cli --slave). Flag the client
@@ -681,89 +790,7 @@ void syncCommand(client *c) {
         c->flags |= CLIENT_PRE_PSYNC;
     }
 
-    /* Full resynchronization. */
-    server.stat_sync_full++;
-
-    /* Setup the slave as one waiting for BGSAVE to start. The following code
-     * paths will change the state if we handle the slave differently. */
-    c->replstate = SLAVE_STATE_WAIT_BGSAVE_START;
-    if (server.repl_disable_tcp_nodelay)
-        anetDisableTcpNoDelay(NULL, c->fd); /* Non critical if it fails. */
-    c->repldbfd = -1;
-    c->flags |= CLIENT_SLAVE;
-    listAddNodeTail(server.slaves,c);
-
-    /* Create the replication backlog if needed. */
-    if (listLength(server.slaves) == 1 && server.repl_backlog == NULL) {
-        /* When we create the backlog from scratch, we always use a new
-         * replication ID and clear the ID2, since there is no valid
-         * past history. */
-        changeReplicationId(&server);
-        clearReplicationId2(&server);
-        createReplicationBacklog(&server);
-    }
-
-    /* CASE 1: BGSAVE is in progress, with disk target. */
-    if (server.rdb_child_pid != -1 &&
-        server.rdb_child_type == RDB_CHILD_TYPE_DISK)
-    {
-        /* Ok a background save is in progress. Let's check if it is a good
-         * one for replication, i.e. if there is another slave that is
-         * registering differences since the server forked to save. */
-        client *slave;
-        listNode *ln;
-        listIter li;
-
-        listRewind(server.slaves,&li);
-        while((ln = listNext(&li))) {
-            slave = ln->value;
-            if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_END) break;
-        }
-        /* To attach this slave, we check that it has at least all the
-         * capabilities of the slave that triggered the current BGSAVE. */
-        if (ln && ((c->slave_capa & slave->slave_capa) == slave->slave_capa)) {
-            /* Perfect, the server is already registering differences for
-             * another slave. Set the right state, and copy the buffer. */
-            copyClientOutputBuffer(c,slave);
-            replicationSetupSlaveForFullResync(c,slave->psync_initial_offset);
-            serverLog(LL_NOTICE,"Waiting for end of BGSAVE for SYNC");
-        } else {
-            /* No way, we need to wait for the next BGSAVE in order to
-             * register differences. */
-            serverLog(LL_NOTICE,"Can't attach the slave to the current BGSAVE. Waiting for next BGSAVE for SYNC");
-        }
-
-    /* CASE 2: BGSAVE is in progress, with socket target. */
-    } else if (server.rdb_child_pid != -1 &&
-               server.rdb_child_type == RDB_CHILD_TYPE_SOCKET)
-    {
-        /* There is an RDB child process but it is writing directly to
-         * children sockets. We need to wait for the next BGSAVE
-         * in order to synchronize. */
-        serverLog(LL_NOTICE,"Current BGSAVE has socket target. Waiting for next BGSAVE for SYNC");
-
-    /* CASE 3: There is no BGSAVE is progress. */
-    } else {
-        if (server.repl_diskless_sync && (c->slave_capa & SLAVE_CAPA_EOF)) {
-            /* Diskless replication RDB child is created inside
-             * replicationCron() since we want to delay its start a
-             * few seconds to wait for more slaves to arrive. */
-            if (server.repl_diskless_sync_delay)
-                serverLog(LL_NOTICE,"Delay next BGSAVE for diskless SYNC");
-        } else {
-            /* Target is disk (or the slave is not capable of supporting
-             * diskless replication) and we don't have a BGSAVE in progress,
-             * let's start one. */
-            if (server.aof_child_pid == -1) {
-                startBgsaveForReplication(c->slave_capa);
-            } else {
-                serverLog(LL_NOTICE,
-                    "No BGSAVE in progress, but an AOF rewrite is active. "
-                    "BGSAVE for replication delayed");
-            }
-        }
-    }
-    return;
+    refullSyncWithSlaves(&server, c);
 }
 
 /* REPLCONF <option> <value> <option> <value> ...
@@ -836,7 +863,12 @@ void replconfCommand(client *c) {
              * to the slave. */
             if (server.masterhost && server.master) replicationSendAck();
             return;
-        } else {
+        }  // minimum vector clock I could handle with
+        else if (!strcasecmp(c->argv[j]->ptr,"min-vc")) {
+            c->vectorClock = sdsToVectorClock(c->argv[j+1]->ptr);
+            return;
+        }
+        else {
             addReplyErrorFormat(c,"Unrecognized REPLCONF option: %s",
                 (char*)c->argv[j]->ptr);
             return;
@@ -867,7 +899,11 @@ void putSlaveOnline(client *slave) {
         freeClient(slave);
         return;
     }
-    refreshGoodSlavesCount();
+    if (slave->flags & CLIENT_CRDT_SLAVE) {
+        refreshGoodSlavesCount(&crdtServer);
+    } else if (slave->flags & CLIENT_SLAVE) {
+        refreshGoodSlavesCount(&server);
+    }
     serverLog(LL_NOTICE,"Synchronization with slave %s succeeded",
         replicationGetSlaveName(slave));
 }
@@ -2247,23 +2283,23 @@ void replicationResurrectCachedMaster(int newfd) {
 /* This function counts the number of slaves with lag <= min-slaves-max-lag.
  * If the option is active, the server will prevent writes if there are not
  * enough connected slaves with the specified lag (or less). */
-void refreshGoodSlavesCount(void) {
+void refreshGoodSlavesCount(struct redisServer *srv) {
     listIter li;
     listNode *ln;
     int good = 0;
 
-    if (!server.repl_min_slaves_to_write ||
-        !server.repl_min_slaves_max_lag) return;
+    if (!srv->repl_min_slaves_to_write ||
+        !srv->repl_min_slaves_max_lag) return;
 
-    listRewind(server.slaves,&li);
+    listRewind(srv->slaves,&li);
     while((ln = listNext(&li))) {
         client *slave = ln->value;
-        time_t lag = server.unixtime - slave->repl_ack_time;
+        time_t lag = srv->unixtime - slave->repl_ack_time;
 
         if (slave->replstate == SLAVE_STATE_ONLINE &&
-            lag <= server.repl_min_slaves_max_lag) good++;
+            lag <= srv->repl_min_slaves_max_lag) good++;
     }
-    server.repl_good_slaves_count = good;
+    srv->repl_good_slaves_count = good;
 }
 
 /* ----------------------- REPLICATION SCRIPT CACHE --------------------------
@@ -2704,6 +2740,6 @@ void replicationCron(void) {
     }
 
     /* Refresh the number of slaves with lag <= min-slaves-max-lag. */
-    refreshGoodSlavesCount();
+    refreshGoodSlavesCount(&server);
     replication_cron_loops++; /* Incremented with frequency 1 HZ. */
 }

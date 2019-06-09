@@ -842,7 +842,7 @@ void freeClient(client *c) {
          * backlog. */
         if (c->flags & CLIENT_SLAVE && listLength(server.slaves) == 0)
             server.repl_no_slaves_since = server.unixtime;
-        refreshGoodSlavesCount();
+        refreshGoodSlavesCount(&server);
     }
 
     /* Master/slave cleanup Case 2:

@@ -13,11 +13,7 @@ source tests/support/util.tcl
 
 set ::all_tests {
     integration/replication
-    integration/replication-2
-    integration/replication-3
-    integration/replication-4
-    integration/replication-psync
-    integration/rdb
+
 }
 # Index to the next test to run in the ::all_tests list.
 set ::next_test 0
