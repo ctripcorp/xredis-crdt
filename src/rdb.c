@@ -1072,7 +1072,7 @@ int rdbSaveBackground(char *filename, rdbSaveInfo *rsi) {
 
     server.dirty_before_bgsave = server.dirty;
     server.lastbgsave_try = time(NULL);
-    openChildInfoPipe(server);
+    openChildInfoPipe(&server);
 
     start = ustime();
     if ((childpid = fork()) == 0) {
@@ -1092,7 +1092,7 @@ int rdbSaveBackground(char *filename, rdbSaveInfo *rsi) {
             }
 
             server.child_info_data.cow_size = private_dirty;
-            sendChildInfo(CHILD_INFO_TYPE_RDB, server);
+            sendChildInfo(CHILD_INFO_TYPE_RDB, &server);
         }
         exitFromChild((retval == C_OK) ? 0 : 1);
     } else {
@@ -1101,7 +1101,7 @@ int rdbSaveBackground(char *filename, rdbSaveInfo *rsi) {
         server.stat_fork_rate = (double) zmalloc_used_memory() * 1000000 / server.stat_fork_time / (1024*1024*1024); /* GB per second. */
         latencyAddSampleIfNeeded("fork",server.stat_fork_time/1000);
         if (childpid == -1) {
-            closeChildInfoPipe(server);
+            closeChildInfoPipe(&server);
             server.lastbgsave_status = C_ERR;
             serverLog(LL_WARNING,"Can't save in background: fork: %s",
                 strerror(errno));
@@ -1841,7 +1841,7 @@ void backgroundSaveDoneHandler(int exitcode, int bysignal) {
 #include "ctrip_crdt_rdb.h"
 /* Spawn an RDB child that writes the RDB to the sockets of the slaves
  * that are currently in SLAVE_STATE_WAIT_BGSAVE_START state. */
-int rdbSaveToSlavesSockets(rdbSaveInfo *rsi, struct redisServer *svr) {
+int rdbSaveToSlavesSockets(void *rsi, struct redisServer *svr) {
     int *fds;
     uint64_t *clientids;
     int numfds;
@@ -1876,7 +1876,7 @@ int rdbSaveToSlavesSockets(rdbSaveInfo *rsi, struct redisServer *svr) {
         if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) {
             clientids[numfds] = slave->id;
             fds[numfds++] = slave->fd;
-            replicationSetupSlaveForFullResync(slave, getPsyncInitialOffset(svr));
+            replicationSetupSlaveForFullResync(svr, slave, getPsyncInitialOffset(svr));
             /* Put the socket in blocking mode to simplify RDB transfer.
              * We'll restore it when the children returns (since duped socket
              * will share the O_NONBLOCK attribute with the parent). */
@@ -1886,11 +1886,11 @@ int rdbSaveToSlavesSockets(rdbSaveInfo *rsi, struct redisServer *svr) {
     }
 
     /* Create the child process. */
-    openChildInfoPipe(*svr);
+    openChildInfoPipe(svr);
     start = ustime();
     if ((childpid = fork()) == 0) {
         /* Child */
-        int retval;
+        int retval = 0;
         rio slave_sockets;
 
         rioInitWithFdset(&slave_sockets,fds,numfds);
@@ -1918,7 +1918,7 @@ int rdbSaveToSlavesSockets(rdbSaveInfo *rsi, struct redisServer *svr) {
             }
 
             svr->child_info_data.cow_size = private_dirty;
-            sendChildInfo(CHILD_INFO_TYPE_RDB, *svr);
+            sendChildInfo(CHILD_INFO_TYPE_RDB, svr);
 
             /* If we are returning OK, at least one slave was served
              * with the RDB file as expected, so we need to send a report
@@ -1985,7 +1985,7 @@ int rdbSaveToSlavesSockets(rdbSaveInfo *rsi, struct redisServer *svr) {
             }
             close(pipefds[0]);
             close(pipefds[1]);
-            closeChildInfoPipe(*svr);
+            closeChildInfoPipe(svr);
         } else {
             svr->stat_fork_time = ustime()-start;
             svr->stat_fork_rate = (double) zmalloc_used_memory() * 1000000 / svr->stat_fork_time / (1024*1024*1024); /* GB per second. */

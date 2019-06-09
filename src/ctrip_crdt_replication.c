@@ -32,6 +32,7 @@
 
 //#include "server.h"
 #include "ctrip_crdt_replication.h"
+#include "ctrip_crdt_rdb.h"
 
 #include <sys/time.h>
 #include <unistd.h>
@@ -40,2258 +41,370 @@
 #include <sys/stat.h>
 
 
-void crdtDiscardCachedMaster(void);
-void crdtResurrectCachedMaster(int newfd);
-void putCrdtSlaveOnline(client* peer);
-void crdtReplicationSendAck(void);
-int crdtCancelReplicationHandshake(void);
-void changeCrdtReplicationId(void);
-void clearCrdtReplicationId2(void);
 
+
+/**---------------------------CRDT Master Instance Related--------------------------------*/
+CRDT_Master_Instance *createPeerMaster(client *c, long long gid) {
+    CRDT_Master_Instance *masterInstance = zmalloc(sizeof(CRDT_Master_Instance));
+    masterInstance->gid = gid;
+    masterInstance->master = c;
+    return masterInstance;
+}
+
+void freePeerMaster(CRDT_Master_Instance *masterInstance) {
+    zfree(masterInstance->vectorClock);
+    if (masterInstance->cached_master) {
+        zfree(masterInstance->cached_master);
+    }
+    zfree(masterInstance);
+}
+
+
+
+/**---------------------------CRDT RDB Start/End Mark--------------------------------*/
+
+/* This function aborts a non blocking replication attempt if there is one
+ * in progress, by canceling the non-blocking connect attempt or
+ * the initial bulk transfer.
+ *
+ * If there was a replication handshake in progress 1 is returned and
+ * the replication state (server.repl_state) set to REPL_STATE_CONNECT.
+ *
+ * Otherwise zero is returned and no operation is perforemd at all. */
+void crdtCancelReplicationHandshake(client *peer) {
+    if (server.repl_state == REPL_STATE_TRANSFER) {
+//        replicationAbortSyncTransfer();
+        server.repl_state = REPL_STATE_CONNECT;
+    } else if (server.repl_state == REPL_STATE_CONNECTING )
+//               slaveIsInHandshakeState())
+    {
+//        undoConnectWithMaster();
+        server.repl_state = REPL_STATE_CONNECT;
+    }
+//    else {
+//        return 0;
+//    }
+//    return 1;
+}
 
 int listMatchCrdtMaster(void *a, void *b) {
     CRDT_Master_Instance *ma = a, *mb = b;
     return ma->gid == mb->gid;
 }
 
+
+//CRDT.START_MERGE <gid> <vector-clock> <repl_id>
+void
+crdtMergeStartCommand(client *c) {
+    listIter li;
+    listNode *ln;
+    CRDT_Master_Instance *peerMaster = NULL;
+    long long sourceGid;
+    if (getLongLongFromObjectOrReply(c, c->argv[1], &sourceGid, NULL) != C_OK) return;
+    listRewind(crdtServer.crdtMasters, &li);
+    while((ln = listNext(&li)) != NULL) {
+        CRDT_Master_Instance *crdtMaster = ln->value;
+        if (crdtMaster->gid == sourceGid) {
+            peerMaster = crdtMaster;
+            break;
+        }
+    }
+    if (!peerMaster) {
+        peerMaster = createPeerMaster(c, sourceGid);
+    }
+    memcpy(peerMaster->master_replid, c->argv[3]->ptr, sizeof(peerMaster->master_replid));
+}
+
+//CRDT.END_MERGE <gid> <vector-clock> <repl_id> <offset>
+// 0               1        2            3          4
+void
+crdtMergeEndCommand(client *c) {
+    listIter li;
+    listNode *ln;
+    CRDT_Master_Instance *peerMaster = NULL;
+
+    long long sourceGid, offset;
+    if (getLongLongFromObjectOrReply(c, c->argv[1], &sourceGid, NULL) != C_OK) return;
+
+    listRewind(crdtServer.crdtMasters, &li);
+    while((ln = listNext(&li)) != NULL) {
+        CRDT_Master_Instance *crdtMaster = ln->value;
+        if (crdtMaster->gid == sourceGid) {
+            peerMaster = crdtMaster;
+            break;
+        }
+    }
+    if (!peerMaster) goto err;
+
+    peerMaster->vectorClock = sdsToVectorClock(c->argv[2]->ptr);
+    memcpy(peerMaster->master_replid, c->argv[3]->ptr, sizeof(peerMaster->master_replid));
+    if (getLongLongFromObjectOrReply(c, c->argv[4], &offset, NULL) != C_OK) return;
+    peerMaster->master_initial_offset = offset;
+    addReply(c, shared.ok);
+    return;
+
+err:
+    addReply(c, shared.crdtmergeerr);
+    crdtCancelReplicationHandshake(c);
+    return;
+}
+
 /** ================================== CRDT Repl MASTER ================================== */
 
-/** -------------------------- CRDT Replication Backlog Lifecycle -------------------------*/
 
-void createCrdtReplBacklog(void) {
-    CRDT_Server_Replication *crdtRepl = server.crdt_repl_server;
-    serverAssert(crdtServer.repl_backlog == NULL);
-    crdtServer.repl_backlog = zmalloc(crdtServer.repl_backlog_size);
-    crdtServer.repl_backlog_histlen = 0;
-    crdtServer.repl_backlog_idx = 0;
 
-    /* We don't have any data inside our buffer, but virtually the first
-     * byte we have is the next byte that will be generated for the
-     * replication stream. */
-    crdtServer.repl_backlog_off = crdtServer.master_repl_offset+1;
-}
 
-/* This function is called when the user modifies the replication backlog
- * size at runtime. It is up to the function to both update the
- * crdtServer.repl_backlog_size and to resize the buffer and setup it so that
- * it contains the same data as the previous one (possibly less data, but
- * the most recent bytes, or the same data and more free space in case the
- * buffer is enlarged). */
-void resizeCrdtReplBacklog(long long newsize) {
-    if (newsize < CONFIG_REPL_BACKLOG_MIN_SIZE)
-        newsize = CONFIG_REPL_BACKLOG_MIN_SIZE;
-    CRDT_Server_Replication *crdtRepl = server.crdt_repl_server;
-    if (crdtServer.repl_backlog_size == newsize) return;
+///*  =================================================================== CRDT Repl Slave ======================================================================  */
+crdtRdbSaveInfo*
+crdtRdbPopulateSaveInfo(crdtRdbSaveInfo *rsi) {
+    crdtRdbSaveInfo rsi_init = CRDT_RDB_SAVE_INFO_INIT;
+    *rsi = rsi_init;
 
-    crdtServer.repl_backlog_size = newsize;
-    if (crdtServer.repl_backlog != NULL) {
-        /* What we actually do is to flush the old buffer and realloc a new
-         * empty one. It will refill with new data incrementally.
-         * The reason is that copying a few gigabytes adds latency and even
-         * worse often we need to alloc additional space before freeing the
-         * old buffer. */
-        zfree(crdtServer.repl_backlog);
-        crdtServer.repl_backlog = zmalloc(crdtServer.repl_backlog_size);
-        crdtServer.repl_backlog_histlen = 0;
-        crdtServer.repl_backlog_idx = 0;
-        /* Next byte we have is... the next since the buffer is empty. */
-        crdtServer.repl_backlog_off = crdtServer.master_repl_offset+1;
+    if(crdtServer.repl_backlog) {
+        /* Note that when server.slaveseldb is -1, it means that this master
+         * didn't apply any write commands after a full synchronization.
+         * So we can let repl_stream_db be 0, this allows a restarted slave
+         * to reload replication ID/offset, it's safe because the next write
+         * command must generate a SELECT statement. */
+        rsi->repl_stream_db = crdtServer.slaveseldb == -1 ? 0 : crdtServer.slaveseldb;
     }
+
+    return NULL;
 }
+/* --------------------------- REPLICATION CRON  ---------------------------- */
 
-void freeCrdtReplBacklog(void) {
-    CRDT_Server_Replication *crdtRepl = server.crdt_repl_server;
-    serverAssert(listLength(crdtServer.slaves) == 0);
-    if(crdtServer.repl_backlog != NULL){
-        serverLog(LL_NOTICE, "free crdt replication backlog");
-        zfree(crdtServer.repl_backlog);
-        crdtServer.repl_backlog = NULL;
-    }
-}
-
-
-/** ---------------------------------feed crdt repl backlog & incr offset----------------------------------------*/
-
-/* Add data to the replication backlog.
- * This function also increments the global crdt replication offset stored at
- * server.crdt_repl_server->master_repl_offset, because there is no case where we want to feed
- * the backlog without incrementing the offset. */
-void feedCrdtReplBacklog(void *ptr, size_t len) {
-    unsigned char *p = ptr;
-
-    CRDT_Server_Replication *crdtRepl = server.crdt_repl_server;
-    crdtServer.master_repl_offset += len;
-
-    /* This is a circular buffer, so write as much data we can at every
-     * iteration and rewind the "idx" index if we reach the limit. */
-    while(len) {
-        size_t thislen = crdtServer.repl_backlog_size - crdtServer.repl_backlog_idx;
-        if (thislen > len) thislen = len;
-        memcpy(crdtServer.repl_backlog+crdtServer.repl_backlog_idx,p,thislen);
-        crdtServer.repl_backlog_idx += thislen;
-        if (crdtServer.repl_backlog_idx == crdtServer.repl_backlog_size)
-            crdtServer.repl_backlog_idx = 0;
-        len -= thislen;
-        p += thislen;
-        crdtServer.repl_backlog_histlen += thislen;
-    }
-    if (crdtServer.repl_backlog_histlen > crdtServer.repl_backlog_size)
-        crdtServer.repl_backlog_histlen = crdtServer.repl_backlog_size;
-    /* Set the offset of the first byte we have in the backlog. */
-    crdtServer.repl_backlog_off = crdtServer.master_repl_offset -
-                              crdtServer.repl_backlog_histlen + 1;
-}
-
-/* Wrapper for feedCrdtReplBacklog() that takes Redis string objects
- * as input. */
-void feedCrdtReplBacklogWithObject(robj *o) {
-    char llstr[LONG_STR_SIZE];
-    void *p;
-    size_t len;
-
-    if (o->encoding == OBJ_ENCODING_INT) {
-        len = ll2string(llstr,sizeof(llstr),(long)o->ptr);
-        p = llstr;
-    } else {
-        len = sdslen(o->ptr);
-        p = o->ptr;
-    }
-    feedCrdtReplBacklog(p,len);
-}
-
-/** ------------------------------!!!crdt master send peers stream & feed the backlog!!!-------------------------------------- */
-/* CRDT Replication act almost same as norm Master-Slave replication.
- * Propagate write commands to peers(slaves), and populate the crdt replication backlog
- * as well. This function is used if the instance is acting as a crdt master: we use
- * the commands received by our clients, and then do some changes() in order to create the replication
- * stream.  */
-void crdtReplicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
-    listNode *ln;
+int startCrdtBgsaveForReplication() {
+    int retval;
     listIter li;
-    int j, len;
-    char llstr[LONG_STR_SIZE];
+    listNode *ln;
 
-    CRDT_Server_Replication *crdtRepl = server.crdt_repl_server;
+    serverLog(LL_NOTICE,"Starting BGSAVE for SYNC with target: Crdt Merge");
 
-    /* If there aren't slaves, and there is no backlog buffer to populate,
-     * we can return ASAP. */
-    if (crdtServer.repl_backlog == NULL && listLength(slaves) == 0) return;
+    crdtRdbSaveInfo rsi, *rsiptr;
+    rsiptr = crdtRdbPopulateSaveInfo(&rsi);
+    /* Only do rdbSave* when rsiptr is not NULL,
+     * otherwise slave will miss repl-stream-db. */
+    if (rsiptr) {
+        retval = rdbSaveToSlavesSockets(rsiptr, &crdtServer);
+    } else {
+        serverLog(LL_WARNING,"BGSAVE for replication: replication information not available, can't generate the RDB file right now. Try later.");
+        retval = C_ERR;
+    }
 
-    /* We can't have slaves attached and no backlog. */
-    serverAssert(!(listLength(slaves) != 0 && crdtServer.repl_backlog == NULL));
-
-    /* Send SELECT command to every slave if needed. */
-    if (crdtServer.slaveseldb != dictid) {
-        robj *selectcmd;
-
-        /* For a few DBs we have pre-computed SELECT command. */
-        if (dictid >= 0 && dictid < PROTO_SHARED_SELECT_CMDS) {
-            selectcmd = shared.select[dictid];
-        } else {
-            int dictid_len;
-
-            dictid_len = ll2string(llstr,sizeof(llstr),dictid);
-            selectcmd = createObject(OBJ_STRING,
-                                     sdscatprintf(sdsempty(),
-                                                  "*2\r\n$6\r\nSELECT\r\n$%d\r\n%s\r\n",
-                                                  dictid_len, llstr));
-        }
-
-        /* Add the SELECT command into the backlog. */
-        if (crdtServer.repl_backlog) feedCrdtReplBacklogWithObject(selectcmd);
-
-        /* Send it to slaves. */
-        listRewind(slaves,&li);
+    /* If we failed to BGSAVE, remove the slaves waiting for a full
+     * resynchorinization from the list of salves, inform them with
+     * an error about what happened, close the connection ASAP. */
+    if (retval == C_ERR) {
+        serverLog(LL_WARNING,"BGSAVE for replication failed");
+        listRewind(crdtServer.slaves,&li);
         while((ln = listNext(&li))) {
             client *slave = ln->value;
-//            CRDT_Client_Replication *crdtClientRepl = slave->crdt_repl_client;
-//            if (crdtClientRepl->replstate == CRDT_SLAVE_STATE_WAIT_BGSAVE_START) continue;
-            addReply(slave,selectcmd);
-        }
 
-        if (dictid < 0 || dictid >= PROTO_SHARED_SELECT_CMDS)
-            decrRefCount(selectcmd);
-    }
-    crdtServer.slaveseldb = dictid;
-
-    /* Write the command to the replication backlog if any. */
-    if (crdtServer.repl_backlog) {
-        char aux[LONG_STR_SIZE+3];
-
-        /* Add the multi bulk reply length. */
-        aux[0] = '*';
-        len = ll2string(aux+1,sizeof(aux)-1,argc);
-        aux[len+1] = '\r';
-        aux[len+2] = '\n';
-        feedCrdtReplBacklog(aux,len+3);
-
-        for (j = 0; j < argc; j++) {
-            long objlen = stringObjectLen(argv[j]);
-
-            /* We need to feed the buffer with the object as a bulk reply
-             * not just as a plain string, so create the $..CRLF payload len
-             * and add the final CRLF */
-            aux[0] = '$';
-            len = ll2string(aux+1,sizeof(aux)-1,objlen);
-            aux[len+1] = '\r';
-            aux[len+2] = '\n';
-            feedCrdtReplBacklog(aux,len+3);
-            feedCrdtReplBacklogWithObject(argv[j]);
-            feedCrdtReplBacklog(aux+len+1,2);
+            if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) {
+                slave->flags &= ~CLIENT_CRDT_SLAVE;
+                listDelNode(crdtServer.slaves,ln);
+                addReplyError(slave,
+                              "BGSAVE failed, replication can't continue");
+                slave->flags |= CLIENT_CLOSE_AFTER_REPLY;
+            }
         }
     }
 
-    /* Write the command to every slave. */
-    listRewind(slaves,&li);
+    return retval;
+
+}
+
+/* Replication cron function, called 1 time per second. */
+void crdtReplicationCron(void) {
+    static long long replication_cron_loops = 0;
+    listIter li;
+    listNode *ln;
+    /* Non blocking connection timeout? */
+
+    listRewind(crdtServer.crdtMasters, &li);
+    while((ln = listNext(&li)) != NULL) {
+        CRDT_Master_Instance *crdtMaster = ln->value;
+
+//
+//        if (crdtServer.masterhost &&
+//            (crdtServer.repl_state == REPL_STATE_CONNECTING ||
+//             slaveIsInHandshakeState()) &&
+//            (time(NULL) - crdtServer.repl_transfer_lastio) > crdtServer.repl_timeout) {
+//            serverLog(LL_WARNING, "Timeout connecting to the MASTER...");
+//            crdtCancelReplicationHandshake();
+//        }
+//
+//        /* Bulk transfer I/O timeout? */
+//        if (crdtServer.masterhost && crdtServer.repl_state == REPL_STATE_TRANSFER &&
+//            (time(NULL) - crdtServer.repl_transfer_lastio) > crdtServer.repl_timeout) {
+//            serverLog(LL_WARNING,
+//                      "Timeout receiving bulk data from MASTER... If the problem persists try to set the 'repl-timeout' parameter in redis.conf to a larger value.");
+//            cancelReplicationHandshake();
+//        }
+//
+//        /* Timed out master when we are an already connected slave? */
+//        if (crdtServer.masterhost && crdtServer.repl_state == REPL_STATE_CONNECTED &&
+//            (time(NULL) - crdtServer.master->lastinteraction) > crdtServer.repl_timeout) {
+//            serverLog(LL_WARNING, "MASTER timeout: no data nor PING received...");
+//            freeClient(crdtServer.master);
+//        }
+//
+//        /* Check if we should connect to a MASTER */
+//        if (crdtServer.repl_state == REPL_STATE_CONNECT) {
+//            serverLog(LL_NOTICE, "Connecting to MASTER %s:%d",
+//                      crdtServer.masterhost, crdtServer.masterport);
+//            if (connectWithMaster() == C_OK) {
+//                serverLog(LL_NOTICE, "MASTER <-> SLAVE sync started");
+//            }
+//        }
+//
+//        /* Send ACK to master from time to time.
+//         * Note that we do not send periodic acks to masters that don't
+//         * support PSYNC and replication offsets. */
+//        if (crdtServer.masterhost && crdtServer.master &&
+//            !(crdtServer.master->flags & CLIENT_PRE_PSYNC))
+//            replicationSendAck();
+    }
+    /* If we have attached slaves, PING them from time to time.
+     * So slaves can implement an explicit timeout to masters, and will
+     * be able to detect a link disconnection even if the TCP connection
+     * will not actually go down. */
+    robj *ping_argv[1];
+
+    /* First, send PING according to ping_slave_period. */
+    if ((replication_cron_loops % crdtServer.repl_ping_slave_period) == 0 &&
+        listLength(crdtServer.slaves))
+    {
+        ping_argv[0] = createStringObject("PING",4);
+        replicationFeedSlaves(&crdtServer, crdtServer.slaves, crdtServer.slaveseldb,
+                              ping_argv, 1);
+        decrRefCount(ping_argv[0]);
+    }
+
+    /* Second, send a newline to all the slaves in pre-synchronization
+     * stage, that is, slaves waiting for the master to create the RDB file.
+     *
+     * Also send the a newline to all the chained slaves we have, if we lost
+     * connection from our master, to keep the slaves aware that their
+     * master is online. This is needed since sub-slaves only receive proxied
+     * data from top-level masters, so there is no explicit pinging in order
+     * to avoid altering the replication offsets. This special out of band
+     * pings (newlines) can be sent, they will have no effect in the offset.
+     *
+     * The newline will be ignored by the slave but will refresh the
+     * last interaction timer preventing a timeout. In this case we ignore the
+     * ping period and refresh the connection once per second since certain
+     * timeouts are set at a few seconds (example: PSYNC response). */
+    listRewind(crdtServer.slaves,&li);
     while((ln = listNext(&li))) {
         client *slave = ln->value;
 
-        /* Don't feed slaves that are still waiting for BGSAVE to start */
-//        if (slave->crdt_repl_client->replstate == SLAVE_STATE_WAIT_BGSAVE_START) continue;
+        int is_presync =
+                (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START ||
+                 (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_END &&
+                  crdtServer.rdb_child_type != RDB_CHILD_TYPE_SOCKET));
 
-        /* Feed slaves that are waiting for the initial SYNC (so these commands
-         * are queued in the output buffer until the initial SYNC completes),
-         * or are already in sync with the master. */
-
-        /* Add the multi bulk length. */
-        addReplyMultiBulkLen(slave,argc);
-
-        /* Finally any additional argument that was not stored inside the
-         * static buffer if any (from j to argc). */
-        for (j = 0; j < argc; j++)
-            addReplyBulk(slave,argv[j]);
-    }
-}
-
-/** ------------------------------!!!crdt master partially sync from backlog!!!-------------------------------------- */
-/* CRDT Feed my peers(slaves) 'c' with the CRDT replication backlog starting from the
- * specified 'offset' up to the end of the backlog. */
-long long addReplyCrdtReplBacklog(client *c, long long offset) {
-    long long j, skip, len;
-
-    CRDT_Server_Replication *crdtRepl = server.crdt_repl_server;
-    serverLog(LL_DEBUG, "[CRDT.PSYNC] Slave request offset: %lld", offset);
-
-    if (crdtServer.repl_backlog_histlen == 0) {
-        serverLog(LL_DEBUG, "[CRDT.PSYNC] Backlog history len is zero");
-        return 0;
+        if (is_presync) {
+            if (write(slave->fd, "\n", 1) == -1) {
+                /* Don't worry about socket errors, it's just a ping. */
+            }
+        }
     }
 
-    serverLog(LL_DEBUG, "[CRDT.PSYNC] Backlog size: %lld",
-              crdtServer.repl_backlog_size);
-    serverLog(LL_DEBUG, "[CRDT.PSYNC] First byte: %lld",
-              crdtServer.repl_backlog_off);
-    serverLog(LL_DEBUG, "[CRDT.PSYNC] History len: %lld",
-              crdtServer.repl_backlog_histlen);
-    serverLog(LL_DEBUG, "[CRDT.PSYNC] Current index: %lld",
-              crdtServer.repl_backlog_idx);
+    /* Disconnect timedout slaves. */
+    if (listLength(crdtServer.slaves)) {
+        listIter li;
+        listNode *ln;
 
-    /* Compute the amount of bytes we need to discard. */
-    skip = offset - crdtServer.repl_backlog_off;
-    serverLog(LL_DEBUG, "[CRDT.PSYNC] Skipping: %lld", skip);
+        listRewind(crdtServer.slaves,&li);
+        while((ln = listNext(&li))) {
+            client *slave = ln->value;
 
-    /* Point j to the oldest byte, that is actually our
-     * crdtServer.repl_backlog_off byte. */
-    j = (crdtServer.repl_backlog_idx +
-         (crdtServer.repl_backlog_size-crdtServer.repl_backlog_histlen)) %
-        crdtServer.repl_backlog_size;
-    serverLog(LL_DEBUG, "[CRDT.PSYNC] Index of first byte: %lld", j);
-
-    /* Discard the amount of data to seek to the specified 'offset'. */
-    j = (j + skip) % crdtServer.repl_backlog_size;
-
-    /* Feed slave with data. Since it is a circular buffer we have to
-     * split the reply in two parts if we are cross-boundary. */
-    len = crdtServer.repl_backlog_histlen - skip;
-    serverLog(LL_DEBUG, "[CRDT.PSYNC] Reply total length: %lld", len);
-    while(len) {
-        long long thislen =
-                ((crdtServer.repl_backlog_size - j) < len) ?
-                (crdtServer.repl_backlog_size - j) : len;
-
-        serverLog(LL_DEBUG, "[CRDT.PSYNC] addReply() length: %lld", thislen);
-        addReplySds(c,sdsnewlen(crdtServer.repl_backlog + j, thislen));
-        len -= thislen;
-        j = 0;
-    }
-    return crdtServer.repl_backlog_histlen - skip;
-}
-
-/* Return the offset to provide as reply to the CRDT.PSYNC command received
- * from the slave. The returned value is only valid immediately after
- * the BGSAVE process started and before executing any other command
- * from clients. */
-long long getCrdtPsyncInitialOffset(void) {
-    return server.crdt_repl_server->master_repl_offset;
-}
-
-/* Send a CRDT.FULLRESYNC reply in the specific case of a full resynchronization,
- * as a side effect setup the slave for a full sync in different ways:
- *
- * 1) Remember, into the slave client structure, the replication offset
- *    we sent here, so that if new slaves will later attach to the same
- *    background RDB saving process (by duplicating this client output
- *    buffer), we can get the right offset from this slave.
- * 2) Set the replication state of the slave to WAIT_BGSAVE_END so that
- *    we start accumulating differences from this point.
- * 3) Force the replication stream to re-emit a SELECT statement so
- *    the new slave incremental differences will start selecting the
- *    right database number.
- *
- * Normally this function should be called immediately after a successful
- * BGSAVE for replication was started, or when there is one already in
- * progress that we attached our slave to. */
-//int crdtReplSetupSlaveForFullResync(client *crdt_slave, long long offset) {
-//    char buf[128];
-//    int buflen;
-//
-//    CRDT_Server_Replication *crdtRepl = server.crdt_repl_server;
-//
-//    crdt_slave->crdt_repl_client->psync_initial_offset = offset;
-//    crdt_slave->crdt_repl_client->replstate = SLAVE_STATE_WAIT_BGSAVE_END;
-//    /* We are going to accumulate the incremental changes for this
-//     * slave as well. Set slaveseldb to -1 in order to force to re-emit
-//     * a SELECT statement in the replication stream. */
-//    crdtServer.slaveseldb = -1;
-//
-//    buflen = snprintf(buf,sizeof(buf),"+CRDT.FULLRESYNC %s %lld\r\n",
-//                      crdtServer.replid,offset);
-//    if (write(crdt_slave->fd,buf,buflen) != buflen) {
-//        freeClientAsync(crdt_slave);
-//        return C_ERR;
-//    }
-//
-//    return C_OK;
-//}
-
-void initClientCrdtIfNeeded(client *c) {
-//    if(c->crdt_repl_client == NULL) {
-//        CRDT_Client_Replication *crdtReplClient = zmalloc(sizeof(CRDT_Client_Replication));
-//        c->crdt_repl_client = crdtReplClient;
-//
-//        crdtReplClient->replstate = CRDT_REPL_STATE_NONE;
-//        crdtReplClient->repl_put_online_on_ack = 0;
-//        crdtReplClient->reploff = 0;
-//        crdtReplClient->read_reploff = 0;
-//        crdtReplClient->repl_ack_off = 0;
-//        crdtReplClient->repl_ack_time = 0;
-//        crdtReplClient->slave_listening_port = 0;
-//        crdtReplClient->slave_ip[0] = '\0';
-//        crdtReplClient->psync_initial_offset = 0;
-//    }
-
-}
-/* This function handles the CRDT.PSYNC command from the point of view of a
- * master receiving a request for partial resynchronization.
- *
- * On success return C_OK, otherwise C_ERR is returned and we proceed
- * with the usual full resync. */
-int crdtMasterTryPartialResynchronization(client *c) {
-    long long psync_offset, psync_len;
-    char *master_replid = c->argv[1]->ptr;
-    char buf[128];
-    int buflen;
-
-    CRDT_Server_Replication *crdtRepl = server.crdt_repl_server;
-
-    /* Parse the replication offset asked by the slave. Go to full sync
-     * on parse error: this should never happen but we try to handle
-     * it in a robust way compared to aborting. */
-    if (getLongLongFromObjectOrReply(c,c->argv[2],&psync_offset,NULL) !=
-        C_OK) goto need_full_resync;
-
-    /* Is the replication ID of this master the same advertised by the wannabe
-     * slave via PSYNC? If the replication ID changed this master has a
-     * different replication history, and there is no way to continue.
-     *
-     * Note that there are two potentially valid replication IDs: the ID1
-     * and the ID2. The ID2 however is only valid up to a specific offset. */
-    if (strcasecmp(master_replid, crdtServer.replid) &&
-        (strcasecmp(master_replid, crdtServer.replid2) ||
-         psync_offset > server.second_replid_offset))
-    {
-        /* Run id "?" is used by slaves that want to force a full resync. */
-        if (master_replid[0] != '?') {
-            if (strcasecmp(master_replid, crdtServer.replid) &&
-                strcasecmp(master_replid, crdtServer.replid2))
+            if (slave->replstate != SLAVE_STATE_ONLINE) continue;
+            if (slave->flags & CLIENT_PRE_PSYNC) continue;
+            if ((crdtServer.unixtime - slave->repl_ack_time) > crdtServer.repl_timeout)
             {
-                serverLog(LL_NOTICE,"CRDT Partial resynchronization not accepted: "
-                                    "CRDT Replication ID mismatch (Slave asked for '%s', my "
-                                    "replication IDs are '%s' and '%s')",
-                          master_replid, crdtServer.replid, crdtServer.replid2);
-            } else {
-                serverLog(LL_NOTICE,"CRDT Partial resynchronization not accepted: "
-                                    "Requested offset for second ID was %lld, but I can reply "
-                                    "up to %lld", psync_offset, crdtServer.second_replid_offset);
+                serverLog(LL_WARNING, "Disconnecting timedout slave: %s",
+                          replicationGetSlaveName(slave));
+                freeClient(slave);
             }
-        } else {
-            serverLog(LL_NOTICE,"CRDT Full resync requested by slave %s",
-                      replicationGetSlaveName(c));
         }
-        goto need_full_resync;
     }
 
-    /* We still have the data our slave is asking for? */
-    if (!crdtServer.repl_backlog ||
-        psync_offset < crdtServer.repl_backlog_off ||
-        psync_offset > (crdtServer.repl_backlog_off + crdtServer.repl_backlog_histlen))
+    /* If this is a master without attached slaves and there is a replication
+     * backlog active, in order to reclaim memory we can free it after some
+     * (configured) time. Note that this cannot be done for slaves: slaves
+     * without sub-slaves attached should still accumulate data into the
+     * backlog, in order to reply to PSYNC queries if they are turned into
+     * masters after a failover. */
+    if (listLength(crdtServer.slaves) == 0 && crdtServer.repl_backlog_time_limit &&
+        crdtServer.repl_backlog)
     {
-        serverLog(LL_NOTICE,
-                  "Unable to crdt partial resync with slave %s for lack of backlog (Slave request was: %lld).", replicationGetSlaveName(c), psync_offset);
-        if (psync_offset > crdtServer.master_repl_offset) {
-            serverLog(LL_WARNING,
-                      "Warning: slave %s tried to CRDT PSYNC with an offset that is greater than the master replication offset(%lld).", replicationGetSlaveName(c), crdtServer.master_repl_offset);
+        time_t idle = crdtServer.unixtime - crdtServer.repl_no_slaves_since;
+
+        if (idle > crdtServer.repl_backlog_time_limit) {
+            /* When we free the backlog, we always use a new
+             * replication ID and clear the ID2. This is needed
+             * because when there is no backlog, the master_repl_offset
+             * is not updated, but we would still retain our replication
+             * ID, leading to the following problem:
+             *
+             * 1. We are a master instance.
+             * 2. Our slave is promoted to master. It's repl-id-2 will
+             *    be the same as our repl-id.
+             * 3. We, yet as master, receive some updates, that will not
+             *    increment the master_repl_offset.
+             * 4. Later we are turned into a slave, connecto to the new
+             *    master that will accept our PSYNC request by second
+             *    replication ID, but there will be data inconsistency
+             *    because we received writes. */
+            changeReplicationId(&crdtServer);
+            clearReplicationId2(&crdtServer);
+            freeReplicationBacklog(&crdtServer);
+            serverLog(LL_NOTICE,
+                      "Replication backlog freed after %d seconds "
+                      "without connected slaves.",
+                      (int) crdtServer.repl_backlog_time_limit);
         }
-        goto need_full_resync;
     }
 
-    /* If we reached this point, we are able to perform a partial resync:
-     * 1) Set client state to make it a slave.
-     * 2) Inform the client we can continue with +CRDT.CONTINUE
-     * 3) Send the backlog data (from the offset to the end) to the slave. */
-    c->flags |= CLIENT_CRDT_SLAVE;
-    initClientCrdtIfNeeded(c);
-
-    listAddNodeTail(server.crdt_repl_server->slaves,c);
-    /* We can't use the connection buffers since they are used to accumulate
-     * new commands at this stage. But we are sure the socket send buffer is
-     * empty so this write will never fail actually. */
-    buflen = snprintf(buf,sizeof(buf),"+CRDT.CONTINUE %s\r\n", crdtServer.replid);
-
-    if (write(c->fd,buf,buflen) != buflen) {
-        freeClientAsync(c);
-        return C_OK;
-    }
-    psync_len = addReplyCrdtReplBacklog(c,psync_offset);
-    serverLog(LL_NOTICE,
-              "CRDT.Partial resynchronization request from %s accepted. Sending %lld bytes of backlog starting from offset %lld.",
-              replicationGetSlaveName(c),
-              psync_len, psync_offset);
-    /* Note that we don't need to set the selected DB at server.slaveseldb
-     * to -1 to force the master to emit SELECT, since the slave already
-     * has this state from the previous connection with the master. */
-
-    return C_OK; /* The caller can return, no full resync needed. */
-
-    need_full_resync:
-    /* We need a full resync for some reason... Note that we can't
-     * reply to PSYNC right now if a full SYNC is needed. The reply
-     * must include the master offset at the time the RDB file we transfer
-     * is generated, so we need to delay the reply to that moment. */
-    return C_ERR;
-}
-
-/* Start a BGSAVE for replication goals, which is, selecting the disk or
- * socket target depending on the configuration, and making sure that
- * the script cache is flushed before to start.
- *
- * The mincapa argument is the bitwise AND among all the slaves capabilities
- * of the slaves waiting for this BGSAVE, so represents the slave capabilities
- * all the slaves support. Can be tested via SLAVE_CAPA_* macros.
- *
- * Side effects, other than starting a BGSAVE:
- *
- * 1) Handle the slaves in WAIT_START state, by preparing them for a full
- *    sync if the BGSAVE was succesfully started, or sending them an error
- *    and dropping them from the list of slaves.
- *
- * 2) Flush the Lua scripting script cache if the BGSAVE was actually
- *    started.
- *
- * Returns C_OK on success or C_ERR otherwise. */
-//int startBgsaveForReplication(int mincapa) {
-//    int retval;
-//    CRDT_Server_Replication *crdtRepl = server.crdt_repl_server;
-//    int socket_target = 1;
-//    listIter li;
-//    listNode *ln;
-//
-//    serverLog(LL_NOTICE,"Starting BGSAVE for SYNC with target: %s",
-//              socket_target ? "slaves sockets" : "disk");
-//
-//    rdbSaveInfo rsi, *rsiptr;
-//    rsiptr = rdbPopulateSaveInfo(&rsi);
-//    /* Only do rdbSave* when rsiptr is not NULL,
-//     * otherwise slave will miss repl-stream-db. */
-//    if (rsiptr) {
-//        if (socket_target)
-//            retval = rdbSaveToSlavesSockets(rsiptr);
-//    } else {
-//        serverLog(LL_WARNING,"BGSAVE for replication: replication information not available, can't generate the RDB file right now. Try later.");
-//        retval = C_ERR;
-//    }
-//
-//    /* If we failed to BGSAVE, remove the slaves waiting for a full
-//     * resynchorinization from the list of salves, inform them with
-//     * an error about what happened, close the connection ASAP. */
-//    if (retval == C_ERR) {
-//        serverLog(LL_WARNING,"BGSAVE for replication failed");
-//        listRewind(server.slaves,&li);
-//        while((ln = listNext(&li))) {
-//            client *slave = ln->value;
-//
-//            if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) {
-//                slave->flags &= ~CLIENT_SLAVE;
-//                listDelNode(server.slaves,ln);
-//                addReplyError(slave,
-//                              "BGSAVE failed, replication can't continue");
-//                slave->flags |= CLIENT_CLOSE_AFTER_REPLY;
-//            }
-//        }
-//        return retval;
-//    }
-//
-//    /* If the target is socket, rdbSaveToSlavesSockets() already setup
-//     * the salves for a full resync. Otherwise for disk target do it now.*/
-//    if (!socket_target) {
-//        listRewind(server.slaves,&li);
-//        while((ln = listNext(&li))) {
-//            client *slave = ln->value;
-//
-//            if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) {
-//                replicationSetupSlaveForFullResync(slave,
-//                                                   getPsyncInitialOffset());
-//            }
-//        }
-//    }
-//
-//    /* Flush the script cache, since we need that slave differences are
-//     * accumulated without requiring slaves to match our cached scripts. */
-//    if (retval == C_OK) replicationScriptCacheFlush();
-//    return retval;
-//}
-//
-
-
-
-///*  CRDT.PSYNC command implemenation. */
-void crdtPSyncCommand(client *c) {
-    /* ignore SYNC if already slave or in monitor mode */
-    if (c->flags & CLIENT_SLAVE || c->flags & CLIENT_CRDT_SLAVE) return;
-
-    CRDT_Server_Replication *crdtRepl = server.crdt_repl_server;
-    /* Refuse CRDT.PSYNC requests if we are a slave but the link with our master
-     * is not ok... */
-//    if (server.masterhost && crdtServer.repl_state != REPL_STATE_CONNECTED) {
-//        addReplySds(c,sdsnew("-NOMASTERLINK Can't SYNC while not connected with my master\r\n"));
-//        return;
-//    }
-
-    /* SYNC can't be issued when the server has pending data to send to
-     * the client about already issued commands. We need a fresh reply
-     * buffer registering the differences between the BGSAVE and the current
-     * dataset, so that we can copy to other slaves if needed. */
-    if (clientHasPendingReplies(c)) {
-        addReplyError(c,"SYNC and PSYNC are invalid with pending output");
-        return;
-    }
-
-    serverLog(LL_NOTICE,"CRDT Peer %s asks for synchronization",
-              replicationGetSlaveName(c));
-
-    /* Try a partial resynchronization if this is a CRDT.PSYNC command.
-     * If it fails, we continue with usual full resynchronization, however
-     * when this happens crdtMasterTryPartialResynchronization() already
-     * replied with:
+    /* Start a BGSAVE good for replication if we have slaves in
+     * WAIT_BGSAVE_START state.
      *
-     * +CRDT.FULLRESYNC <replid> <offset>
-     *
-     * So the slave knows the new replid and offset to try a CRDT.PSYNC later
-     * if the connection with the master is lost. */
-    if (crdtMasterTryPartialResynchronization(c) == C_OK) {
-        crdtServer.stat_sync_partial_ok++;
-        return; /* No full resync needed, return. */
-    } else {
-        char *master_replid = c->argv[1]->ptr;
+     * In case of diskless replication, we make sure to wait the specified
+     * number of seconds (according to configuration) so that other slaves
+     * have the time to arrive before we start streaming. */
+    if (crdtServer.rdb_child_pid == -1 && crdtServer.aof_child_pid == -1) {
+        time_t idle, max_idle = 0;
+        int slaves_waiting = 0;
+        int mincapa = -1;
+        listNode *ln;
+        listIter li;
 
-        /* Increment stats for failed PSYNCs, but only if the
-         * replid is not "?", as this is used by slaves to force a full
-         * resync on purpose when they are not albe to partially
-         * resync. */
-        if (master_replid[0] != '?') crdtServer.stat_sync_partial_err++;
-    }
-
-
-    /* Full resynchronization. */
-    crdtServer.stat_sync_full++;
-
-    /* Setup the slave as one waiting for BGSAVE to start. The following code
-     * paths will change the state if we handle the slave differently. */
-//    c->crdt_repl_client->replstate = CRDT_SLAVE_STATE_WAIT_BGSAVE_START;
-//    c->crdt_repl_client->repldbfd = -1;
-    c->flags |= CLIENT_CRDT_SLAVE;
-    listAddNodeTail(crdtServer.slaves,c);
-
-    /* Create the replication backlog if needed. */
-    if (listLength(crdtServer.slaves) == 1 && crdtServer.repl_backlog == NULL) {
-        /* When we create the backlog from scratch, we always use a new
-         * replication ID and clear the ID2, since there is no valid
-         * past history. */
-        changeCrdtReplicationId();
-        clearCrdtReplicationId2();
-        createCrdtReplBacklog();
-    }
-
-    /* CASE 1: BGSAVE is in progress */
-    if (crdtServer.rdb_child_pid != -1)
-    {
-        /* There is an RDB child process but it is writing directly to
-         * children sockets. We need to wait for the next BGSAVE
-         * in order to synchronize. */
-        serverLog(LL_NOTICE,"Current BGSAVE has socket target. Waiting for next BGSAVE for SYNC");
-
-        /* CASE 2: There is no BGSAVE is progress. */
-    } else {
-        /* CRDT replication backend child is created inside
-         * crdtReplicationCron() since we want to delay its start a
-         * few seconds to wait for more crdt peers(slaves) to arrive. */
-        if (crdtServer.repl_diskless_sync_delay)
-            serverLog(LL_NOTICE,"Delay next BGSAVE for CRDT PSYNC");
-
-    }
-}
-
-///* REPLCONF <option> <value> <option> <value> ...
-/* * This command is used by a slave in order to configure the replication
- * process before starting it with the SYNC command.
- *
- * Currently the only use of this command is to communicate to the master
- * what is the listening port of the Slave redis instance, so that the
- * master can accurately list slaves and their listening ports in
- * the INFO output.
- *
- * In the future the same command can be used in order to configure
- * the replication to initiate an incremental replication instead of a
- * full resync. */
-void crdtReplconfCommand(client *c) {
-    int j;
-
-    if ((c->argc % 2) == 0) {
-        /* Number of arguments must be odd to make sure that every
-         * option has a corresponding value. */
-        addReply(c,shared.syntaxerr);
-        return;
-    }
-
-    /* Process every option-value pair. */
-    for (j = 1; j < c->argc; j+=2) {
-        if (!strcasecmp(c->argv[j]->ptr,"listening-port")) {
-            long port;
-
-            if ((getLongFromObjectOrReply(c,c->argv[j+1],
-                                          &port,NULL) != C_OK))
-                return;
-            c->slave_listening_port = port;
-        } else if (!strcasecmp(c->argv[j]->ptr,"ip-address")) {
-            sds ip = c->argv[j+1]->ptr;
-            if (sdslen(ip) < sizeof(c->slave_ip)) {
-                memcpy(c->slave_ip,ip,sdslen(ip)+1);
-            } else {
-                addReplyErrorFormat(c,"REPLCONF ip-address provided by "
-                                      "slave instance is too long: %zd bytes", sdslen(ip));
-                return;
+        listRewind(crdtServer.slaves,&li);
+        while((ln = listNext(&li))) {
+            client *slave = ln->value;
+            if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) {
+                idle = crdtServer.unixtime - slave->lastinteraction;
+                if (idle > max_idle) max_idle = idle;
+                slaves_waiting++;
+                mincapa = (mincapa == -1) ? slave->slave_capa :
+                          (mincapa & slave->slave_capa);
             }
-        } else if (!strcasecmp(c->argv[j]->ptr,"vector-clock")) {
-            //todo: to be done vector-clock
+        }
 
-        } else if (!strcasecmp(c->argv[j]->ptr,"ack")) {
-            /* REPLCONF ACK is used by slave to inform the master the amount
-             * of replication stream that it processed so far. It is an
-             * internal only command that normal clients should never use. */
-            long long offset;
-
-            if (!(c->flags & CLIENT_CRDT_SLAVE)) return;
-            if ((getLongLongFromObject(c->argv[j+1], &offset) != C_OK))
-                return;
-//            if (offset > c->crdt_repl_client->repl_ack_off)
-//                c->crdt_repl_client->repl_ack_off = offset;
-//            c->crdt_repl_client->repl_ack_time = server.unixtime;
-//            /* If this was a diskless replication, we need to really put
-//             * the slave online when the first ACK is received (which
-//             * confirms slave is online and ready to get more data). */
-//            if (c->crdt_repl_client->repl_put_online_on_ack && c->crdt_repl_client->replstate == CRDT_SLAVE_STATE_ONLINE)
-//                putCrdtSlaveOnline(c);
-            /* Note: this command does not reply anything! */
-            return;
-        } else if (!strcasecmp(c->argv[j]->ptr,"getack")) {
-            /* REPLCONF GETACK is used in order to request an ACK ASAP
-             * to the slave. */
-            if (server.masterhost && server.master) crdtReplicationSendAck();
-            return;
-        } else {
-            addReplyErrorFormat(c,"Unrecognized REPLCONF option: %s",
-                                (char*)c->argv[j]->ptr);
-            return;
+        if (slaves_waiting &&
+            (!crdtServer.repl_diskless_sync ||
+             max_idle > crdtServer.repl_diskless_sync_delay))
+        {
+            /* Start the BGSAVE. The called function may start a
+             * BGSAVE with socket target or disk target depending on the
+             * configuration and slaves capabilities. */
+            startCrdtBgsaveForReplication();
         }
     }
-    addReply(c,shared.ok);
+
+    /* Refresh the number of slaves with lag <= min-slaves-max-lag. */
+    refreshGoodSlavesCount(&crdtServer);
+    replication_cron_loops++; /* Incremented with frequency 1 HZ. */
 }
-
-/* This function puts a slave in the online state, and should be called just
- * after a slave received the RDB file for the initial synchronization, and
- * we are finally ready to send the incremental stream of commands.
- *
- * It does a few things:
- *
- * 1) Put the slave in ONLINE state (useless when the function is called
- *    because state is already ONLINE but repl_put_online_on_ack is true).
- * 2) Make sure the writable event is re-installed, since calling the SYNC
- *    command disables it, so that we can accumulate output buffer without
- *    sending it to the slave.
- * 3) Update the count of good slaves. */
-void putCrdtSlaveOnline(client *peer) {
-//    CRDT_Client_Replication *clientRepl = peer->crdt_repl_client;
-//    clientRepl->replstate = CRDT_SLAVE_STATE_ONLINE;
-//    clientRepl->repl_put_online_on_ack = 0;
-//    clientRepl->repl_ack_time = server.unixtime; /* Prevent false timeout. */
-    if (aeCreateFileEvent(server.el, peer->fd, AE_WRITABLE,
-                          sendReplyToClient, peer) == AE_ERR) {
-        serverLog(LL_WARNING,"Unable to register writable event for slave bulk transfer: %s", strerror(errno));
-        freeClient(peer);
-        return;
-    }
-    serverLog(LL_NOTICE,"Synchronization with slave %s succeeded",
-              replicationGetSlaveName(peer));
-}
-
-
-///* This function is called at the end of every background saving,
-// * or when the replication RDB transfer strategy is modified from
-// * disk to socket or the other way around.
-// *
-// * The goal of this function is to handle slaves waiting for a successful
-// * background saving in order to perform non-blocking synchronization, and
-// * to schedule a new BGSAVE if there are slaves that attached while a
-// * BGSAVE was in progress, but it was not a good one for replication (no
-// * other slave was accumulating differences).
-// *
-// * The argument bgsaveerr is C_OK if the background saving succeeded
-// * otherwise C_ERR is passed to the function.
-// * The 'type' argument is the type of the child that terminated
-// * (if it had a disk or socket target). */
-//void updateSlavesWaitingBgsave(int bgsaveerr, int type) {
-//    listNode *ln;
-//    int startbgsave = 0;
-//    int mincapa = -1;
-//    listIter li;
-//
-//    listRewind(server.slaves,&li);
-//    while((ln = listNext(&li))) {
-//        client *slave = ln->value;
-//
-//        if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) {
-//            startbgsave = 1;
-//            mincapa = (mincapa == -1) ? slave->slave_capa :
-//                      (mincapa & slave->slave_capa);
-//        } else if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_END) {
-//            struct redis_stat buf;
-//
-//            /* If this was an RDB on disk save, we have to prepare to send
-//             * the RDB from disk to the slave socket. Otherwise if this was
-//             * already an RDB -> Slaves socket transfer, used in the case of
-//             * diskless replication, our work is trivial, we can just put
-//             * the slave online. */
-//            if (type == RDB_CHILD_TYPE_SOCKET) {
-//                serverLog(LL_NOTICE,
-//                          "Streamed RDB transfer with slave %s succeeded (socket). Waiting for REPLCONF ACK from slave to enable streaming",
-//                          replicationGetSlaveName(slave));
-//                /* Note: we wait for a REPLCONF ACK message from slave in
-//                 * order to really put it online (install the write handler
-//                 * so that the accumulated data can be transfered). However
-//                 * we change the replication state ASAP, since our slave
-//                 * is technically online now. */
-//                slave->replstate = SLAVE_STATE_ONLINE;
-//                slave->repl_put_online_on_ack = 1;
-//                slave->repl_ack_time = server.unixtime; /* Timeout otherwise. */
-//            } else {
-//                if (bgsaveerr != C_OK) {
-//                    freeClient(slave);
-//                    serverLog(LL_WARNING,"SYNC failed. BGSAVE child returned an error");
-//                    continue;
-//                }
-//                if ((slave->repldbfd = open(crdtServer.rdb_filename,O_RDONLY)) == -1 ||
-//                    redis_fstat(slave->repldbfd,&buf) == -1) {
-//                    freeClient(slave);
-//                    serverLog(LL_WARNING,"SYNC failed. Can't open/stat DB after BGSAVE: %s", strerror(errno));
-//                    continue;
-//                }
-//                slave->repldboff = 0;
-//                slave->repldbsize = buf.st_size;
-//                slave->replstate = SLAVE_STATE_SEND_BULK;
-//                slave->replpreamble = sdscatprintf(sdsempty(),"$%lld\r\n",
-//                                                   (unsigned long long) slave->repldbsize);
-//
-//                aeDeleteFileEvent(server.el,slave->fd,AE_WRITABLE);
-//                if (aeCreateFileEvent(server.el, slave->fd, AE_WRITABLE, sendBulkToSlave, slave) == AE_ERR) {
-//                    freeClient(slave);
-//                    continue;
-//                }
-//            }
-//        }
-//    }
-//    if (startbgsave) startBgsaveForReplication(mincapa);
-//}
-//
-/* Change the current instance replication ID with a new, random one.
- * This will prevent successful PSYNCs between this master and other
- * slaves, so the command should be called when something happens that
- * alters the current story of the dataset. */
-void changeCrdtReplicationId(void) {
-    getRandomHexChars(server.crdt_repl_server->replid,CONFIG_RUN_ID_SIZE);
-    server.crdt_repl_server->replid[CONFIG_RUN_ID_SIZE] = '\0';
-}
-
-/* Clear (invalidate) the secondary replication ID. This happens, for
- * example, after a full resynchronization, when we start a new replication
- * history. */
-void clearCrdtReplicationId2(void) {
-    memset(server.crdt_repl_server->replid2,'0',sizeof(server.crdt_repl_server->replid));
-    server.crdt_repl_server->replid2[CONFIG_RUN_ID_SIZE] = '\0';
-    server.crdt_repl_server->second_replid_offset = -1;
-}
-
-///* Use the current replication ID / offset as secondary replication
-// * ID, and change the current one in order to start a new history.
-// * This should be used when an instance is switched from slave to master
-// * so that it can serve PSYNC requests performed using the master
-// * replication ID. */
-//void shiftReplicationId(void) {
-//    memcpy(crdtServer.replid2,crdtServer.replid,sizeof(crdtServer.replid));
-//    /* We set the second replid offset to the master offset + 1, since
-//     * the slave will ask for the first byte it has not yet received, so
-//     * we need to add one to the offset: for example if, as a slave, we are
-//     * sure we have the same history as the master for 50 bytes, after we
-//     * are turned into a master, we can accept a PSYNC request with offset
-//     * 51, since the slave asking has the same history up to the 50th
-//     * byte, and is asking for the new bytes starting at offset 51. */
-//    server.second_replid_offset = server.master_repl_offset+1;
-//    changeReplicationId();
-//    serverLog(LL_WARNING,"Setting secondary replication ID to %s, valid up to offset: %lld. New replication ID is %s", crdtServer.replid2, server.second_replid_offset, crdtServer.replid);
-//}
-//
-///*  =================================================================== CRDT Repl Slave ======================================================================  */
-//
-///* Returns 1 if the given replication state is a handshake state,
-// * 0 otherwise. */
-//int slaveIsInHandshakeState(void) {
-//    return crdtServer.repl_state >= REPL_STATE_RECEIVE_PONG &&
-//           crdtServer.repl_state <= REPL_STATE_RECEIVE_PSYNC;
-//}
-//
-///* Avoid the master to detect the slave is timing out while loading the
-// * RDB file in initial synchronization. We send a single newline character
-// * that is valid protocol but is guaranteed to either be sent entierly or
-// * not, since the byte is indivisible.
-// *
-// * The function is called in two contexts: while we flush the current
-// * data with emptyDb(), and while we load the new data received as an
-// * RDB file from the master. */
-//void replicationSendNewlineToMaster(void) {
-//    static time_t newline_sent;
-//    if (time(NULL) != newline_sent) {
-//        newline_sent = time(NULL);
-//        if (write(crdtServer.repl_transfer_s,"\n",1) == -1) {
-//            /* Pinging back in this stage is best-effort. */
-//        }
-//    }
-//}
-//
-///* Callback used by emptyDb() while flushing away old data to load
-// * the new dataset received by the master. */
-//void replicationEmptyDbCallback(void *privdata) {
-//    UNUSED(privdata);
-//    replicationSendNewlineToMaster();
-//}
-//
-///* Once we have a link with the master and the synchroniziation was
-// * performed, this function materializes the master client we store
-// * at server.master, starting from the specified file descriptor. */
-//void replicationCreateMasterClient(int fd, int dbid) {
-//    server.master = createClient(fd);
-//    server.master->flags |= CLIENT_MASTER;
-//    server.master->authenticated = 1;
-//    server.master->reploff = server.master_initial_offset;
-//    server.master->read_reploff = server.master->reploff;
-//    memcpy(server.master->replid, server.master_replid,
-//           sizeof(server.master_replid));
-//    /* If master offset is set to -1, this master is old and is not
-//     * PSYNC capable, so we flag it accordingly. */
-//    if (server.master->reploff == -1)
-//        server.master->flags |= CLIENT_PRE_PSYNC;
-//    if (dbid != -1) selectDb(server.master,dbid);
-//}
-//
-//void restartAOF() {
-//    int retry = 10;
-//    while (retry-- && startAppendOnly() == C_ERR) {
-//        serverLog(LL_WARNING,"Failed enabling the AOF after successful master synchronization! Trying it again in one second.");
-//        sleep(1);
-//    }
-//    if (!retry) {
-//        serverLog(LL_WARNING,"FATAL: this slave instance finished the synchronization with its master, but the AOF can't be turned on. Exiting now.");
-//        exit(1);
-//    }
-//}
-//
-///* Asynchronously read the SYNC payload we receive from a master */
-//#define REPL_MAX_WRITTEN_BEFORE_FSYNC (1024*1024*8) /* 8 MB */
-//void readSyncBulkPayload(aeEventLoop *el, int fd, void *privdata, int mask) {
-//    char buf[4096];
-//    ssize_t nread, readlen;
-//    off_t left;
-//    UNUSED(el);
-//    UNUSED(privdata);
-//    UNUSED(mask);
-//
-//    /* Static vars used to hold the EOF mark, and the last bytes received
-//     * form the server: when they match, we reached the end of the transfer. */
-//    static char eofmark[CONFIG_RUN_ID_SIZE];
-//    static char lastbytes[CONFIG_RUN_ID_SIZE];
-//    static int usemark = 0;
-//
-//    /* If repl_transfer_size == -1 we still have to read the bulk length
-//     * from the master reply. */
-//    if (crdtServer.repl_transfer_size == -1) {
-//        if (syncReadLine(fd,buf,1024,crdtServer.repl_syncio_timeout*1000) == -1) {
-//            serverLog(LL_WARNING,
-//                      "I/O error reading bulk count from MASTER: %s",
-//                      strerror(errno));
-//            goto error;
-//        }
-//
-//        if (buf[0] == '-') {
-//            serverLog(LL_WARNING,
-//                      "MASTER aborted replication with an error: %s",
-//                      buf+1);
-//            goto error;
-//        } else if (buf[0] == '\0') {
-//            /* At this stage just a newline works as a PING in order to take
-//             * the connection live. So we refresh our last interaction
-//             * timestamp. */
-//            crdtServer.repl_transfer_lastio = server.unixtime;
-//            return;
-//        } else if (buf[0] != '$') {
-//            serverLog(LL_WARNING,"Bad protocol from MASTER, the first byte is not '$' (we received '%s'), are you sure the host and port are right?", buf);
-//            goto error;
-//        }
-//
-//        /* There are two possible forms for the bulk payload. One is the
-//         * usual $<count> bulk format. The other is used for diskless transfers
-//         * when the master does not know beforehand the size of the file to
-//         * transfer. In the latter case, the following format is used:
-//         *
-//         * $EOF:<40 bytes delimiter>
-//         *
-//         * At the end of the file the announced delimiter is transmitted. The
-//         * delimiter is long and random enough that the probability of a
-//         * collision with the actual file content can be ignored. */
-//        if (strncmp(buf+1,"EOF:",4) == 0 && strlen(buf+5) >= CONFIG_RUN_ID_SIZE) {
-//            usemark = 1;
-//            memcpy(eofmark,buf+5,CONFIG_RUN_ID_SIZE);
-//            memset(lastbytes,0,CONFIG_RUN_ID_SIZE);
-//            /* Set any repl_transfer_size to avoid entering this code path
-//             * at the next call. */
-//            crdtServer.repl_transfer_size = 0;
-//            serverLog(LL_NOTICE,
-//                      "MASTER <-> SLAVE sync: receiving streamed RDB from master");
-//        } else {
-//            usemark = 0;
-//            crdtServer.repl_transfer_size = strtol(buf+1,NULL,10);
-//            serverLog(LL_NOTICE,
-//                      "MASTER <-> SLAVE sync: receiving %lld bytes from master",
-//                      (long long) crdtServer.repl_transfer_size);
-//        }
-//        return;
-//    }
-//
-//    /**
-//     * sync command success free ReplicationBacklog
-//     * sync command fail, keep ReplicationBacklog
-//     */
-//    freeReplicationBacklog();
-//
-//    /* Read bulk data */
-//    if (usemark) {
-//        readlen = sizeof(buf);
-//    } else {
-//        left = crdtServer.repl_transfer_size - crdtServer.repl_transfer_read;
-//        readlen = (left < (signed)sizeof(buf)) ? left : (signed)sizeof(buf);
-//    }
-//
-//    nread = read(fd,buf,readlen);
-//    if (nread <= 0) {
-//        serverLog(LL_WARNING,"I/O error trying to sync with MASTER: %s",
-//                  (nread == -1) ? strerror(errno) : "connection lost");
-//        cancelReplicationHandshake();
-//        return;
-//    }
-//    server.stat_net_input_bytes += nread;
-//
-//    /* When a mark is used, we want to detect EOF asap in order to avoid
-//     * writing the EOF mark into the file... */
-//    int eof_reached = 0;
-//
-//    if (usemark) {
-//        /* Update the last bytes array, and check if it matches our delimiter.*/
-//        if (nread >= CONFIG_RUN_ID_SIZE) {
-//            memcpy(lastbytes,buf+nread-CONFIG_RUN_ID_SIZE,CONFIG_RUN_ID_SIZE);
-//        } else {
-//            int rem = CONFIG_RUN_ID_SIZE-nread;
-//            memmove(lastbytes,lastbytes+nread,rem);
-//            memcpy(lastbytes+rem,buf,nread);
-//        }
-//        if (memcmp(lastbytes,eofmark,CONFIG_RUN_ID_SIZE) == 0) eof_reached = 1;
-//    }
-//
-//    crdtServer.repl_transfer_lastio = server.unixtime;
-//    if (write(crdtServer.repl_transfer_fd,buf,nread) != nread) {
-//        serverLog(LL_WARNING,"Write error or short write writing to the DB dump file needed for MASTER <-> SLAVE synchronization: %s", strerror(errno));
-//        goto error;
-//    }
-//    crdtServer.repl_transfer_read += nread;
-//
-//    /* Delete the last 40 bytes from the file if we reached EOF. */
-//    if (usemark && eof_reached) {
-//        if (ftruncate(crdtServer.repl_transfer_fd,
-//                      crdtServer.repl_transfer_read - CONFIG_RUN_ID_SIZE) == -1)
-//        {
-//            serverLog(LL_WARNING,"Error truncating the RDB file received from the master for SYNC: %s", strerror(errno));
-//            goto error;
-//        }
-//    }
-//
-//    /* Sync data on disk from time to time, otherwise at the end of the transfer
-//     * we may suffer a big delay as the memory buffers are copied into the
-//     * actual disk. */
-//    if (crdtServer.repl_transfer_read >=
-//        crdtServer.repl_transfer_last_fsync_off + REPL_MAX_WRITTEN_BEFORE_FSYNC)
-//    {
-//        off_t sync_size = crdtServer.repl_transfer_read -
-//                          crdtServer.repl_transfer_last_fsync_off;
-//        rdb_fsync_range(crdtServer.repl_transfer_fd,
-//                        crdtServer.repl_transfer_last_fsync_off, sync_size);
-//        crdtServer.repl_transfer_last_fsync_off += sync_size;
-//    }
-//
-//    /* Check if the transfer is now complete */
-//    if (!usemark) {
-//        if (crdtServer.repl_transfer_read == crdtServer.repl_transfer_size)
-//            eof_reached = 1;
-//    }
-//
-//    if (eof_reached) {
-//        int aof_is_enabled = server.aof_state != AOF_OFF;
-//
-//        if (rename(crdtServer.repl_transfer_tmpfile,crdtServer.rdb_filename) == -1) {
-//            serverLog(LL_WARNING,"Failed trying to rename the temp DB into dump.rdb in MASTER <-> SLAVE synchronization: %s", strerror(errno));
-//            cancelReplicationHandshake();
-//            return;
-//        }
-//        serverLog(LL_NOTICE, "MASTER <-> SLAVE sync: Flushing old data");
-//        /* We need to stop any AOFRW fork before flusing and parsing
-//         * RDB, otherwise we'll create a copy-on-write disaster. */
-//        if(aof_is_enabled) stopAppendOnly();
-//        signalFlushedDb(-1);
-//        emptyDb(
-//                -1,
-//                crdtServer.repl_slave_lazy_flush ? EMPTYDB_ASYNC : EMPTYDB_NO_FLAGS,
-//                replicationEmptyDbCallback);
-//        /* Before loading the DB into memory we need to delete the readable
-//         * handler, otherwise it will get called recursively since
-//         * rdbLoad() will call the event loop to process events from time to
-//         * time for non blocking loading. */
-//        aeDeleteFileEvent(server.el,crdtServer.repl_transfer_s,AE_READABLE);
-//        serverLog(LL_NOTICE, "MASTER <-> SLAVE sync: Loading DB in memory");
-//        rdbSaveInfo rsi = RDB_SAVE_INFO_INIT;
-//        if (rdbLoad(crdtServer.rdb_filename,&rsi) != C_OK) {
-//            serverLog(LL_WARNING,"Failed trying to load the MASTER synchronization DB from disk");
-//            cancelReplicationHandshake();
-//            /* Re-enable the AOF if we disabled it earlier, in order to restore
-//             * the original configuration. */
-//            if (aof_is_enabled) restartAOF();
-//            return;
-//        }
-//        /* Final setup of the connected slave <- master link */
-//        zfree(crdtServer.repl_transfer_tmpfile);
-//        close(crdtServer.repl_transfer_fd);
-//        replicationCreateMasterClient(crdtServer.repl_transfer_s,rsi.repl_stream_db);
-//        crdtServer.repl_state = REPL_STATE_CONNECTED;
-//        /* After a full resynchroniziation we use the replication ID and
-//         * offset of the master. The secondary ID / offset are cleared since
-//         * we are starting a new history. */
-//        memcpy(crdtServer.replid,server.master->replid,sizeof(crdtServer.replid));
-//        server.master_repl_offset = server.master->reploff;
-//        clearReplicationId2();
-//        /* Let's create the replication backlog if needed. Slaves need to
-//         * accumulate the backlog regardless of the fact they have sub-slaves
-//         * or not, in order to behave correctly if they are promoted to
-//         * masters after a failover. */
-//        if (crdtServer.repl_backlog == NULL) createReplicationBacklog();
-//
-//        serverLog(LL_NOTICE, "MASTER <-> SLAVE sync: Finished with success");
-//        /* Restart the AOF subsystem now that we finished the sync. This
-//         * will trigger an AOF rewrite, and when done will start appending
-//         * to the new file. */
-//        if (aof_is_enabled) restartAOF();
-//    }
-//    return;
-//
-//    error:
-//    cancelReplicationHandshake();
-//    return;
-//}
-//
-///* Send a synchronous command to the master. Used to send AUTH and
-// * REPLCONF commands before starting the replication with SYNC.
-// *
-// * The command returns an sds string representing the result of the
-// * operation. On error the first byte is a "-".
-// */
-//#define SYNC_CMD_READ (1<<0)
-//#define SYNC_CMD_WRITE (1<<1)
-//#define SYNC_CMD_FULL (SYNC_CMD_READ|SYNC_CMD_WRITE)
-//char *sendSynchronousCommand(int flags, int fd, ...) {
-//
-//    /* Create the command to send to the master, we use simple inline
-//     * protocol for simplicity as currently we only send simple strings. */
-//    if (flags & SYNC_CMD_WRITE) {
-//        char *arg;
-//        va_list ap;
-//        sds cmd = sdsempty();
-//        va_start(ap,fd);
-//
-//        while(1) {
-//            arg = va_arg(ap, char*);
-//            if (arg == NULL) break;
-//
-//            if (sdslen(cmd) != 0) cmd = sdscatlen(cmd," ",1);
-//            cmd = sdscat(cmd,arg);
-//        }
-//        cmd = sdscatlen(cmd,"\r\n",2);
-//        va_end(ap);
-//
-//        /* Transfer command to the server. */
-//        if (syncWrite(fd,cmd,sdslen(cmd),crdtServer.repl_syncio_timeout*1000)
-//            == -1)
-//        {
-//            sdsfree(cmd);
-//            return sdscatprintf(sdsempty(),"-Writing to master: %s",
-//                                strerror(errno));
-//        }
-//        sdsfree(cmd);
-//    }
-//
-//    /* Read the reply from the server. */
-//    if (flags & SYNC_CMD_READ) {
-//        char buf[256];
-//
-//        if (syncReadLine(fd,buf,sizeof(buf),crdtServer.repl_syncio_timeout*1000)
-//            == -1)
-//        {
-//            return sdscatprintf(sdsempty(),"-Reading from master: %s",
-//                                strerror(errno));
-//        }
-//        crdtServer.repl_transfer_lastio = server.unixtime;
-//        return sdsnew(buf);
-//    }
-//    return NULL;
-//}
-//
-///* Try a partial resynchronization with the master if we are about to reconnect.
-// * If there is no cached master structure, at least try to issue a
-// * "PSYNC ? -1" command in order to trigger a full resync using the PSYNC
-// * command in order to obtain the master run id and the master replication
-// * global offset.
-// *
-// * This function is designed to be called from syncWithMaster(), so the
-// * following assumptions are made:
-// *
-// * 1) We pass the function an already connected socket "fd".
-// * 2) This function does not close the file descriptor "fd". However in case
-// *    of successful partial resynchronization, the function will reuse
-// *    'fd' as file descriptor of the server.master client structure.
-// *
-// * The function is split in two halves: if read_reply is 0, the function
-// * writes the PSYNC command on the socket, and a new function call is
-// * needed, with read_reply set to 1, in order to read the reply of the
-// * command. This is useful in order to support non blocking operations, so
-// * that we write, return into the event loop, and read when there are data.
-// *
-// * When read_reply is 0 the function returns PSYNC_WRITE_ERR if there
-// * was a write error, or PSYNC_WAIT_REPLY to signal we need another call
-// * with read_reply set to 1. However even when read_reply is set to 1
-// * the function may return PSYNC_WAIT_REPLY again to signal there were
-// * insufficient data to read to complete its work. We should re-enter
-// * into the event loop and wait in such a case.
-// *
-// * The function returns:
-// *
-// * PSYNC_CONTINUE: If the PSYNC command succeded and we can continue.
-// * PSYNC_FULLRESYNC: If PSYNC is supported but a full resync is needed.
-// *                   In this case the master run_id and global replication
-// *                   offset is saved.
-// * PSYNC_NOT_SUPPORTED: If the server does not understand PSYNC at all and
-// *                      the caller should fall back to SYNC.
-// * PSYNC_WRITE_ERROR: There was an error writing the command to the socket.
-// * PSYNC_WAIT_REPLY: Call again the function with read_reply set to 1.
-// * PSYNC_TRY_LATER: Master is currently in a transient error condition.
-// *
-// * Notable side effects:
-// *
-// * 1) As a side effect of the function call the function removes the readable
-// *    event handler from "fd", unless the return value is PSYNC_WAIT_REPLY.
-// * 2) server.master_initial_offset is set to the right value according
-// *    to the master reply. This will be used to populate the 'server.master'
-// *    structure replication offset.
-// */
-//
-//#define PSYNC_WRITE_ERROR 0
-//#define PSYNC_WAIT_REPLY 1
-//#define PSYNC_CONTINUE 2
-//#define PSYNC_FULLRESYNC 3
-//#define PSYNC_NOT_SUPPORTED 4
-//#define PSYNC_TRY_LATER 5
-//int slaveTryPartialResynchronization(int fd, int read_reply) {
-//    char *psync_replid;
-//    char psync_offset[32];
-//    sds reply;
-//
-//    /* Writing half */
-//    if (!read_reply) {
-//        /* Initially set master_initial_offset to -1 to mark the current
-//         * master run_id and offset as not valid. Later if we'll be able to do
-//         * a FULL resync using the PSYNC command we'll set the offset at the
-//         * right value, so that this information will be propagated to the
-//         * client structure representing the master into server.master. */
-//        server.master_initial_offset = -1;
-//
-//        if (server.cached_master) {
-//            psync_replid = server.cached_master->replid;
-//            snprintf(psync_offset,sizeof(psync_offset),"%lld", server.cached_master->reploff+1);
-//            serverLog(LL_NOTICE,"Trying a partial resynchronization (request %s:%s).", psync_replid, psync_offset);
-//        } else {
-//            serverLog(LL_NOTICE,"Partial resynchronization not possible (no cached master)");
-//            psync_replid = "?";
-//            memcpy(psync_offset,"-1",3);
-//        }
-//
-//        /* Issue the PSYNC command */
-//        reply = sendSynchronousCommand(SYNC_CMD_WRITE,fd,"PSYNC",psync_replid,psync_offset,NULL);
-//        if (reply != NULL) {
-//            serverLog(LL_WARNING,"Unable to send PSYNC to master: %s",reply);
-//            sdsfree(reply);
-//            aeDeleteFileEvent(server.el,fd,AE_READABLE);
-//            return PSYNC_WRITE_ERROR;
-//        }
-//        return PSYNC_WAIT_REPLY;
-//    }
-//
-//    /* Reading half */
-//    reply = sendSynchronousCommand(SYNC_CMD_READ,fd,NULL);
-//    if (sdslen(reply) == 0) {
-//        /* The master may send empty newlines after it receives PSYNC
-//         * and before to reply, just to keep the connection alive. */
-//        sdsfree(reply);
-//        return PSYNC_WAIT_REPLY;
-//    }
-//
-//    aeDeleteFileEvent(server.el,fd,AE_READABLE);
-//
-//    if (!strncmp(reply,"+FULLRESYNC",11)) {
-//        char *replid = NULL, *offset = NULL;
-//
-//        /* FULL RESYNC, parse the reply in order to extract the run id
-//         * and the replication offset. */
-//        replid = strchr(reply,' ');
-//        if (replid) {
-//            replid++;
-//            offset = strchr(replid,' ');
-//            if (offset) offset++;
-//        }
-//        if (!replid || !offset || (offset-replid-1) != CONFIG_RUN_ID_SIZE) {
-//            serverLog(LL_WARNING,
-//                      "Master replied with wrong +FULLRESYNC syntax.");
-//            /* This is an unexpected condition, actually the +FULLRESYNC
-//             * reply means that the master supports PSYNC, but the reply
-//             * format seems wrong. To stay safe we blank the master
-//             * replid to make sure next PSYNCs will fail. */
-//            memset(server.master_replid,0,CONFIG_RUN_ID_SIZE+1);
-//        } else {
-//            memcpy(server.master_replid, replid, offset-replid-1);
-//            server.master_replid[CONFIG_RUN_ID_SIZE] = '\0';
-//            server.master_initial_offset = strtoll(offset,NULL,10);
-//            serverLog(LL_NOTICE,"Full resync from master: %s:%lld",
-//                      server.master_replid,
-//                      server.master_initial_offset);
-//        }
-//        /* We are going to full resync, discard the cached master structure. */
-//        replicationDiscardCachedMaster();
-//        sdsfree(reply);
-//        return PSYNC_FULLRESYNC;
-//    }
-//
-//    if (!strncmp(reply,"+CONTINUE",9)) {
-//        /* Partial resync was accepted. */
-//        serverLog(LL_NOTICE,
-//                  "Successful partial resynchronization with master.");
-//
-//        /* Check the new replication ID advertised by the master. If it
-//         * changed, we need to set the new ID as primary ID, and set or
-//         * secondary ID as the old master ID up to the current offset, so
-//         * that our sub-slaves will be able to PSYNC with us after a
-//         * disconnection. */
-//        char *start = reply+10;
-//        char *end = reply+9;
-//        while(end[0] != '\r' && end[0] != '\n' && end[0] != '\0') end++;
-//        if (end-start == CONFIG_RUN_ID_SIZE) {
-//            char new[CONFIG_RUN_ID_SIZE+1];
-//            memcpy(new,start,CONFIG_RUN_ID_SIZE);
-//            new[CONFIG_RUN_ID_SIZE] = '\0';
-//
-//            if (strcmp(new,server.cached_master->replid)) {
-//                /* Master ID changed. */
-//                serverLog(LL_WARNING,"Master replication ID changed to %s",new);
-//
-//                /* Set the old ID as our ID2, up to the current offset+1. */
-//                memcpy(crdtServer.replid2,server.cached_master->replid,
-//                       sizeof(crdtServer.replid2));
-//                server.second_replid_offset = server.master_repl_offset+1;
-//
-//                /* Update the cached master ID and our own primary ID to the
-//                 * new one. */
-//                memcpy(crdtServer.replid,new,sizeof(crdtServer.replid));
-//                memcpy(server.cached_master->replid,new,sizeof(crdtServer.replid));
-//
-//                /* Disconnect all the sub-slaves: they need to be notified. */
-//                disconnectSlaves();
-//            }
-//        }
-//
-//        /* Setup the replication to continue. */
-//        sdsfree(reply);
-//        replicationResurrectCachedMaster(fd);
-//
-//        /* If this instance was restarted and we read the metadata to
-//         * PSYNC from the persistence file, our replication backlog could
-//         * be still not initialized. Create it. */
-//        if (crdtServer.repl_backlog == NULL) createReplicationBacklog();
-//        return PSYNC_CONTINUE;
-//    }
-//
-//    /* If we reach this point we received either an error (since the master does
-//     * not understand PSYNC or because it is in a special state and cannot
-//     * serve our request), or an unexpected reply from the master.
-//     *
-//     * Return PSYNC_NOT_SUPPORTED on errors we don't understand, otherwise
-//     * return PSYNC_TRY_LATER if we believe this is a transient error. */
-//
-//    if (!strncmp(reply,"-NOMASTERLINK",13) ||
-//        !strncmp(reply,"-LOADING",8))
-//    {
-//        serverLog(LL_NOTICE,
-//                  "Master is currently unable to PSYNC "
-//                  "but should be in the future: %s", reply);
-//        sdsfree(reply);
-//        return PSYNC_TRY_LATER;
-//    }
-//
-//    if (strncmp(reply,"-ERR",4)) {
-//        /* If it's not an error, log the unexpected event. */
-//        serverLog(LL_WARNING,
-//                  "Unexpected reply to PSYNC from master: %s", reply);
-//    } else {
-//        serverLog(LL_NOTICE,
-//                  "Master does not support PSYNC or is in "
-//                  "error state (reply: %s)", reply);
-//    }
-//    sdsfree(reply);
-//    return PSYNC_NOT_SUPPORTED;
-//}
-//
-///* This handler fires when the non blocking connect was able to
-// * establish a connection with the master. */
-//void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
-//    char tmpfile[256], *err = NULL;
-//    int dfd = -1, maxtries = 5;
-//    int sockerr = 0, psync_result;
-//    socklen_t errlen = sizeof(sockerr);
-//    UNUSED(el);
-//    UNUSED(privdata);
-//    UNUSED(mask);
-//
-//    /* If this event fired after the user turned the instance into a master
-//     * with SLAVEOF NO ONE we must just return ASAP. */
-//    if (crdtServer.repl_state == REPL_STATE_NONE) {
-//        close(fd);
-//        return;
-//    }
-//
-//    /* Check for errors in the socket: after a non blocking connect() we
-//     * may find that the socket is in error state. */
-//    if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &sockerr, &errlen) == -1)
-//        sockerr = errno;
-//    if (sockerr) {
-//        serverLog(LL_WARNING,"Error condition on socket for SYNC: %s",
-//                  strerror(sockerr));
-//        goto error;
-//    }
-//
-//    /* Send a PING to check the master is able to reply without errors. */
-//    if (crdtServer.repl_state == REPL_STATE_CONNECTING) {
-//        serverLog(LL_NOTICE,"Non blocking connect for SYNC fired the event.");
-//        /* Delete the writable event so that the readable event remains
-//         * registered and we can wait for the PONG reply. */
-//        aeDeleteFileEvent(server.el,fd,AE_WRITABLE);
-//        crdtServer.repl_state = REPL_STATE_RECEIVE_PONG;
-//        /* Send the PING, don't check for errors at all, we have the timeout
-//         * that will take care about this. */
-//        err = sendSynchronousCommand(SYNC_CMD_WRITE,fd,"PING",NULL);
-//        if (err) goto write_error;
-//        return;
-//    }
-//
-//    /* Receive the PONG command. */
-//    if (crdtServer.repl_state == REPL_STATE_RECEIVE_PONG) {
-//        err = sendSynchronousCommand(SYNC_CMD_READ,fd,NULL);
-//
-//        /* We accept only two replies as valid, a positive +PONG reply
-//         * (we just check for "+") or an authentication error.
-//         * Note that older versions of Redis replied with "operation not
-//         * permitted" instead of using a proper error code, so we test
-//         * both. */
-//        if (err[0] != '+' &&
-//            strncmp(err,"-NOAUTH",7) != 0 &&
-//            strncmp(err,"-ERR operation not permitted",28) != 0)
-//        {
-//            serverLog(LL_WARNING,"Error reply to PING from master: '%s'",err);
-//            sdsfree(err);
-//            goto error;
-//        } else {
-//            serverLog(LL_NOTICE,
-//                      "Master replied to PING, replication can continue...");
-//        }
-//        sdsfree(err);
-//        crdtServer.repl_state = REPL_STATE_SEND_AUTH;
-//    }
-//
-//    /* AUTH with the master if required. */
-//    if (crdtServer.repl_state == REPL_STATE_SEND_AUTH) {
-//        if (server.masterauth) {
-//            err = sendSynchronousCommand(SYNC_CMD_WRITE,fd,"AUTH",server.masterauth,NULL);
-//            if (err) goto write_error;
-//            crdtServer.repl_state = REPL_STATE_RECEIVE_AUTH;
-//            return;
-//        } else {
-//            crdtServer.repl_state = REPL_STATE_SEND_PORT;
-//        }
-//    }
-//
-//    /* Receive AUTH reply. */
-//    if (crdtServer.repl_state == REPL_STATE_RECEIVE_AUTH) {
-//        err = sendSynchronousCommand(SYNC_CMD_READ,fd,NULL);
-//        if (err[0] == '-') {
-//            serverLog(LL_WARNING,"Unable to AUTH to MASTER: %s",err);
-//            sdsfree(err);
-//            goto error;
-//        }
-//        sdsfree(err);
-//        crdtServer.repl_state = REPL_STATE_SEND_PORT;
-//    }
-//
-//    /* Set the slave port, so that Master's INFO command can list the
-//     * slave listening port correctly. */
-//    if (crdtServer.repl_state == REPL_STATE_SEND_PORT) {
-//        sds port = sdsfromlonglong(server.slave_announce_port ?
-//                                   server.slave_announce_port : server.port);
-//        err = sendSynchronousCommand(SYNC_CMD_WRITE,fd,"REPLCONF",
-//                                     "listening-port",port, NULL);
-//        sdsfree(port);
-//        if (err) goto write_error;
-//        sdsfree(err);
-//        crdtServer.repl_state = REPL_STATE_RECEIVE_PORT;
-//        return;
-//    }
-//
-//    /* Receive REPLCONF listening-port reply. */
-//    if (crdtServer.repl_state == REPL_STATE_RECEIVE_PORT) {
-//        err = sendSynchronousCommand(SYNC_CMD_READ,fd,NULL);
-//        /* Ignore the error if any, not all the Redis versions support
-//         * REPLCONF listening-port. */
-//        if (err[0] == '-') {
-//            serverLog(LL_NOTICE,"(Non critical) Master does not understand "
-//                                "REPLCONF listening-port: %s", err);
-//        }
-//        sdsfree(err);
-//        crdtServer.repl_state = REPL_STATE_SEND_IP;
-//    }
-//
-//    /* Skip REPLCONF ip-address if there is no slave-announce-ip option set. */
-//    if (crdtServer.repl_state == REPL_STATE_SEND_IP &&
-//        server.slave_announce_ip == NULL)
-//    {
-//        crdtServer.repl_state = REPL_STATE_SEND_CAPA;
-//    }
-//
-//    /* Set the slave ip, so that Master's INFO command can list the
-//     * slave IP address port correctly in case of port forwarding or NAT. */
-//    if (crdtServer.repl_state == REPL_STATE_SEND_IP) {
-//        err = sendSynchronousCommand(SYNC_CMD_WRITE,fd,"REPLCONF",
-//                                     "ip-address",server.slave_announce_ip, NULL);
-//        if (err) goto write_error;
-//        sdsfree(err);
-//        crdtServer.repl_state = REPL_STATE_RECEIVE_IP;
-//        return;
-//    }
-//
-//    /* Receive REPLCONF ip-address reply. */
-//    if (crdtServer.repl_state == REPL_STATE_RECEIVE_IP) {
-//        err = sendSynchronousCommand(SYNC_CMD_READ,fd,NULL);
-//        /* Ignore the error if any, not all the Redis versions support
-//         * REPLCONF listening-port. */
-//        if (err[0] == '-') {
-//            serverLog(LL_NOTICE,"(Non critical) Master does not understand "
-//                                "REPLCONF ip-address: %s", err);
-//        }
-//        sdsfree(err);
-//        crdtServer.repl_state = REPL_STATE_SEND_CAPA;
-//    }
-//
-//    /* Inform the master of our (slave) capabilities.
-//     *
-//     * EOF: supports EOF-style RDB transfer for diskless replication.
-//     * PSYNC2: supports PSYNC v2, so understands +CONTINUE <new repl ID>.
-//     *
-//     * The master will ignore capabilities it does not understand. */
-//    if (crdtServer.repl_state == REPL_STATE_SEND_CAPA) {
-//        err = sendSynchronousCommand(SYNC_CMD_WRITE,fd,"REPLCONF",
-//                                     "capa","eof","capa","psync2",NULL);
-//        if (err) goto write_error;
-//        sdsfree(err);
-//        crdtServer.repl_state = REPL_STATE_RECEIVE_CAPA;
-//        return;
-//    }
-//
-//    /* Receive CAPA reply. */
-//    if (crdtServer.repl_state == REPL_STATE_RECEIVE_CAPA) {
-//        err = sendSynchronousCommand(SYNC_CMD_READ,fd,NULL);
-//        /* Ignore the error if any, not all the Redis versions support
-//         * REPLCONF capa. */
-//        if (err[0] == '-') {
-//            serverLog(LL_NOTICE,"(Non critical) Master does not understand "
-//                                "REPLCONF capa: %s", err);
-//        }
-//        sdsfree(err);
-//        crdtServer.repl_state = REPL_STATE_SEND_PSYNC;
-//    }
-//
-//    /* Try a partial resynchonization. If we don't have a cached master
-//     * slaveTryPartialResynchronization() will at least try to use PSYNC
-//     * to start a full resynchronization so that we get the master run id
-//     * and the global offset, to try a partial resync at the next
-//     * reconnection attempt. */
-//    if (crdtServer.repl_state == REPL_STATE_SEND_PSYNC) {
-//        if (slaveTryPartialResynchronization(fd,0) == PSYNC_WRITE_ERROR) {
-//            err = sdsnew("Write error sending the PSYNC command.");
-//            goto write_error;
-//        }
-//        crdtServer.repl_state = REPL_STATE_RECEIVE_PSYNC;
-//        return;
-//    }
-//
-//    /* If reached this point, we should be in REPL_STATE_RECEIVE_PSYNC. */
-//    if (crdtServer.repl_state != REPL_STATE_RECEIVE_PSYNC) {
-//        serverLog(LL_WARNING,"syncWithMaster(): state machine error, "
-//                             "state should be RECEIVE_PSYNC but is %d",
-//                  crdtServer.repl_state);
-//        goto error;
-//    }
-//
-//    psync_result = slaveTryPartialResynchronization(fd,1);
-//    if (psync_result == PSYNC_WAIT_REPLY) return; /* Try again later... */
-//
-//    /* If the master is in an transient error, we should try to PSYNC
-//     * from scratch later, so go to the error path. This happens when
-//     * the server is loading the dataset or is not connected with its
-//     * master and so forth. */
-//    if (psync_result == PSYNC_TRY_LATER) goto error;
-//
-//    /* Note: if PSYNC does not return WAIT_REPLY, it will take care of
-//     * uninstalling the read handler from the file descriptor. */
-//
-//    if (psync_result == PSYNC_CONTINUE) {
-//        serverLog(LL_NOTICE, "MASTER <-> SLAVE sync: Master accepted a Partial Resynchronization.");
-//        return;
-//    }
-//
-//    /* PSYNC failed or is not supported: we want our slaves to resync with us
-//     * as well, if we have any sub-slaves. The master may transfer us an
-//     * entirely different data set and we have no way to incrementally feed
-//     * our slaves after that. */
-//    disconnectSlaves(); /* Force our slaves to resync with us as well. */
-//    if (psync_result == PSYNC_FULLRESYNC) {
-//        freeReplicationBacklog(); /* Don't allow our chained slaves to PSYNC. */
-//    }
-//
-//    /* Fall back to SYNC if needed. Otherwise psync_result == PSYNC_FULLRESYNC
-//     * and the server.master_replid and master_initial_offset are
-//     * already populated. */
-//    if (psync_result == PSYNC_NOT_SUPPORTED) {
-//        serverLog(LL_NOTICE,"Retrying with SYNC...");
-//        if (syncWrite(fd,"SYNC\r\n",6,crdtServer.repl_syncio_timeout*1000) == -1) {
-//            serverLog(LL_WARNING,"I/O error writing to MASTER: %s",
-//                      strerror(errno));
-//            goto error;
-//        }
-//    }
-//
-//    /* Prepare a suitable temp file for bulk transfer */
-//    while(maxtries--) {
-//        snprintf(tmpfile,256,
-//                 "temp-%d.%ld.rdb",(int)server.unixtime,(long int)getpid());
-//        dfd = open(tmpfile,O_CREAT|O_WRONLY|O_EXCL,0644);
-//        if (dfd != -1) break;
-//        sleep(1);
-//    }
-//    if (dfd == -1) {
-//        serverLog(LL_WARNING,"Opening the temp file needed for MASTER <-> SLAVE synchronization: %s",strerror(errno));
-//        goto error;
-//    }
-//
-//    /* Setup the non blocking download of the bulk file. */
-//    if (aeCreateFileEvent(server.el,fd, AE_READABLE,readSyncBulkPayload,NULL)
-//        == AE_ERR)
-//    {
-//        serverLog(LL_WARNING,
-//                  "Can't create readable event for SYNC: %s (fd=%d)",
-//                  strerror(errno),fd);
-//        goto error;
-//    }
-//
-//    crdtServer.repl_state = REPL_STATE_TRANSFER;
-//    crdtServer.repl_transfer_size = -1;
-//    crdtServer.repl_transfer_read = 0;
-//    crdtServer.repl_transfer_last_fsync_off = 0;
-//    crdtServer.repl_transfer_fd = dfd;
-//    crdtServer.repl_transfer_lastio = server.unixtime;
-//    crdtServer.repl_transfer_tmpfile = zstrdup(tmpfile);
-//    return;
-//
-//    error:
-//    aeDeleteFileEvent(server.el,fd,AE_READABLE|AE_WRITABLE);
-//    if (dfd != -1) close(dfd);
-//    close(fd);
-//    crdtServer.repl_transfer_s = -1;
-//    crdtServer.repl_state = REPL_STATE_CONNECT;
-//    return;
-//
-//    write_error: /* Handle sendSynchronousCommand(SYNC_CMD_WRITE) errors. */
-//    serverLog(LL_WARNING,"Sending command to master in replication handshake: %s", err);
-//    sdsfree(err);
-//    goto error;
-//}
-//
-//int connectWithMaster(void) {
-//    int fd;
-//
-//    fd = anetTcpNonBlockBestEffortBindConnect(NULL,
-//                                              server.masterhost,server.masterport,NET_FIRST_BIND_ADDR);
-//    if (fd == -1) {
-//        serverLog(LL_WARNING,"Unable to connect to MASTER: %s",
-//                  strerror(errno));
-//        return C_ERR;
-//    }
-//
-//    if (aeCreateFileEvent(server.el,fd,AE_READABLE|AE_WRITABLE,syncWithMaster,NULL) ==
-//        AE_ERR)
-//    {
-//        close(fd);
-//        serverLog(LL_WARNING,"Can't create readable event for SYNC");
-//        return C_ERR;
-//    }
-//
-//    crdtServer.repl_transfer_lastio = server.unixtime;
-//    crdtServer.repl_transfer_s = fd;
-//    crdtServer.repl_state = REPL_STATE_CONNECTING;
-//    return C_OK;
-//}
-//
-///* This function can be called when a non blocking connection is currently
-// * in progress to undo it.
-// * Never call this function directly, use cancelReplicationHandshake() instead.
-// */
-//void undoConnectWithMaster(void) {
-//    int fd = crdtServer.repl_transfer_s;
-//
-//    aeDeleteFileEvent(server.el,fd,AE_READABLE|AE_WRITABLE);
-//    close(fd);
-//    crdtServer.repl_transfer_s = -1;
-//}
-//
-///* Abort the async download of the bulk dataset while SYNC-ing with master.
-// * Never call this function directly, use cancelReplicationHandshake() instead.
-// */
-//void replicationAbortSyncTransfer(void) {
-//    serverAssert(crdtServer.repl_state == REPL_STATE_TRANSFER);
-//    undoConnectWithMaster();
-//    close(crdtServer.repl_transfer_fd);
-//    unlink(crdtServer.repl_transfer_tmpfile);
-//    zfree(crdtServer.repl_transfer_tmpfile);
-//}
-//
-///* This function aborts a non blocking replication attempt if there is one
-// * in progress, by canceling the non-blocking connect attempt or
-// * the initial bulk transfer.
-// *
-// * If there was a replication handshake in progress 1 is returned and
-// * the replication state (crdtServer.repl_state) set to REPL_STATE_CONNECT.
-// *
-// * Otherwise zero is returned and no operation is perforemd at all. */
-//int cancelReplicationHandshake(void) {
-//    if (crdtServer.repl_state == REPL_STATE_TRANSFER) {
-//        replicationAbortSyncTransfer();
-//        crdtServer.repl_state = REPL_STATE_CONNECT;
-//    } else if (crdtServer.repl_state == REPL_STATE_CONNECTING ||
-//               slaveIsInHandshakeState())
-//    {
-//        undoConnectWithMaster();
-//        crdtServer.repl_state = REPL_STATE_CONNECT;
-//    } else {
-//        return 0;
-//    }
-//    return 1;
-//}
-//
-///* Set replication to the specified master address and port. */
-//void replicationSetMaster(char *ip, int port) {
-//    int was_master = server.masterhost == NULL;
-//
-//    sdsfree(server.masterhost);
-//    server.masterhost = sdsnew(ip);
-//    server.masterport = port;
-//    if (server.master) {
-//        freeClient(server.master);
-//    }
-//    disconnectAllBlockedClients(); /* Clients blocked in master, now slave. */
-//
-//    /* Force our slaves to resync with us as well. They may hopefully be able
-//     * to partially resync with us, but we can notify the replid change. */
-//    disconnectSlaves();
-//    cancelReplicationHandshake();
-//    /* Before destroying our master state, create a cached master using
-//     * our own parameters, to later PSYNC with the new master. */
-//    if (was_master) replicationCacheMasterUsingMyself();
-//    crdtServer.repl_state = REPL_STATE_CONNECT;
-//    crdtServer.repl_down_since = 0;
-//}
-//
-///* Cancel replication, setting the instance as a master itself. */
-//void replicationUnsetMaster(void) {
-//    if (server.masterhost == NULL) return; /* Nothing to do. */
-//    sdsfree(server.masterhost);
-//    server.masterhost = NULL;
-//    /* When a slave is turned into a master, the current replication ID
-//     * (that was inherited from the master at synchronization time) is
-//     * used as secondary ID up to the current offset, and a new replication
-//     * ID is created to continue with a new replication history. */
-//    shiftReplicationId();
-//    if (server.master) freeClient(server.master);
-//    replicationDiscardCachedMaster();
-//    cancelReplicationHandshake();
-//    /* Disconnecting all the slaves is required: we need to inform slaves
-//     * of the replication ID change (see shiftReplicationId() call). However
-//     * the slaves will be able to partially resync with us, so it will be
-//     * a very fast reconnection. */
-//    disconnectSlaves();
-//    crdtServer.repl_state = REPL_STATE_NONE;
-//
-//    /* We need to make sure the new master will start the replication stream
-//     * with a SELECT statement. This is forced after a full resync, but
-//     * with PSYNC version 2, there is no need for full resync after a
-//     * master switch. */
-//    server.slaveseldb = -1;
-//    crdtServer.repl_slave_repl_all = CONFIG_DEFAULT_SLAVE_REPLICATE_ALL;
-//
-//    /* Once we turn from slave to master, we consider the starting time without
-//     * slaves (that is used to count the replication backlog time to live) as
-//     * starting from now. Otherwise the backlog will be freed after a
-//     * failover if slaves do not connect immediately. */
-//    crdtServer.repl_no_slaves_since = server.unixtime;
-//}
-//
-///* This function is called when the slave lose the connection with the
-// * master into an unexpected way. */
-//void replicationHandleMasterDisconnection(void) {
-//    server.master = NULL;
-//    crdtServer.repl_state = REPL_STATE_CONNECT;
-//    crdtServer.repl_down_since = server.unixtime;
-//    /* We lost connection with our master, don't disconnect slaves yet,
-//     * maybe we'll be able to PSYNC with our master later. We'll disconnect
-//     * the slaves only if we'll have to do a full resync with our master. */
-//}
-//
-//void slaveofCommand(client *c) {
-//    /* SLAVEOF is not allowed in cluster mode as replication is automatically
-//     * configured using the current address of the master node. */
-//    if (server.cluster_enabled) {
-//        addReplyError(c,"SLAVEOF not allowed in cluster mode.");
-//        return;
-//    }
-//
-//    /* The special host/port combination "NO" "ONE" turns the instance
-//     * into a master. Otherwise the new master address is set. */
-//    if (!strcasecmp(c->argv[1]->ptr,"no") &&
-//        !strcasecmp(c->argv[2]->ptr,"one")) {
-//        if (server.masterhost) {
-//            replicationUnsetMaster();
-//            sds client = catClientInfoString(sdsempty(),c);
-//            serverLog(LL_NOTICE,"MASTER MODE enabled (user request from '%s')",
-//                      client);
-//            sdsfree(client);
-//        }
-//    } else {
-//        long port;
-//
-//        if ((getLongFromObjectOrReply(c, c->argv[2], &port, NULL) != C_OK))
-//            return;
-//
-//        /* Check if we are already attached to the specified slave */
-//        if (server.masterhost && !strcasecmp(server.masterhost,c->argv[1]->ptr)
-//            && server.masterport == port) {
-//            serverLog(LL_NOTICE,"SLAVE OF would result into synchronization with the master we are already connected with. No operation performed.");
-//            addReplySds(c,sdsnew("+OK Already connected to specified master\r\n"));
-//            return;
-//        }
-//        /* There was no previous master or the user specified a different one,
-//         * we can continue. */
-//        replicationSetMaster(c->argv[1]->ptr, port);
-//        sds client = catClientInfoString(sdsempty(),c);
-//        serverLog(LL_NOTICE,"SLAVE OF %s:%d enabled (user request from '%s')",
-//                  server.masterhost, server.masterport, client);
-//        sdsfree(client);
-//    }
-//    addReply(c,shared.ok);
-//}
-//
-///* ROLE command: provide information about the role of the instance
-// * (master or slave) and additional information related to replication
-// * in an easy to process format. */
-//void roleCommand(client *c) {
-//    if (server.masterhost == NULL) {
-//        listIter li;
-//        listNode *ln;
-//        void *mbcount;
-//        int slaves = 0;
-//
-//        addReplyMultiBulkLen(c,3);
-//        addReplyBulkCBuffer(c,"master",6);
-//        addReplyLongLong(c,server.master_repl_offset);
-//        mbcount = addDeferredMultiBulkLength(c);
-//        listRewind(server.slaves,&li);
-//        while((ln = listNext(&li))) {
-//            client *slave = ln->value;
-//            char ip[NET_IP_STR_LEN], *slaveip = slave->slave_ip;
-//
-//            if (slaveip[0] == '\0') {
-//                if (anetPeerToString(slave->fd,ip,sizeof(ip),NULL) == -1)
-//                    continue;
-//                slaveip = ip;
-//            }
-//            if (slave->replstate != SLAVE_STATE_ONLINE) continue;
-//            addReplyMultiBulkLen(c,3);
-//            addReplyBulkCString(c,slaveip);
-//            addReplyBulkLongLong(c,slave->slave_listening_port);
-//            addReplyBulkLongLong(c,slave->repl_ack_off);
-//            slaves++;
-//        }
-//        setDeferredMultiBulkLength(c,mbcount,slaves);
-//    } else {
-//        char *slavestate = NULL;
-//
-//        addReplyMultiBulkLen(c,5);
-//        addReplyBulkCBuffer(c,"slave",5);
-//        addReplyBulkCString(c,server.masterhost);
-//        addReplyLongLong(c,server.masterport);
-//        if (slaveIsInHandshakeState()) {
-//            slavestate = "handshake";
-//        } else {
-//            switch(crdtServer.repl_state) {
-//                case REPL_STATE_NONE: slavestate = "none"; break;
-//                case REPL_STATE_CONNECT: slavestate = "connect"; break;
-//                case REPL_STATE_CONNECTING: slavestate = "connecting"; break;
-//                case REPL_STATE_TRANSFER: slavestate = "sync"; break;
-//                case REPL_STATE_CONNECTED: slavestate = "connected"; break;
-//                default: slavestate = "unknown"; break;
-//            }
-//        }
-//        addReplyBulkCString(c,slavestate);
-//        addReplyLongLong(c,server.master ? server.master->reploff : -1);
-//    }
-//}
-//
-/* Send a REPLCONF ACK command to the master to inform it about the current
- * processed offset. If we are not connected with a master, the command has
- * no effects. */
-void crdtReplicationSendAck(void) {
-    CRDT_Server_Replication *crdtRepl = server.crdt_repl_server;
-    crdtServer.slaves;
-    client *c = server.master;
-
-    if (c != NULL) {
-        c->flags |= CLIENT_MASTER_FORCE_REPLY;
-        addReplyMultiBulkLen(c,3);
-        addReplyBulkCString(c,"REPLCONF");
-        addReplyBulkCString(c,"ACK");
-        addReplyBulkLongLong(c,c->reploff);
-        c->flags &= ~CLIENT_MASTER_FORCE_REPLY;
-    }
-}
-
-///* ---------------------- MASTER CACHING FOR PSYNC -------------------------- */
-//
-///* In order to implement partial synchronization we need to be able to cache
-// * our master's client structure after a transient disconnection.
-// * It is cached into server.cached_master and flushed away using the following
-// * functions. */
-//
-///* This function is called by freeClient() in order to cache the master
-// * client structure instead of destryoing it. freeClient() will return
-// * ASAP after this function returns, so every action needed to avoid problems
-// * with a client that is really "suspended" has to be done by this function.
-// *
-// * The other functions that will deal with the cached master are:
-// *
-// * replicationDiscardCachedMaster() that will make sure to kill the client
-// * as for some reason we don't want to use it in the future.
-// *
-// * replicationResurrectCachedMaster() that is used after a successful PSYNC
-// * handshake in order to reactivate the cached master.
-// */
-//void replicationCacheMaster(client *c) {
-//    serverAssert(server.master != NULL && server.cached_master == NULL);
-//    serverLog(LL_NOTICE,"Caching the disconnected master state.");
-//
-//    /* Unlink the client from the server structures. */
-//    unlinkClient(c);
-//
-//    /* Reset the master client so that's ready to accept new commands:
-//     * we want to discard te non processed query buffers and non processed
-//     * offsets, including pending transactions, already populated arguments,
-//     * pending outputs to the master. */
-//    sdsclear(server.master->querybuf);
-//    sdsclear(server.master->pending_querybuf);
-//    server.master->read_reploff = server.master->reploff;
-//    if (c->flags & CLIENT_MULTI) discardTransaction(c);
-//    listEmpty(c->reply);
-//    c->bufpos = 0;
-//    resetClient(c);
-//
-//    /* Save the master. Server.master will be set to null later by
-//     * replicationHandleMasterDisconnection(). */
-//    server.cached_master = server.master;
-//
-//    /* Invalidate the Peer ID cache. */
-//    if (c->peerid) {
-//        sdsfree(c->peerid);
-//        c->peerid = NULL;
-//    }
-//
-//    /* Caching the master happens instead of the actual freeClient() call,
-//     * so make sure to adjust the replication state. This function will
-//     * also set server.master to NULL. */
-//    replicationHandleMasterDisconnection();
-//}
-//
-///* This function is called when a master is turend into a slave, in order to
-// * create from scratch a cached master for the new client, that will allow
-// * to PSYNC with the slave that was promoted as the new master after a
-// * failover.
-// *
-// * Assuming this instance was previously the master instance of the new master,
-// * the new master will accept its replication ID, and potentiall also the
-// * current offset if no data was lost during the failover. So we use our
-// * current replication ID and offset in order to synthesize a cached master. */
-//void replicationCacheMasterUsingMyself(void) {
-//    /* The master client we create can be set to any DBID, because
-//     * the new master will start its replication stream with SELECT. */
-//    server.master_initial_offset = server.master_repl_offset;
-//    replicationCreateMasterClient(-1,-1);
-//
-//    /* Use our own ID / offset. */
-//    memcpy(server.master->replid, crdtServer.replid, sizeof(crdtServer.replid));
-//
-//    /* Set as cached master. */
-//    unlinkClient(server.master);
-//    server.cached_master = server.master;
-//    server.master = NULL;
-//    serverLog(LL_NOTICE,"Before turning into a slave, using my master parameters to synthesize a cached master: I may be able to synchronize with the new master with just a partial transfer.");
-//}
-//
-///* Free a cached master, called when there are no longer the conditions for
-// * a partial resync on reconnection. */
-//void replicationDiscardCachedMaster(void) {
-//    if (server.cached_master == NULL) return;
-//
-//    serverLog(LL_NOTICE,"Discarding previously cached master state.");
-//    server.cached_master->flags &= ~CLIENT_MASTER;
-//    freeClient(server.cached_master);
-//    server.cached_master = NULL;
-//}
-//
-///* Turn the cached master into the current master, using the file descriptor
-// * passed as argument as the socket for the new master.
-// *
-// * This function is called when successfully setup a partial resynchronization
-// * so the stream of data that we'll receive will start from were this
-// * master left. */
-//void replicationResurrectCachedMaster(int newfd) {
-//    server.master = server.cached_master;
-//    server.cached_master = NULL;
-//    server.master->fd = newfd;
-//    server.master->flags &= ~(CLIENT_CLOSE_AFTER_REPLY|CLIENT_CLOSE_ASAP);
-//    server.master->authenticated = 1;
-//    server.master->lastinteraction = server.unixtime;
-//    crdtServer.repl_state = REPL_STATE_CONNECTED;
-//
-//    /* Re-add to the list of clients. */
-//    listAddNodeTail(server.clients,server.master);
-//    if (aeCreateFileEvent(server.el, newfd, AE_READABLE,
-//                          readQueryFromClient, server.master)) {
-//        serverLog(LL_WARNING,"Error resurrecting the cached master, impossible to add the readable handler: %s", strerror(errno));
-//        freeClientAsync(server.master); /* Close ASAP. */
-//    }
-//
-//    /* We may also need to install the write handler as well if there is
-//     * pending data in the write buffers. */
-//    if (clientHasPendingReplies(server.master)) {
-//        if (aeCreateFileEvent(server.el, newfd, AE_WRITABLE,
-//                              sendReplyToClient, server.master)) {
-//            serverLog(LL_WARNING,"Error resurrecting the cached master, impossible to add the writable handler: %s", strerror(errno));
-//            freeClientAsync(server.master); /* Close ASAP. */
-//        }
-//    }
-//}
-
-///* Return the slave replication offset for this instance, that is
-// * the offset for which we already processed the master replication stream. */
-//long long replicationGetSlaveOffset(void) {
-//    long long offset = 0;
-//
-//    if (server.masterhost != NULL) {
-//        if (server.master) {
-//            offset = server.master->reploff;
-//        } else if (server.cached_master) {
-//            offset = server.cached_master->reploff;
-//        }
-//    }
-//    /* offset may be -1 when the master does not support it at all, however
-//     * this function is designed to return an offset that can express the
-//     * amount of data processed by the master, so we return a positive
-//     * integer. */
-//    if (offset < 0) offset = 0;
-//    return offset;
-//}
-//
-///* --------------------------- REPLICATION CRON  ---------------------------- */
-//
-///* Replication cron function, called 1 time per second. */
-//void replicationCron(void) {
-//    static long long replication_cron_loops = 0;
-//
-//    /* Non blocking connection timeout? */
-//    if (server.masterhost &&
-//        (crdtServer.repl_state == REPL_STATE_CONNECTING ||
-//         slaveIsInHandshakeState()) &&
-//        (time(NULL)-crdtServer.repl_transfer_lastio) > crdtServer.repl_timeout)
-//    {
-//        serverLog(LL_WARNING,"Timeout connecting to the MASTER...");
-//        cancelReplicationHandshake();
-//    }
-//
-//    /* Bulk transfer I/O timeout? */
-//    if (server.masterhost && crdtServer.repl_state == REPL_STATE_TRANSFER &&
-//        (time(NULL)-crdtServer.repl_transfer_lastio) > crdtServer.repl_timeout)
-//    {
-//        serverLog(LL_WARNING,"Timeout receiving bulk data from MASTER... If the problem persists try to set the 'repl-timeout' parameter in redis.conf to a larger value.");
-//        cancelReplicationHandshake();
-//    }
-//
-//    /* Timed out master when we are an already connected slave? */
-//    if (server.masterhost && crdtServer.repl_state == REPL_STATE_CONNECTED &&
-//        (time(NULL)-server.master->lastinteraction) > crdtServer.repl_timeout)
-//    {
-//        serverLog(LL_WARNING,"MASTER timeout: no data nor PING received...");
-//        freeClient(server.master);
-//    }
-//
-//    /* Check if we should connect to a MASTER */
-//    if (crdtServer.repl_state == REPL_STATE_CONNECT) {
-//        serverLog(LL_NOTICE,"Connecting to MASTER %s:%d",
-//                  server.masterhost, server.masterport);
-//        if (connectWithMaster() == C_OK) {
-//            serverLog(LL_NOTICE,"MASTER <-> SLAVE sync started");
-//        }
-//    }
-//
-//    /* Send ACK to master from time to time.
-//     * Note that we do not send periodic acks to masters that don't
-//     * support PSYNC and replication offsets. */
-//    if (server.masterhost && server.master &&
-//        !(server.master->flags & CLIENT_PRE_PSYNC))
-//        replicationSendAck();
-//
-//    /* If we have attached slaves, PING them from time to time.
-//     * So slaves can implement an explicit timeout to masters, and will
-//     * be able to detect a link disconnection even if the TCP connection
-//     * will not actually go down. */
-//    listIter li;
-//    listNode *ln;
-//    robj *ping_argv[1];
-//
-//    /* First, send PING according to ping_slave_period. */
-//    if ((replication_cron_loops % crdtServer.repl_ping_slave_period) == 0 &&
-//        listLength(server.slaves))
-//    {
-//        ping_argv[0] = createStringObject("PING",4);
-//        replicationFeedSlaves(server.slaves, server.slaveseldb,
-//                              ping_argv, 1);
-//        decrRefCount(ping_argv[0]);
-//    }
-//
-//    /* Second, send a newline to all the slaves in pre-synchronization
-//     * stage, that is, slaves waiting for the master to create the RDB file.
-//     *
-//     * Also send the a newline to all the chained slaves we have, if we lost
-//     * connection from our master, to keep the slaves aware that their
-//     * master is online. This is needed since sub-slaves only receive proxied
-//     * data from top-level masters, so there is no explicit pinging in order
-//     * to avoid altering the replication offsets. This special out of band
-//     * pings (newlines) can be sent, they will have no effect in the offset.
-//     *
-//     * The newline will be ignored by the slave but will refresh the
-//     * last interaction timer preventing a timeout. In this case we ignore the
-//     * ping period and refresh the connection once per second since certain
-//     * timeouts are set at a few seconds (example: PSYNC response). */
-//    listRewind(server.slaves,&li);
-//    while((ln = listNext(&li))) {
-//        client *slave = ln->value;
-//
-//        int is_presync =
-//                (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START ||
-//                 (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_END &&
-//                  crdtServer.rdb_child_type != RDB_CHILD_TYPE_SOCKET));
-//
-//        if (is_presync) {
-//            if (write(slave->fd, "\n", 1) == -1) {
-//                /* Don't worry about socket errors, it's just a ping. */
-//            }
-//        }
-//    }
-//
-//    /* Disconnect timedout slaves. */
-//    if (listLength(server.slaves)) {
-//        listIter li;
-//        listNode *ln;
-//
-//        listRewind(server.slaves,&li);
-//        while((ln = listNext(&li))) {
-//            client *slave = ln->value;
-//
-//            if (slave->replstate != SLAVE_STATE_ONLINE) continue;
-//            if (slave->flags & CLIENT_PRE_PSYNC) continue;
-//            if ((server.unixtime - slave->repl_ack_time) > crdtServer.repl_timeout)
-//            {
-//                serverLog(LL_WARNING, "Disconnecting timedout slave: %s",
-//                          replicationGetSlaveName(slave));
-//                freeClient(slave);
-//            }
-//        }
-//    }
-//
-//    /* If this is a master without attached slaves and there is a replication
-//     * backlog active, in order to reclaim memory we can free it after some
-//     * (configured) time. Note that this cannot be done for slaves: slaves
-//     * without sub-slaves attached should still accumulate data into the
-//     * backlog, in order to reply to PSYNC queries if they are turned into
-//     * masters after a failover. */
-//    if (listLength(server.slaves) == 0 && crdtServer.repl_backlog_time_limit &&
-//        crdtServer.repl_backlog && server.masterhost == NULL)
-//    {
-//        time_t idle = server.unixtime - crdtServer.repl_no_slaves_since;
-//
-//        if (idle > crdtServer.repl_backlog_time_limit) {
-//            /* When we free the backlog, we always use a new
-//             * replication ID and clear the ID2. This is needed
-//             * because when there is no backlog, the master_repl_offset
-//             * is not updated, but we would still retain our replication
-//             * ID, leading to the following problem:
-//             *
-//             * 1. We are a master instance.
-//             * 2. Our slave is promoted to master. It's repl-id-2 will
-//             *    be the same as our repl-id.
-//             * 3. We, yet as master, receive some updates, that will not
-//             *    increment the master_repl_offset.
-//             * 4. Later we are turned into a slave, connecto to the new
-//             *    master that will accept our PSYNC request by second
-//             *    replication ID, but there will be data inconsistency
-//             *    because we received writes. */
-//            changeReplicationId();
-//            clearReplicationId2();
-//            freeReplicationBacklog();
-//            serverLog(LL_NOTICE,
-//                      "Replication backlog freed after %d seconds "
-//                      "without connected slaves.",
-//                      (int) crdtServer.repl_backlog_time_limit);
-//        }
-//    }
-//
-//    /* If AOF is disabled and we no longer have attached slaves, we can
-//     * free our Replication Script Cache as there is no need to propagate
-//     * EVALSHA at all. */
-//    if (listLength(server.slaves) == 0 &&
-//        server.aof_state == AOF_OFF &&
-//        listLength(crdtServer.repl_scriptcache_fifo) != 0)
-//    {
-//        replicationScriptCacheFlush();
-//    }
-//
-//    /* Start a BGSAVE good for replication if we have slaves in
-//     * WAIT_BGSAVE_START state.
-//     *
-//     * In case of diskless replication, we make sure to wait the specified
-//     * number of seconds (according to configuration) so that other slaves
-//     * have the time to arrive before we start streaming. */
-//    if (crdtServer.rdb_child_pid == -1 && server.aof_child_pid == -1) {
-//        time_t idle, max_idle = 0;
-//        int slaves_waiting = 0;
-//        int mincapa = -1;
-//        listNode *ln;
-//        listIter li;
-//
-//        listRewind(server.slaves,&li);
-//        while((ln = listNext(&li))) {
-//            client *slave = ln->value;
-//            if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) {
-//                idle = server.unixtime - slave->lastinteraction;
-//                if (idle > max_idle) max_idle = idle;
-//                slaves_waiting++;
-//                mincapa = (mincapa == -1) ? slave->slave_capa :
-//                          (mincapa & slave->slave_capa);
-//            }
-//        }
-//
-//        if (slaves_waiting &&
-//            (!crdtServer.repl_diskless_sync ||
-//             max_idle > crdtServer.repl_diskless_sync_delay))
-//        {
-//            /* Start the BGSAVE. The called function may start a
-//             * BGSAVE with socket target or disk target depending on the
-//             * configuration and slaves capabilities. */
-//            startBgsaveForReplication(mincapa);
-//        }
-//    }
-//
-//    /* Refresh the number of slaves with lag <= min-slaves-max-lag. */
-//    refreshGoodSlavesCount();
-//    replication_cron_loops++; /* Incremented with frequency 1 HZ. */
-//}
-

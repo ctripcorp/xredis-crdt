@@ -1370,7 +1370,7 @@ int rewriteAppendOnlyFileBackground(void) {
 
     if (server.aof_child_pid != -1 || server.rdb_child_pid != -1) return C_ERR;
     if (aofCreatePipes() != C_OK) return C_ERR;
-    openChildInfoPipe(server);
+    openChildInfoPipe(&server);
     start = ustime();
     if ((childpid = fork()) == 0) {
         char tmpfile[256];
@@ -1389,7 +1389,7 @@ int rewriteAppendOnlyFileBackground(void) {
             }
 
             server.child_info_data.cow_size = private_dirty;
-            sendChildInfo(CHILD_INFO_TYPE_AOF, server);
+            sendChildInfo(CHILD_INFO_TYPE_AOF, &server);
             exitFromChild(0);
         } else {
             exitFromChild(1);
@@ -1400,7 +1400,7 @@ int rewriteAppendOnlyFileBackground(void) {
         server.stat_fork_rate = (double) zmalloc_used_memory() * 1000000 / server.stat_fork_time / (1024*1024*1024); /* GB per second. */
         latencyAddSampleIfNeeded("fork",server.stat_fork_time/1000);
         if (childpid == -1) {
-            closeChildInfoPipe(server);
+            closeChildInfoPipe(&server);
             serverLog(LL_WARNING,
                 "Can't rewrite append only file in background: fork: %s",
                 strerror(errno));

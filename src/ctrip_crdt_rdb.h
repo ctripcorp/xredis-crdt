@@ -34,7 +34,6 @@
 #define REDIS_CRDT_RDB_H
 
 #include "server.h"
-
 typedef struct crdtRdbSaveInfo {
     /* Used saving and loading. */
     int repl_stream_db;  /* DB to select in server.master client. */
@@ -47,18 +46,10 @@ typedef struct crdtRdbSaveInfo {
     /* CRDT Specialized param */
     VectorClock *vc;
 } crdtRdbSaveInfo;
+#define CRDT_RDB_SAVE_INFO_INIT {-1,0,"000000000000000000000000000000",-1,NULL}
 
-#define RDB_SAVE_INFO_INIT {-1,0,"000000000000000000000000000000",-1}
-
-
-void
-crdtMergeCommand(client *c);
-
-void
-crdtMergeStartCommand(client *c);
-
-void
-crdtMergeEndCommand(client *c);
+crdtRdbSaveInfo*
+crdtRdbPopulateSaveInfo(crdtRdbSaveInfo *rsi);
 
 int
 crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi);

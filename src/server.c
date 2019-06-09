@@ -309,8 +309,11 @@ struct redisCommand redisCommandTable[] = {
     {"post",securityWarningCommand,-1,"lt",0,NULL,0,0,0,0,0},
     {"host:",securityWarningCommand,-1,"lt",0,NULL,0,0,0,0,0},
     {"latency",latencyCommand,-2,"aslt",0,NULL,0,0,0,0,0},
-//    {"crdt.psync",crdtPSyncCommand,3,"ars",0,NULL,0,0,0,0,0},
-//    {"crdt.replconf",crdtReplconfCommand,3,"ars",0,NULL,0,0,0,0,0}
+    {"crdt.psync",syncCommand,3,"ars",0,NULL,0,0,0,0,0},
+    {"crdt.merge_start", crdtMergeStartCommand,-1,"ars",0,NULL,0,0,0,0,0},
+    {"crdt.merge",crdtMergeCommand,-1,"ars",0,NULL,0,0,0,0,0},
+    {"crdt.merge_end",crdtMergeEndCommand,-1,"ars",0,NULL,0,0,0,0,0},
+    {"crdt.replconf",replconfCommand,-1,"aslt",0,NULL,0,0,0,0,0}
 
 };
 
@@ -1082,10 +1085,10 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
                     (int) server.aof_child_pid);
             } else if (pid == server.rdb_child_pid) {
                 backgroundSaveDoneHandler(exitcode,bysignal);
-                if (!bysignal && exitcode == 0) receiveChildInfo(server);
+                if (!bysignal && exitcode == 0) receiveChildInfo(&server);
             } else if (pid == server.aof_child_pid) {
                 backgroundRewriteDoneHandler(exitcode,bysignal);
-                if (!bysignal && exitcode == 0) receiveChildInfo(server);
+                if (!bysignal && exitcode == 0) receiveChildInfo(&server);
             } else {
                 if (!ldbRemoveChild(pid)) {
                     serverLog(LL_WARNING,
@@ -1094,7 +1097,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
                 }
             }
             updateDictResizePolicy();
-            closeChildInfoPipe(server);
+            closeChildInfoPipe(&server);
         }
     } else {
         /* If there is not a background saving/rewrite in progress check if
@@ -1314,6 +1317,8 @@ void createSharedObjects(void) {
         "-NOREPLICAS Not enough good slaves to write.\r\n"));
     shared.busykeyerr = createObject(OBJ_STRING,sdsnew(
         "-BUSYKEY Target key name already exists.\r\n"));
+    shared.crdtmergeerr = createObject(OBJ_STRING,sdsnew(
+        "-CRDT.MERGE crdt merge error.\r\n"));
     shared.space = createObject(OBJ_STRING,sdsnew(" "));
     shared.colon = createObject(OBJ_STRING,sdsnew(":"));
     shared.plus = createObject(OBJ_STRING,sdsnew("+"));
@@ -1467,7 +1472,7 @@ void initServerConfig(struct redisServer *srv) {
 
     unsigned int lruclock = getLRUClock();
     atomicSet(srv->lruclock,lruclock);
-    resetServerSaveParams();
+    resetServerSaveParams(srv);
 
     appendServerSaveParams(60*60,1);  /* save after 1 hour and 1 change */
     appendServerSaveParams(300,100);  /* save after 5 minutes and 100 changes */
@@ -1523,7 +1528,9 @@ void initServerConfig(struct redisServer *srv) {
      * redis.conf using the rename-command directive. */
     srv->commands = dictCreate(&commandTableDictType,NULL);
     srv->orig_commands = dictCreate(&commandTableDictType,NULL);
-    populateCommandTable();
+    if(srv == &server) {
+        populateCommandTable();
+    }
     srv->delCommand = lookupCommandByCString("del");
     srv->multiCommand = lookupCommandByCString("multi");
     srv->lpushCommand = lookupCommandByCString("lpush");
@@ -2015,6 +2022,7 @@ void initServer(struct redisServer *srv) {
         srv->crdtMasters = listCreate();
 //        listSetMatchMethod(srv->crdtMasters, listMatchCrdtMaster);
         srv->crdt_gid = server.crdt_gid;
+        srv->rdb_child_type = RDB_CHILD_TYPE_SOCKET;
     }
 }
 
@@ -3875,7 +3883,7 @@ int main(int argc, char **argv) {
                 "Sentinel needs config file on disk to save state.  Exiting...");
             exit(1);
         }
-        resetServerSaveParams();
+        resetServerSaveParams(&server);
         loadServerConfig(configfile,options);
         sdsfree(options);
     }

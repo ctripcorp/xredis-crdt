@@ -71,7 +71,7 @@ rdbSaveRioWithCrdtMerge(rio *rdb, int *error, void *rsi) {
 
     return C_OK;
 
-    werr: /* Write error. */
+werr: /* Write error. */
     /* Set 'error' only if not already set by rdbSaveRio() call. */
     if (error && *error == 0) *error = errno;
     return C_ERR;
@@ -225,17 +225,6 @@ crdtRdbSaveObject(rio *rdb, robj *val) {
     return io.error ? -1 : (ssize_t)io.bytes;
 }
 
-/**---------------------------CRDT Load RDB--------------------------------*/
-void
-crdtMergeStartCommand(client *c) {
-
-}
-
-void
-crdtMergeEndCommand(client *c) {
-
-}
-
 /**---------------------------CRDT Merge Command--------------------------------*/
 //CRDT.Merge <gid> <key> <vc> <timestamp/-1> <expire> <value>
 // 0           1    2     3      4             5        6
@@ -244,7 +233,6 @@ crdtMergeCommand(client *c) {
     long long sourceGid, timestamp, expire;
     if (getLongLongFromObjectOrReply(c, c->argv[1], &sourceGid, NULL) != C_OK) goto error;
     robj *key = c->argv[2];
-    sds vc = sdsdup(c->argv[3]->ptr);
 
     if (getLongLongFromObjectOrReply(c, c->argv[4], &timestamp, NULL) != C_OK) goto error;
     if (getLongLongFromObjectOrReply(c, c->argv[5], &expire, NULL) != C_OK) goto error;
@@ -275,7 +263,7 @@ crdtMergeCommand(client *c) {
     return;
 
 error:
-//    crdtCancelReplicationHandshake(c);
+    crdtCancelReplicationHandshake(c);
     return;
 
 }

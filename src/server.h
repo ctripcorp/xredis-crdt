@@ -737,6 +737,10 @@ typedef struct client {
     /* Response buffer */
     int bufpos;
     char buf[PROTO_REPLY_CHUNK_BYTES];
+
+    /* Crdt Stuff*/
+    VectorClock *vectorClock;
+
 } client;
 
 struct saveparam {
@@ -759,6 +763,7 @@ struct sharedObjectsStruct {
     *busykeyerr, *oomerr, *plus, *messagebulk, *pmessagebulk, *subscribebulk,
     *unsubscribebulk, *psubscribebulk, *punsubscribebulk, *del, *unlink,
     *rpop, *lpop, *lpush, *emptyscan,
+    *crdtmergeerr,
     *select[PROTO_SHARED_SELECT_CMDS],
     *integers[OBJ_SHARED_INTEGERS],
     *mbulkhdr[OBJ_SHARED_BULKHDR_LEN], /* "*<value>\r\n" */
@@ -901,6 +906,8 @@ typedef struct CRDT_Master_Instance {
     char master_replid[CONFIG_RUN_ID_SIZE+1];  /* Master PSYNC repl_id. */
     long long master_initial_offset;           /* Master PSYNC offset. used for the full sync*/
     int repl_slave_lazy_flush;          /* Lazy FLUSHALL before loading DB? */
+
+    VectorClock *vectorClock;
 
 } CRDT_Master_Instance;
 
@@ -1547,7 +1554,7 @@ void replicationCacheMaster(client *c);
 void resizeReplicationBacklog(struct redisServer *srv, long long newsize);
 void replicationSetMaster(char *ip, int port);
 void replicationUnsetMaster(void);
-void refreshGoodSlavesCount(void);
+void refreshGoodSlavesCount(struct redisServer *srv);
 void replicationScriptCacheInit(void);
 void replicationScriptCacheFlush(void);
 void replicationScriptCacheAdd(sds sha1);
@@ -1559,15 +1566,22 @@ void replicationSendNewlineToMaster(void);
 long long replicationGetSlaveOffset(void);
 char *replicationGetSlaveName(client *c);
 long long getPsyncInitialOffset(struct redisServer *s);
-int replicationSetupSlaveForFullResync(client *slave, long long offset);
+int replicationSetupSlaveForFullResync(struct redisServer *srv, client *slave, long long offset);
 void changeReplicationId(struct redisServer *srv);
 void clearReplicationId2(struct redisServer *srv);
 void chopReplicationBacklog(void);
 void replicationCacheMasterUsingMyself(void);
 void feedReplicationBacklog(struct redisServer *srv, void *ptr, size_t len);
+int masterTryPartialResynchronization(struct redisServer *srv, client *c);
 
 /* CRDT Replications */
+
 int listMatchCrdtMaster(void *a, void *b);
+void crdtReplicationCron(void);
+void crdtMergeCommand(client *c);
+void crdtMergeStartCommand(client *c);
+void crdtMergeEndCommand(client *c);
+
 
 /* Macro to initialize an IO context. Note that the 'ver' field is populated
  * inside rdb.c according to the version of the value to load. */
@@ -1606,10 +1620,10 @@ unsigned long aofRewriteBufferSize(void);
 ssize_t aofReadDiffFromParent(void);
 
 /* Child info */
-void openChildInfoPipe(struct redisServer s);
-void closeChildInfoPipe(struct redisServer s);
-void sendChildInfo(int process_type, struct redisServer s);
-void receiveChildInfo(struct redisServer s);
+void openChildInfoPipe(struct redisServer *srv);
+void closeChildInfoPipe(struct redisServer *srv);
+void sendChildInfo(int process_type, struct redisServer *srv);
+void receiveChildInfo(struct redisServer *srv);
 
 /* Sorted sets data type */
 
@@ -1772,7 +1786,7 @@ sds keyspaceEventsFlagsToString(int flags);
 /* Configuration */
 void loadServerConfig(char *filename, char *options);
 void appendServerSaveParams(time_t seconds, int changes);
-void resetServerSaveParams(void);
+void resetServerSaveParams(struct redisServer *srv);
 struct rewriteConfigState; /* Forward declaration to export API. */
 void rewriteConfigRewriteLine(struct rewriteConfigState *state, const char *option, sds line, int force);
 int rewriteConfig(char *path);
