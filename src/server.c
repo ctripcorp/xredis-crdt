@@ -33,7 +33,6 @@
 #include "bio.h"
 #include "latency.h"
 #include "atomicvar.h"
-#include "ctrip_crdt_replication.h"
 
 #include <time.h>
 #include <signal.h>
@@ -947,10 +946,10 @@ void databasesCron(void) {
  * virtual memory and aging there is to store the current time in objects at
  * every object access, and accuracy is not needed. To access a global var is
  * a lot faster than calling time(NULL) */
-void updateCachedTime(void) {
+void updateCachedTime(struct redisServer *srv) {
     time_t unixtime = time(NULL);
-    atomicSet(server.unixtime,unixtime);
-    server.mstime = mstime();
+    atomicSet(srv->unixtime,unixtime);
+    srv->mstime = mstime();
 }
 
 /* This is our timer interrupt, called server.hz times per second.
@@ -983,7 +982,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     if (server.watchdog_period) watchdogScheduleSignal(server.watchdog_period);
 
     /* Update the time cache. */
-    updateCachedTime();
+    updateCachedTime(&server);
 
     run_with_period(100) {
         trackInstantaneousMetric(STATS_METRIC_COMMAND,server.stat_numcommands);
@@ -1359,115 +1358,115 @@ void createSharedObjects(void) {
     shared.maxstring = sdsnew("maxstring");
 }
 
-void initServerConfig(void) {
+void initServerConfig(struct redisServer *srv) {
     int j;
 
-    pthread_mutex_init(&server.next_client_id_mutex,NULL);
-    pthread_mutex_init(&server.lruclock_mutex,NULL);
-    pthread_mutex_init(&server.unixtime_mutex,NULL);
+    pthread_mutex_init(&srv->next_client_id_mutex,NULL);
+    pthread_mutex_init(&srv->lruclock_mutex,NULL);
+    pthread_mutex_init(&srv->unixtime_mutex,NULL);
 
-    getRandomHexChars(server.runid,CONFIG_RUN_ID_SIZE);
-    server.runid[CONFIG_RUN_ID_SIZE] = '\0';
-    changeReplicationId();
-    clearReplicationId2();
-    server.configfile = NULL;
-    server.executable = NULL;
-    server.hz = CONFIG_DEFAULT_HZ;
-    server.arch_bits = (sizeof(long) == 8) ? 64 : 32;
-    server.port = CONFIG_DEFAULT_SERVER_PORT;
-    server.tcp_backlog = CONFIG_DEFAULT_TCP_BACKLOG;
-    server.bindaddr_count = 0;
-    server.unixsocket = NULL;
-    server.unixsocketperm = CONFIG_DEFAULT_UNIX_SOCKET_PERM;
-    server.ipfd_count = 0;
-    server.sofd = -1;
-    server.protected_mode = CONFIG_DEFAULT_PROTECTED_MODE;
-    server.dbnum = CONFIG_DEFAULT_DBNUM;
-    server.verbosity = CONFIG_DEFAULT_VERBOSITY;
-    server.maxidletime = CONFIG_DEFAULT_CLIENT_TIMEOUT;
-    server.tcpkeepalive = CONFIG_DEFAULT_TCP_KEEPALIVE;
-    server.active_expire_enabled = 1;
-    server.active_defrag_enabled = CONFIG_DEFAULT_ACTIVE_DEFRAG;
-    server.active_defrag_ignore_bytes = CONFIG_DEFAULT_DEFRAG_IGNORE_BYTES;
-    server.active_defrag_threshold_lower = CONFIG_DEFAULT_DEFRAG_THRESHOLD_LOWER;
-    server.active_defrag_threshold_upper = CONFIG_DEFAULT_DEFRAG_THRESHOLD_UPPER;
-    server.active_defrag_cycle_min = CONFIG_DEFAULT_DEFRAG_CYCLE_MIN;
-    server.active_defrag_cycle_max = CONFIG_DEFAULT_DEFRAG_CYCLE_MAX;
-    server.proto_max_bulk_len = CONFIG_DEFAULT_PROTO_MAX_BULK_LEN;
-    server.client_max_querybuf_len = PROTO_MAX_QUERYBUF_LEN;
-    server.saveparams = NULL;
-    server.loading = 0;
-    server.logfile = zstrdup(CONFIG_DEFAULT_LOGFILE);
-    server.syslog_enabled = CONFIG_DEFAULT_SYSLOG_ENABLED;
-    server.syslog_ident = zstrdup(CONFIG_DEFAULT_SYSLOG_IDENT);
-    server.syslog_facility = LOG_LOCAL0;
-    server.daemonize = CONFIG_DEFAULT_DAEMONIZE;
-    server.supervised = 0;
-    server.supervised_mode = SUPERVISED_NONE;
-    server.aof_state = AOF_OFF;
-    server.aof_fsync = CONFIG_DEFAULT_AOF_FSYNC;
-    server.aof_no_fsync_on_rewrite = CONFIG_DEFAULT_AOF_NO_FSYNC_ON_REWRITE;
-    server.aof_rewrite_perc = AOF_REWRITE_PERC;
-    server.aof_rewrite_min_size = AOF_REWRITE_MIN_SIZE;
-    server.aof_rewrite_base_size = 0;
-    server.aof_rewrite_scheduled = 0;
-    server.aof_last_fsync = time(NULL);
-    server.aof_rewrite_time_last = -1;
-    server.aof_rewrite_time_start = -1;
-    server.aof_lastbgrewrite_status = C_OK;
-    server.aof_delayed_fsync = 0;
-    server.aof_fd = -1;
-    server.aof_selected_db = -1; /* Make sure the first time will not match */
-    server.aof_flush_postponed_start = 0;
-    server.aof_rewrite_incremental_fsync = CONFIG_DEFAULT_AOF_REWRITE_INCREMENTAL_FSYNC;
-    server.aof_load_truncated = CONFIG_DEFAULT_AOF_LOAD_TRUNCATED;
-    server.aof_use_rdb_preamble = CONFIG_DEFAULT_AOF_USE_RDB_PREAMBLE;
-    server.pidfile = NULL;
-    server.rdb_filename = zstrdup(CONFIG_DEFAULT_RDB_FILENAME);
-    server.aof_filename = zstrdup(CONFIG_DEFAULT_AOF_FILENAME);
-    server.requirepass = NULL;
-    server.rdb_compression = CONFIG_DEFAULT_RDB_COMPRESSION;
-    server.rdb_checksum = CONFIG_DEFAULT_RDB_CHECKSUM;
-    server.stop_writes_on_bgsave_err = CONFIG_DEFAULT_STOP_WRITES_ON_BGSAVE_ERROR;
-    server.activerehashing = CONFIG_DEFAULT_ACTIVE_REHASHING;
-    server.active_defrag_running = 0;
-    server.notify_keyspace_events = 0;
-    server.maxclients = CONFIG_DEFAULT_MAX_CLIENTS;
-    server.bpop_blocked_clients = 0;
-    server.maxmemory = CONFIG_DEFAULT_MAXMEMORY;
-    server.maxmemory_policy = CONFIG_DEFAULT_MAXMEMORY_POLICY;
-    server.maxmemory_samples = CONFIG_DEFAULT_MAXMEMORY_SAMPLES;
-    server.lfu_log_factor = CONFIG_DEFAULT_LFU_LOG_FACTOR;
-    server.lfu_decay_time = CONFIG_DEFAULT_LFU_DECAY_TIME;
-    server.hash_max_ziplist_entries = OBJ_HASH_MAX_ZIPLIST_ENTRIES;
-    server.hash_max_ziplist_value = OBJ_HASH_MAX_ZIPLIST_VALUE;
-    server.list_max_ziplist_size = OBJ_LIST_MAX_ZIPLIST_SIZE;
-    server.list_compress_depth = OBJ_LIST_COMPRESS_DEPTH;
-    server.set_max_intset_entries = OBJ_SET_MAX_INTSET_ENTRIES;
-    server.zset_max_ziplist_entries = OBJ_ZSET_MAX_ZIPLIST_ENTRIES;
-    server.zset_max_ziplist_value = OBJ_ZSET_MAX_ZIPLIST_VALUE;
-    server.hll_sparse_max_bytes = CONFIG_DEFAULT_HLL_SPARSE_MAX_BYTES;
-    server.shutdown_asap = 0;
-    server.cluster_enabled = 0;
-    server.cluster_node_timeout = CLUSTER_DEFAULT_NODE_TIMEOUT;
-    server.cluster_migration_barrier = CLUSTER_DEFAULT_MIGRATION_BARRIER;
-    server.cluster_slave_validity_factor = CLUSTER_DEFAULT_SLAVE_VALIDITY;
-    server.cluster_require_full_coverage = CLUSTER_DEFAULT_REQUIRE_FULL_COVERAGE;
-    server.cluster_configfile = zstrdup(CONFIG_DEFAULT_CLUSTER_CONFIG_FILE);
-    server.cluster_announce_ip = CONFIG_DEFAULT_CLUSTER_ANNOUNCE_IP;
-    server.cluster_announce_port = CONFIG_DEFAULT_CLUSTER_ANNOUNCE_PORT;
-    server.cluster_announce_bus_port = CONFIG_DEFAULT_CLUSTER_ANNOUNCE_BUS_PORT;
-    server.migrate_cached_sockets = dictCreate(&migrateCacheDictType,NULL);
-    server.next_client_id = 1; /* Client IDs, start from 1 .*/
-    server.loading_process_events_interval_bytes = (1024*1024*2);
-    server.lazyfree_lazy_eviction = CONFIG_DEFAULT_LAZYFREE_LAZY_EVICTION;
-    server.lazyfree_lazy_expire = CONFIG_DEFAULT_LAZYFREE_LAZY_EXPIRE;
-    server.lazyfree_lazy_server_del = CONFIG_DEFAULT_LAZYFREE_LAZY_SERVER_DEL;
-    server.always_show_logo = CONFIG_DEFAULT_ALWAYS_SHOW_LOGO;
-    server.lua_time_limit = LUA_SCRIPT_TIME_LIMIT;
+    getRandomHexChars(srv->runid,CONFIG_RUN_ID_SIZE);
+    srv->runid[CONFIG_RUN_ID_SIZE] = '\0';
+    changeReplicationId(srv);
+    clearReplicationId2(srv);
+    srv->configfile = NULL;
+    srv->executable = NULL;
+    srv->hz = CONFIG_DEFAULT_HZ;
+    srv->arch_bits = (sizeof(long) == 8) ? 64 : 32;
+    srv->port = CONFIG_DEFAULT_SERVER_PORT;
+    srv->tcp_backlog = CONFIG_DEFAULT_TCP_BACKLOG;
+    srv->bindaddr_count = 0;
+    srv->unixsocket = NULL;
+    srv->unixsocketperm = CONFIG_DEFAULT_UNIX_SOCKET_PERM;
+    srv->ipfd_count = 0;
+    srv->sofd = -1;
+    srv->protected_mode = CONFIG_DEFAULT_PROTECTED_MODE;
+    srv->dbnum = CONFIG_DEFAULT_DBNUM;
+    srv->verbosity = CONFIG_DEFAULT_VERBOSITY;
+    srv->maxidletime = CONFIG_DEFAULT_CLIENT_TIMEOUT;
+    srv->tcpkeepalive = CONFIG_DEFAULT_TCP_KEEPALIVE;
+    srv->active_expire_enabled = 1;
+    srv->active_defrag_enabled = CONFIG_DEFAULT_ACTIVE_DEFRAG;
+    srv->active_defrag_ignore_bytes = CONFIG_DEFAULT_DEFRAG_IGNORE_BYTES;
+    srv->active_defrag_threshold_lower = CONFIG_DEFAULT_DEFRAG_THRESHOLD_LOWER;
+    srv->active_defrag_threshold_upper = CONFIG_DEFAULT_DEFRAG_THRESHOLD_UPPER;
+    srv->active_defrag_cycle_min = CONFIG_DEFAULT_DEFRAG_CYCLE_MIN;
+    srv->active_defrag_cycle_max = CONFIG_DEFAULT_DEFRAG_CYCLE_MAX;
+    srv->proto_max_bulk_len = CONFIG_DEFAULT_PROTO_MAX_BULK_LEN;
+    srv->client_max_querybuf_len = PROTO_MAX_QUERYBUF_LEN;
+    srv->saveparams = NULL;
+    srv->loading = 0;
+    srv->logfile = zstrdup(CONFIG_DEFAULT_LOGFILE);
+    srv->syslog_enabled = CONFIG_DEFAULT_SYSLOG_ENABLED;
+    srv->syslog_ident = zstrdup(CONFIG_DEFAULT_SYSLOG_IDENT);
+    srv->syslog_facility = LOG_LOCAL0;
+    srv->daemonize = CONFIG_DEFAULT_DAEMONIZE;
+    srv->supervised = 0;
+    srv->supervised_mode = SUPERVISED_NONE;
+    srv->aof_state = AOF_OFF;
+    srv->aof_fsync = CONFIG_DEFAULT_AOF_FSYNC;
+    srv->aof_no_fsync_on_rewrite = CONFIG_DEFAULT_AOF_NO_FSYNC_ON_REWRITE;
+    srv->aof_rewrite_perc = AOF_REWRITE_PERC;
+    srv->aof_rewrite_min_size = AOF_REWRITE_MIN_SIZE;
+    srv->aof_rewrite_base_size = 0;
+    srv->aof_rewrite_scheduled = 0;
+    srv->aof_last_fsync = time(NULL);
+    srv->aof_rewrite_time_last = -1;
+    srv->aof_rewrite_time_start = -1;
+    srv->aof_lastbgrewrite_status = C_OK;
+    srv->aof_delayed_fsync = 0;
+    srv->aof_fd = -1;
+    srv->aof_selected_db = -1; /* Make sure the first time will not match */
+    srv->aof_flush_postponed_start = 0;
+    srv->aof_rewrite_incremental_fsync = CONFIG_DEFAULT_AOF_REWRITE_INCREMENTAL_FSYNC;
+    srv->aof_load_truncated = CONFIG_DEFAULT_AOF_LOAD_TRUNCATED;
+    srv->aof_use_rdb_preamble = CONFIG_DEFAULT_AOF_USE_RDB_PREAMBLE;
+    srv->pidfile = NULL;
+    srv->rdb_filename = zstrdup(CONFIG_DEFAULT_RDB_FILENAME);
+    srv->aof_filename = zstrdup(CONFIG_DEFAULT_AOF_FILENAME);
+    srv->requirepass = NULL;
+    srv->rdb_compression = CONFIG_DEFAULT_RDB_COMPRESSION;
+    srv->rdb_checksum = CONFIG_DEFAULT_RDB_CHECKSUM;
+    srv->stop_writes_on_bgsave_err = CONFIG_DEFAULT_STOP_WRITES_ON_BGSAVE_ERROR;
+    srv->activerehashing = CONFIG_DEFAULT_ACTIVE_REHASHING;
+    srv->active_defrag_running = 0;
+    srv->notify_keyspace_events = 0;
+    srv->maxclients = CONFIG_DEFAULT_MAX_CLIENTS;
+    srv->bpop_blocked_clients = 0;
+    srv->maxmemory = CONFIG_DEFAULT_MAXMEMORY;
+    srv->maxmemory_policy = CONFIG_DEFAULT_MAXMEMORY_POLICY;
+    srv->maxmemory_samples = CONFIG_DEFAULT_MAXMEMORY_SAMPLES;
+    srv->lfu_log_factor = CONFIG_DEFAULT_LFU_LOG_FACTOR;
+    srv->lfu_decay_time = CONFIG_DEFAULT_LFU_DECAY_TIME;
+    srv->hash_max_ziplist_entries = OBJ_HASH_MAX_ZIPLIST_ENTRIES;
+    srv->hash_max_ziplist_value = OBJ_HASH_MAX_ZIPLIST_VALUE;
+    srv->list_max_ziplist_size = OBJ_LIST_MAX_ZIPLIST_SIZE;
+    srv->list_compress_depth = OBJ_LIST_COMPRESS_DEPTH;
+    srv->set_max_intset_entries = OBJ_SET_MAX_INTSET_ENTRIES;
+    srv->zset_max_ziplist_entries = OBJ_ZSET_MAX_ZIPLIST_ENTRIES;
+    srv->zset_max_ziplist_value = OBJ_ZSET_MAX_ZIPLIST_VALUE;
+    srv->hll_sparse_max_bytes = CONFIG_DEFAULT_HLL_SPARSE_MAX_BYTES;
+    srv->shutdown_asap = 0;
+    srv->cluster_enabled = 0;
+    srv->cluster_node_timeout = CLUSTER_DEFAULT_NODE_TIMEOUT;
+    srv->cluster_migration_barrier = CLUSTER_DEFAULT_MIGRATION_BARRIER;
+    srv->cluster_slave_validity_factor = CLUSTER_DEFAULT_SLAVE_VALIDITY;
+    srv->cluster_require_full_coverage = CLUSTER_DEFAULT_REQUIRE_FULL_COVERAGE;
+    srv->cluster_configfile = zstrdup(CONFIG_DEFAULT_CLUSTER_CONFIG_FILE);
+    srv->cluster_announce_ip = CONFIG_DEFAULT_CLUSTER_ANNOUNCE_IP;
+    srv->cluster_announce_port = CONFIG_DEFAULT_CLUSTER_ANNOUNCE_PORT;
+    srv->cluster_announce_bus_port = CONFIG_DEFAULT_CLUSTER_ANNOUNCE_BUS_PORT;
+    srv->migrate_cached_sockets = dictCreate(&migrateCacheDictType,NULL);
+    srv->next_client_id = 1; /* Client IDs, start from 1 .*/
+    srv->loading_process_events_interval_bytes = (1024*1024*2);
+    srv->lazyfree_lazy_eviction = CONFIG_DEFAULT_LAZYFREE_LAZY_EVICTION;
+    srv->lazyfree_lazy_expire = CONFIG_DEFAULT_LAZYFREE_LAZY_EXPIRE;
+    srv->lazyfree_lazy_server_del = CONFIG_DEFAULT_LAZYFREE_LAZY_SERVER_DEL;
+    srv->always_show_logo = CONFIG_DEFAULT_ALWAYS_SHOW_LOGO;
+    srv->lua_time_limit = LUA_SCRIPT_TIME_LIMIT;
 
     unsigned int lruclock = getLRUClock();
-    atomicSet(server.lruclock,lruclock);
+    atomicSet(srv->lruclock,lruclock);
     resetServerSaveParams();
 
     appendServerSaveParams(60*60,1);  /* save after 1 hour and 1 change */
@@ -1475,43 +1474,43 @@ void initServerConfig(void) {
     appendServerSaveParams(60,10000); /* save after 1 minute and 10000 changes */
 
     /* Replication related */
-    server.masterauth = NULL;
-    server.masterhost = NULL;
-    server.masterport = 6379;
-    server.master = NULL;
-    server.cached_master = NULL;
-    server.master_initial_offset = -1;
-    server.repl_state = REPL_STATE_NONE;
-    server.repl_syncio_timeout = CONFIG_REPL_SYNCIO_TIMEOUT;
-    server.repl_serve_stale_data = CONFIG_DEFAULT_SLAVE_SERVE_STALE_DATA;
-    server.repl_slave_ro = CONFIG_DEFAULT_SLAVE_READ_ONLY;
-    server.repl_slave_repl_all = CONFIG_DEFAULT_SLAVE_REPLICATE_ALL;
-    server.repl_slave_lazy_flush = CONFIG_DEFAULT_SLAVE_LAZY_FLUSH;
-    server.repl_down_since = 0; /* Never connected, repl is down since EVER. */
-    server.repl_disable_tcp_nodelay = CONFIG_DEFAULT_REPL_DISABLE_TCP_NODELAY;
-    server.repl_diskless_sync = CONFIG_DEFAULT_REPL_DISKLESS_SYNC;
-    server.repl_diskless_sync_delay = CONFIG_DEFAULT_REPL_DISKLESS_SYNC_DELAY;
-    server.repl_ping_slave_period = CONFIG_DEFAULT_REPL_PING_SLAVE_PERIOD;
-    server.repl_timeout = CONFIG_DEFAULT_REPL_TIMEOUT;
-    server.repl_min_slaves_to_write = CONFIG_DEFAULT_MIN_SLAVES_TO_WRITE;
-    server.repl_min_slaves_max_lag = CONFIG_DEFAULT_MIN_SLAVES_MAX_LAG;
-    server.slave_priority = CONFIG_DEFAULT_SLAVE_PRIORITY;
-    server.slave_announce_ip = CONFIG_DEFAULT_SLAVE_ANNOUNCE_IP;
-    server.slave_announce_port = CONFIG_DEFAULT_SLAVE_ANNOUNCE_PORT;
-    server.master_repl_offset = 0;
+    srv->masterauth = NULL;
+    srv->masterhost = NULL;
+    srv->masterport = 6379;
+    srv->master = NULL;
+    srv->cached_master = NULL;
+    srv->master_initial_offset = -1;
+    srv->repl_state = REPL_STATE_NONE;
+    srv->repl_syncio_timeout = CONFIG_REPL_SYNCIO_TIMEOUT;
+    srv->repl_serve_stale_data = CONFIG_DEFAULT_SLAVE_SERVE_STALE_DATA;
+    srv->repl_slave_ro = CONFIG_DEFAULT_SLAVE_READ_ONLY;
+    srv->repl_slave_repl_all = CONFIG_DEFAULT_SLAVE_REPLICATE_ALL;
+    srv->repl_slave_lazy_flush = CONFIG_DEFAULT_SLAVE_LAZY_FLUSH;
+    srv->repl_down_since = 0; /* Never connected, repl is down since EVER. */
+    srv->repl_disable_tcp_nodelay = CONFIG_DEFAULT_REPL_DISABLE_TCP_NODELAY;
+    srv->repl_diskless_sync = CONFIG_DEFAULT_REPL_DISKLESS_SYNC;
+    srv->repl_diskless_sync_delay = CONFIG_DEFAULT_REPL_DISKLESS_SYNC_DELAY;
+    srv->repl_ping_slave_period = CONFIG_DEFAULT_REPL_PING_SLAVE_PERIOD;
+    srv->repl_timeout = CONFIG_DEFAULT_REPL_TIMEOUT;
+    srv->repl_min_slaves_to_write = CONFIG_DEFAULT_MIN_SLAVES_TO_WRITE;
+    srv->repl_min_slaves_max_lag = CONFIG_DEFAULT_MIN_SLAVES_MAX_LAG;
+    srv->slave_priority = CONFIG_DEFAULT_SLAVE_PRIORITY;
+    srv->slave_announce_ip = CONFIG_DEFAULT_SLAVE_ANNOUNCE_IP;
+    srv->slave_announce_port = CONFIG_DEFAULT_SLAVE_ANNOUNCE_PORT;
+    srv->master_repl_offset = 0;
 
     /* Replication partial resync backlog */
-    server.repl_backlog = NULL;
-    server.repl_backlog_size = CONFIG_DEFAULT_REPL_BACKLOG_SIZE;
-    server.repl_backlog_histlen = 0;
-    server.repl_backlog_idx = 0;
-    server.repl_backlog_off = 0;
-    server.repl_backlog_time_limit = CONFIG_DEFAULT_REPL_BACKLOG_TIME_LIMIT;
-    server.repl_no_slaves_since = time(NULL);
+    srv->repl_backlog = NULL;
+    srv->repl_backlog_size = CONFIG_DEFAULT_REPL_BACKLOG_SIZE;
+    srv->repl_backlog_histlen = 0;
+    srv->repl_backlog_idx = 0;
+    srv->repl_backlog_off = 0;
+    srv->repl_backlog_time_limit = CONFIG_DEFAULT_REPL_BACKLOG_TIME_LIMIT;
+    srv->repl_no_slaves_since = time(NULL);
 
     /* Client output buffer limits */
     for (j = 0; j < CLIENT_TYPE_OBUF_COUNT; j++)
-        server.client_obuf_limits[j] = clientBufferLimitsDefaults[j];
+        srv->client_obuf_limits[j] = clientBufferLimitsDefaults[j];
 
     /* Double constants initialization */
     R_Zero = 0.0;
@@ -1522,32 +1521,41 @@ void initServerConfig(void) {
     /* Command table -- we initiialize it here as it is part of the
      * initial configuration, since command names may be changed via
      * redis.conf using the rename-command directive. */
-    server.commands = dictCreate(&commandTableDictType,NULL);
-    server.orig_commands = dictCreate(&commandTableDictType,NULL);
+    srv->commands = dictCreate(&commandTableDictType,NULL);
+    srv->orig_commands = dictCreate(&commandTableDictType,NULL);
     populateCommandTable();
-    server.delCommand = lookupCommandByCString("del");
-    server.multiCommand = lookupCommandByCString("multi");
-    server.lpushCommand = lookupCommandByCString("lpush");
-    server.lpopCommand = lookupCommandByCString("lpop");
-    server.rpopCommand = lookupCommandByCString("rpop");
-    server.sremCommand = lookupCommandByCString("srem");
-    server.execCommand = lookupCommandByCString("exec");
-    server.expireCommand = lookupCommandByCString("expire");
-    server.pexpireCommand = lookupCommandByCString("pexpire");
+    srv->delCommand = lookupCommandByCString("del");
+    srv->multiCommand = lookupCommandByCString("multi");
+    srv->lpushCommand = lookupCommandByCString("lpush");
+    srv->lpopCommand = lookupCommandByCString("lpop");
+    srv->rpopCommand = lookupCommandByCString("rpop");
+    srv->sremCommand = lookupCommandByCString("srem");
+    srv->execCommand = lookupCommandByCString("exec");
+    srv->expireCommand = lookupCommandByCString("expire");
+    srv->pexpireCommand = lookupCommandByCString("pexpire");
 
     /* Slow log */
-    server.slowlog_log_slower_than = CONFIG_DEFAULT_SLOWLOG_LOG_SLOWER_THAN;
-    server.slowlog_max_len = CONFIG_DEFAULT_SLOWLOG_MAX_LEN;
+    srv->slowlog_log_slower_than = CONFIG_DEFAULT_SLOWLOG_LOG_SLOWER_THAN;
+    srv->slowlog_max_len = CONFIG_DEFAULT_SLOWLOG_MAX_LEN;
 
     /* Latency monitor */
-    server.latency_monitor_threshold = CONFIG_DEFAULT_LATENCY_MONITOR_THRESHOLD;
+    srv->latency_monitor_threshold = CONFIG_DEFAULT_LATENCY_MONITOR_THRESHOLD;
 
     /* Debugging */
-    server.assert_failed = "<no assertion failed>";
-    server.assert_file = "<no file>";
-    server.assert_line = 0;
-    server.bug_report_start = 0;
-    server.watchdog_period = 0;
+    srv->assert_failed = "<no assertion failed>";
+    srv->assert_file = "<no file>";
+    srv->assert_line = 0;
+    srv->bug_report_start = 0;
+    srv->watchdog_period = 0;
+
+    //TODO: Specialize Crdt Server Configs
+    if (srv == &crdtServer) {
+        srv->repl_syncio_timeout = CONFIG_REPL_SYNCIO_TIMEOUT;
+        srv->repl_timeout = CONFIG_DEFAULT_REPL_TIMEOUT;
+        srv->repl_diskless_sync_delay = CONFIG_DEFAULT_REPL_DISKLESS_SYNC_DELAY;
+        srv->repl_ping_slave_period = CONFIG_DEFAULT_REPL_PING_SLAVE_PERIOD;
+        srv->repl_timeout = CONFIG_DEFAULT_REPL_TIMEOUT;
+    }
 }
 
 extern char **environ;
@@ -1796,201 +1804,218 @@ int listenToPort(int port, int *fds, int *count) {
 /* Resets the stats that we expose via INFO or other means that we want
  * to reset via CONFIG RESETSTAT. The function is also used in order to
  * initialize these fields in initServer() at server startup. */
-void resetServerStats(void) {
+void resetServerStats(struct redisServer *srv) {
     int j;
 
-    server.stat_numcommands = 0;
-    server.stat_numconnections = 0;
-    server.stat_expiredkeys = 0;
-    server.stat_evictedkeys = 0;
-    server.stat_keyspace_misses = 0;
-    server.stat_keyspace_hits = 0;
-    server.stat_active_defrag_hits = 0;
-    server.stat_active_defrag_misses = 0;
-    server.stat_active_defrag_key_hits = 0;
-    server.stat_active_defrag_key_misses = 0;
-    server.stat_fork_time = 0;
-    server.stat_fork_rate = 0;
-    server.stat_rejected_conn = 0;
-    server.stat_sync_full = 0;
-    server.stat_sync_partial_ok = 0;
-    server.stat_sync_partial_err = 0;
+    srv->stat_numcommands = 0;
+    srv->stat_numconnections = 0;
+    srv->stat_expiredkeys = 0;
+    srv->stat_evictedkeys = 0;
+    srv->stat_keyspace_misses = 0;
+    srv->stat_keyspace_hits = 0;
+    srv->stat_active_defrag_hits = 0;
+    srv->stat_active_defrag_misses = 0;
+    srv->stat_active_defrag_key_hits = 0;
+    srv->stat_active_defrag_key_misses = 0;
+    srv->stat_fork_time = 0;
+    srv->stat_fork_rate = 0;
+    srv->stat_rejected_conn = 0;
+    srv->stat_sync_full = 0;
+    srv->stat_sync_partial_ok = 0;
+    srv->stat_sync_partial_err = 0;
     for (j = 0; j < STATS_METRIC_COUNT; j++) {
-        server.inst_metric[j].idx = 0;
-        server.inst_metric[j].last_sample_time = mstime();
-        server.inst_metric[j].last_sample_count = 0;
-        memset(server.inst_metric[j].samples,0,
-            sizeof(server.inst_metric[j].samples));
+        srv->inst_metric[j].idx = 0;
+        srv->inst_metric[j].last_sample_time = mstime();
+        srv->inst_metric[j].last_sample_count = 0;
+        memset(srv->inst_metric[j].samples,0,
+            sizeof(srv->inst_metric[j].samples));
     }
-    server.stat_net_input_bytes = 0;
-    server.stat_net_output_bytes = 0;
-    server.aof_delayed_fsync = 0;
+    srv->stat_net_input_bytes = 0;
+    srv->stat_net_output_bytes = 0;
+    srv->aof_delayed_fsync = 0;
 }
 
-void initServer(void) {
+void initServer(struct redisServer *srv) {
     int j;
 
     signal(SIGHUP, SIG_IGN);
     signal(SIGPIPE, SIG_IGN);
     setupSignalHandlers();
 
-    if (server.syslog_enabled) {
-        openlog(server.syslog_ident, LOG_PID | LOG_NDELAY | LOG_NOWAIT,
-            server.syslog_facility);
+    if (srv == &server && srv->syslog_enabled) {
+        openlog(srv->syslog_ident, LOG_PID | LOG_NDELAY | LOG_NOWAIT,
+                srv->syslog_facility);
     }
 
-    server.pid = getpid();
-    server.current_client = NULL;
-    server.clients = listCreate();
-    server.clients_to_close = listCreate();
-    server.slaves = listCreate();
-    server.monitors = listCreate();
-    server.clients_pending_write = listCreate();
-    server.slaveseldb = -1; /* Force to emit the first SELECT command. */
-    server.unblocked_clients = listCreate();
-    server.ready_keys = listCreate();
-    server.clients_waiting_acks = listCreate();
-    server.get_ack_from_slaves = 0;
-    server.clients_paused = 0;
-    server.system_memory_size = zmalloc_get_memory_size();
+    srv->pid = getpid();
+    srv->current_client = NULL;
+    srv->clients = listCreate();
+    srv->clients_to_close = listCreate();
+    srv->slaves = listCreate();
+    srv->monitors = listCreate();
+    srv->clients_pending_write = listCreate();
+    srv->slaveseldb = -1; /* Force to emit the first SELECT command. */
+    srv->unblocked_clients = listCreate();
+    srv->ready_keys = listCreate();
+    srv->clients_waiting_acks = listCreate();
+    srv->get_ack_from_slaves = 0;
+    srv->clients_paused = 0;
+    srv->system_memory_size = zmalloc_get_memory_size();
 
-    createSharedObjects();
-    adjustOpenFilesLimit();
-    server.el = aeCreateEventLoop(server.maxclients+CONFIG_FDSET_INCR);
-    if (server.el == NULL) {
-        serverLog(LL_WARNING,
-            "Failed creating the event loop. Error message: '%s'",
-            strerror(errno));
-        exit(1);
-    }
-    server.db = zmalloc(sizeof(redisDb)*server.dbnum);
+    if(srv == &server) {
+        createSharedObjects();
+        adjustOpenFilesLimit();
 
-    /* Open the TCP listening socket for the user commands. */
-    if (server.port != 0 &&
-        listenToPort(server.port,server.ipfd,&server.ipfd_count) == C_ERR)
-        exit(1);
-
-    /* Open the listening Unix domain socket. */
-    if (server.unixsocket != NULL) {
-        unlink(server.unixsocket); /* don't care if this fails */
-        server.sofd = anetUnixServer(server.neterr,server.unixsocket,
-            server.unixsocketperm, server.tcp_backlog);
-        if (server.sofd == ANET_ERR) {
-            serverLog(LL_WARNING, "Opening Unix socket: %s", server.neterr);
+        srv->el = aeCreateEventLoop(srv->maxclients + CONFIG_FDSET_INCR);
+        if (srv->el == NULL) {
+            serverLog(LL_WARNING,
+                      "Failed creating the event loop. Error message: '%s'",
+                      strerror(errno));
             exit(1);
         }
-        anetNonBlock(NULL,server.sofd);
-    }
+        srv->db = zmalloc(sizeof(redisDb) * srv->dbnum);
 
-    /* Abort if there are no listening sockets at all. */
-    if (server.ipfd_count == 0 && server.sofd < 0) {
-        serverLog(LL_WARNING, "Configured to not listen anywhere, exiting.");
-        exit(1);
-    }
 
-    /* Create the Redis databases, and initialize other internal state. */
-    for (j = 0; j < server.dbnum; j++) {
-        server.db[j].dict = dictCreate(&dbDictType,NULL);
-        server.db[j].expires = dictCreate(&keyptrDictType,NULL);
-        server.db[j].blocking_keys = dictCreate(&keylistDictType,NULL);
-        server.db[j].ready_keys = dictCreate(&objectKeyPointerValueDictType,NULL);
-        server.db[j].watched_keys = dictCreate(&keylistDictType,NULL);
-        server.db[j].id = j;
-        server.db[j].avg_ttl = 0;
-    }
-    evictionPoolAlloc(); /* Initialize the LRU keys pool. */
-    server.pubsub_channels = dictCreate(&keylistDictType,NULL);
-    server.pubsub_patterns = listCreate();
-    listSetFreeMethod(server.pubsub_patterns,freePubsubPattern);
-    listSetMatchMethod(server.pubsub_patterns,listMatchPubsubPattern);
-    server.cronloops = 0;
-    server.rdb_child_pid = -1;
-    server.aof_child_pid = -1;
-    server.rdb_child_type = RDB_CHILD_TYPE_NONE;
-    server.rdb_bgsave_scheduled = 0;
-    server.child_info_pipe[0] = -1;
-    server.child_info_pipe[1] = -1;
-    server.child_info_data.magic = 0;
-    aofRewriteBufferReset();
-    server.aof_buf = sdsempty();
-    server.lastsave = time(NULL); /* At startup we consider the DB saved. */
-    server.lastbgsave_try = 0;    /* At startup we never tried to BGSAVE. */
-    server.rdb_save_time_last = -1;
-    server.rdb_save_time_start = -1;
-    server.dirty = 0;
-    resetServerStats();
-    /* A few stats we don't want to reset: server startup time, and peak mem. */
-    server.stat_starttime = time(NULL);
-    server.stat_peak_memory = 0;
-    server.stat_rdb_cow_bytes = 0;
-    server.stat_aof_cow_bytes = 0;
-    server.resident_set_size = 0;
-    server.lastbgsave_status = C_OK;
-    server.aof_last_write_status = C_OK;
-    server.aof_last_write_errno = 0;
-    server.repl_good_slaves_count = 0;
+        /* Open the TCP listening socket for the user commands. */
+        if (srv->port != 0 &&
+            listenToPort(srv->port, srv->ipfd, &srv->ipfd_count) == C_ERR)
+            exit(1);
 
-    updateCachedTime();
-
-    /* Create the timer callback, this is our way to process many background
-     * operations incrementally, like clients timeout, eviction of unaccessed
-     * expired keys and so forth. */
-    if (aeCreateTimeEvent(server.el, 1, serverCron, NULL, NULL) == AE_ERR) {
-        serverPanic("Can't create event loop timers.");
-        exit(1);
-    }
-
-    /* Create an event handler for accepting new connections in TCP and Unix
-     * domain sockets. */
-    for (j = 0; j < server.ipfd_count; j++) {
-        if (aeCreateFileEvent(server.el, server.ipfd[j], AE_READABLE,
-            acceptTcpHandler,NULL) == AE_ERR)
-            {
-                serverPanic(
-                    "Unrecoverable error creating server.ipfd file event.");
+        /* Open the listening Unix domain socket. */
+        if (srv->unixsocket != NULL) {
+            unlink(srv->unixsocket); /* don't care if this fails */
+            srv->sofd = anetUnixServer(srv->neterr, srv->unixsocket,
+                                       srv->unixsocketperm, srv->tcp_backlog);
+            if (srv->sofd == ANET_ERR) {
+                serverLog(LL_WARNING, "Opening Unix socket: %s", srv->neterr);
+                exit(1);
             }
-    }
-    if (server.sofd > 0 && aeCreateFileEvent(server.el,server.sofd,AE_READABLE,
-        acceptUnixHandler,NULL) == AE_ERR) serverPanic("Unrecoverable error creating server.sofd file event.");
+            anetNonBlock(NULL, srv->sofd);
+        }
 
-
-    /* Register a readable event for the pipe used to awake the event loop
-     * when a blocked client in a module needs attention. */
-    if (aeCreateFileEvent(server.el, server.module_blocked_pipe[0], AE_READABLE,
-        moduleBlockedClientPipeReadable,NULL) == AE_ERR) {
-            serverPanic(
-                "Error registering the readable event for the module "
-                "blocked clients subsystem.");
-    }
-
-    /* Open the AOF file if needed. */
-    if (server.aof_state == AOF_ON) {
-        server.aof_fd = open(server.aof_filename,
-                               O_WRONLY|O_APPEND|O_CREAT,0644);
-        if (server.aof_fd == -1) {
-            serverLog(LL_WARNING, "Can't open the append-only file: %s",
-                strerror(errno));
+        /* Abort if there are no listening sockets at all. */
+        if (srv->ipfd_count == 0 && srv->sofd < 0) {
+            serverLog(LL_WARNING, "Configured to not listen anywhere, exiting.");
             exit(1);
         }
+
+        /* Create the Redis databases, and initialize other internal state. */
+        for (j = 0; j < srv->dbnum; j++) {
+            srv->db[j].dict = dictCreate(&dbDictType, NULL);
+            srv->db[j].expires = dictCreate(&keyptrDictType, NULL);
+            srv->db[j].blocking_keys = dictCreate(&keylistDictType, NULL);
+            srv->db[j].ready_keys = dictCreate(&objectKeyPointerValueDictType, NULL);
+            srv->db[j].watched_keys = dictCreate(&keylistDictType, NULL);
+            srv->db[j].id = j;
+            srv->db[j].avg_ttl = 0;
+        }
+        evictionPoolAlloc(); /* Initialize the LRU keys pool. */
+    }
+    else if (srv == &crdtServer) {
+        srv->el = server.el;
+        srv->db = server.db;
+    }
+    srv->pubsub_channels = dictCreate(&keylistDictType,NULL);
+    srv->pubsub_patterns = listCreate();
+    listSetFreeMethod(srv->pubsub_patterns,freePubsubPattern);
+    listSetMatchMethod(srv->pubsub_patterns,listMatchPubsubPattern);
+    srv->cronloops = 0;
+    srv->rdb_child_pid = -1;
+    srv->aof_child_pid = -1;
+    srv->rdb_child_type = RDB_CHILD_TYPE_NONE;
+    srv->rdb_bgsave_scheduled = 0;
+    srv->child_info_pipe[0] = -1;
+    srv->child_info_pipe[1] = -1;
+    srv->child_info_data.magic = 0;
+    aofRewriteBufferReset();
+    srv->aof_buf = sdsempty();
+    srv->lastsave = time(NULL); /* At startup we consider the DB saved. */
+    srv->lastbgsave_try = 0;    /* At startup we never tried to BGSAVE. */
+    srv->rdb_save_time_last = -1;
+    srv->rdb_save_time_start = -1;
+    srv->dirty = 0;
+    resetServerStats(srv);
+    /* A few stats we don't want to reset: server startup time, and peak mem. */
+    srv->stat_starttime = time(NULL);
+    srv->stat_peak_memory = 0;
+    srv->stat_rdb_cow_bytes = 0;
+    srv->stat_aof_cow_bytes = 0;
+    srv->resident_set_size = 0;
+    srv->lastbgsave_status = C_OK;
+    srv->aof_last_write_status = C_OK;
+    srv->aof_last_write_errno = 0;
+    srv->repl_good_slaves_count = 0;
+
+    updateCachedTime(srv);
+
+    if(srv == &server) {
+        /* Create the timer callback, this is our way to process many background
+         * operations incrementally, like clients timeout, eviction of unaccessed
+         * expired keys and so forth. */
+        if (aeCreateTimeEvent(srv->el, 1, serverCron, NULL, NULL) == AE_ERR) {
+            serverPanic("Can't create event loop timers.");
+            exit(1);
+        }
+
+        /* Create an event handler for accepting new connections in TCP and Unix
+         * domain sockets. */
+        for (j = 0; j < srv->ipfd_count; j++) {
+            if (aeCreateFileEvent(srv->el, srv->ipfd[j], AE_READABLE,
+                                  acceptTcpHandler, NULL) == AE_ERR) {
+                serverPanic(
+                        "Unrecoverable error creating srv->ipfd file event.");
+            }
+        }
+        if (srv->sofd > 0 && aeCreateFileEvent(srv->el, srv->sofd, AE_READABLE,
+                                               acceptUnixHandler, NULL) == AE_ERR)
+            serverPanic("Unrecoverable error creating srv->sofd file event.");
+
+
+        /* Register a readable event for the pipe used to awake the event loop
+         * when a blocked client in a module needs attention. */
+        if (aeCreateFileEvent(srv->el, srv->module_blocked_pipe[0], AE_READABLE,
+                              moduleBlockedClientPipeReadable, NULL) == AE_ERR) {
+            serverPanic(
+                    "Error registering the readable event for the module "
+                    "blocked clients subsystem.");
+        }
+
+        /* Open the AOF file if needed. */
+        if (srv->aof_state == AOF_ON) {
+            srv->aof_fd = open(srv->aof_filename,
+                               O_WRONLY | O_APPEND | O_CREAT, 0644);
+            if (srv->aof_fd == -1) {
+                serverLog(LL_WARNING, "Can't open the append-only file: %s",
+                          strerror(errno));
+                exit(1);
+            }
+        }
+
+        /* 32 bit instances are limited to 4GB of address space, so if there is
+         * no explicit limit in the user provided configuration we set a limit
+         * at 3 GB using maxmemory with 'noeviction' policy'. This avoids
+         * useless crashes of the Redis instance for out of memory. */
+        if (srv->arch_bits == 32 && srv->maxmemory == 0) {
+            serverLog(LL_WARNING,
+                      "Warning: 32 bit instance detected but no memory limit set. Setting 3 GB maxmemory limit with 'noeviction' policy now.");
+            srv->maxmemory = 3072LL * (1024 * 1024); /* 3 GB */
+            srv->maxmemory_policy = MAXMEMORY_NO_EVICTION;
+        }
+
+        if (srv->cluster_enabled) clusterInit();
+        replicationScriptCacheInit();
+        scriptingInit(1);
+        slowlogInit();
+        latencyMonitorInit();
+        bioInit();
+        srv->initial_memory_usage = zmalloc_used_memory();
     }
 
-    /* 32 bit instances are limited to 4GB of address space, so if there is
-     * no explicit limit in the user provided configuration we set a limit
-     * at 3 GB using maxmemory with 'noeviction' policy'. This avoids
-     * useless crashes of the Redis instance for out of memory. */
-    if (server.arch_bits == 32 && server.maxmemory == 0) {
-        serverLog(LL_WARNING,"Warning: 32 bit instance detected but no memory limit set. Setting 3 GB maxmemory limit with 'noeviction' policy now.");
-        server.maxmemory = 3072LL*(1024*1024); /* 3 GB */
-        server.maxmemory_policy = MAXMEMORY_NO_EVICTION;
+    if(srv == &crdtServer) {
+        srv->crdtMasters = listCreate();
+//        listSetMatchMethod(srv->crdtMasters, listMatchCrdtMaster);
+        srv->crdt_gid = server.crdt_gid;
     }
-
-    if (server.cluster_enabled) clusterInit();
-    replicationScriptCacheInit();
-    scriptingInit(1);
-    slowlogInit();
-    latencyMonitorInit();
-    bioInit();
-    server.initial_memory_usage = zmalloc_used_memory();
 }
 
 /* Populates the Redis Command Table starting from the hard coded list
@@ -3762,7 +3787,8 @@ int main(int argc, char **argv) {
     getRandomHexChars(hashseed,sizeof(hashseed));
     dictSetHashFunctionSeed((uint8_t*)hashseed);
     server.sentinel_mode = checkForSentinelMode(argc,argv);
-    initServerConfig();
+    initServerConfig(&server);
+    initServerConfig(&crdtServer);
     moduleInitModulesSystem();
 
     /* Store the executable path and arguments in a safe place in order
@@ -3873,7 +3899,9 @@ int main(int argc, char **argv) {
     int background = server.daemonize && !server.supervised;
     if (background) daemonize();
 
-    initServer();
+    initServer(&server);
+    //init crdt server also
+    initServer(&crdtServer);
     if (background || server.pidfile) createPidFile();
     redisSetProcTitle(argv[0]);
     redisAsciiArt();

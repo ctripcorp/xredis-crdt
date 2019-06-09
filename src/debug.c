@@ -553,8 +553,8 @@ void debugCommand(client *c) {
         addReplyBulkSds(c,stats);
     } else if (!strcasecmp(c->argv[1]->ptr,"change-repl-id") && c->argc == 2) {
         serverLog(LL_WARNING,"Changing replication IDs after receiving DEBUG change-repl-id");
-        changeReplicationId();
-        clearReplicationId2();
+        changeReplicationId(&server);
+        clearReplicationId2(&server);
         addReply(c,shared.ok);
     } else {
         addReplyErrorFormat(c, "Unknown DEBUG subcommand or wrong number of arguments for '%s'",

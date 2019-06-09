@@ -49,10 +49,9 @@ void changeCrdtReplicationId(void);
 void clearCrdtReplicationId2(void);
 
 
-void crdtInitServer(void) {
-    CRDT_Server_Replication *crdtRepl = zmalloc(sizeof(CRDT_Server_Replication));
-    server.crdt_repl_server = crdtRepl;
-
+int listMatchCrdtMaster(void *a, void *b) {
+    CRDT_Master_Instance *ma = a, *mb = b;
+    return ma->gid == mb->gid;
 }
 
 /** ================================== CRDT Repl MASTER ================================== */

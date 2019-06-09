@@ -7,7 +7,7 @@ void refullsyncCommand(client *c) {
     sdsfree(client);
 
     disconnectSlaves(); /* Force our slaves to resync with us as well. */
-    freeReplicationBacklog(); /* Don't allow our chained slaves to PSYNC. */
+    freeReplicationBacklog(&server); /* Don't allow our chained slaves to PSYNC. */
 
     addReply(c,shared.ok);
 }
