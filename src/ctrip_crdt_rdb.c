@@ -248,11 +248,19 @@ crdtMergeCommand(client *c) {
     /* Merge the new object in the hash table */
     moduleValue *mv = val->ptr;
     moduleType *mt = mv->type;
-    void *moduleValue = mv->value;
-    CrdtCommon *common = (CrdtCommon *) moduleValue;
+    void *moduleDataType = mv->value;
+    CrdtCommon *common = (CrdtCommon *) moduleDataType;
 
-    // call merge function, and store the merged val
-    void *mergedVal = common->merge(mv->value);
+    robj *currentVal = lookupKeyWrite(c->db, key);
+    void *mergedVal;
+    if (currentVal) {
+        moduleValue *cmv = currentVal->ptr;
+        // call merge function, and store the merged val
+        mergedVal = common->merge(cmv->value, mv->value);
+        decrRefCount(currentVal);
+    } else {
+        mergedVal = common->merge(NULL, mv->value);
+    }
     dbAdd(c->db, key, createModuleObject(mt, mergedVal));
     decrRefCount(val);
 

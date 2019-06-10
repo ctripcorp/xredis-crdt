@@ -17,7 +17,7 @@ start_server {tags {"crdt-register"} module {crdt.so}} {
     } [string repeat "abcd" 1000000]
 
     test {Test Crdt Set} {
-        r CRDT.set key val 1 [clock milliseconds]
+        r CRDT.set key val 1 [clock milliseconds] "1:100"
     } {OK}
 
     test {Test Crdt Get} {
