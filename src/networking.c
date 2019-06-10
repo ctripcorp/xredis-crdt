@@ -792,6 +792,18 @@ void freeClient(client *c) {
         }
     }
 
+    if (c->flags & CLIENT_CRDT_MASTER) {
+        serverLog(LL_WARNING,"Connection with Crdt master lost.");
+        if (!(c->flags & (CLIENT_CLOSE_AFTER_REPLY|
+                          CLIENT_CLOSE_ASAP|
+                          CLIENT_BLOCKED|
+                          CLIENT_UNBLOCKED)))
+        {
+            crdtReplicationCacheMaster(c);
+            return;
+        }
+    }
+
     /* Log link disconnection with slave */
     if ((c->flags & CLIENT_SLAVE) && !(c->flags & CLIENT_MONITOR)) {
         serverLog(LL_WARNING,"Connection with slave %s lost.",

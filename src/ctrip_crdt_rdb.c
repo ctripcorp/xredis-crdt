@@ -120,7 +120,7 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
             sds keystr = dictGetKey(de);
             robj key, *o = dictGetVal(de);
             long long expire;
-            if(o->type != OBJ_MODULE) {
+            if(o->type != OBJ_MODULE || isModuleCrdt(o)) {
                 continue;
             }
 
