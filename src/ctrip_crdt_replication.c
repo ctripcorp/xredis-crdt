@@ -40,7 +40,9 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 
-
+void crdtReplicationResurrectCachedMaster(CRDT_Master_Instance *crdtMaster, int newfd);
+void crdtReplicationDiscardCachedMaster(CRDT_Master_Instance *crdtMaster);
+void crdtReplicationCreateMasterClient(CRDT_Master_Instance *crdtMaster, int fd, int dbid);
 
 
 /**---------------------------CRDT Master Instance Related--------------------------------*/
@@ -338,7 +340,7 @@ int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, i
         }
 
         /* Issue the PSYNC command */
-        reply = crdtSendSynchronousCommand(SYNC_CMD_WRITE, fd, "PSYNC", psync_replid, psync_offset, NULL);
+        reply = crdtSendSynchronousCommand(SYNC_CMD_WRITE, fd, "CRDT.PSYNC", psync_replid, psync_offset, NULL);
         if (reply != NULL) {
             serverLog(LL_WARNING,"Unable to send PSYNC to master: %s",reply);
             sdsfree(reply);
@@ -386,9 +388,9 @@ int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, i
                       masterInstance->master_replid,
                       masterInstance->master_initial_offset);
         }
-        //todo: here
+
         /* We are going to full resync, discard the cached master structure. */
-//        replicationDiscardCachedMaster();
+        crdtReplicationDiscardCachedMaster(masterInstance);
         sdsfree(reply);
         return PSYNC_FULLRESYNC;
     }
@@ -417,8 +419,8 @@ int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, i
 
         /* Setup the replication to continue. */
         sdsfree(reply);
-        //todo: here
-//        replicationResurrectCachedMaster(fd);
+
+        crdtReplicationResurrectCachedMaster(masterInstance, fd);
 
         /* If this instance was restarted and we read the metadata to
          * PSYNC from the persistence file, our replication backlog could
@@ -683,7 +685,7 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
         goto error;
     }
 
-    psync_result = crdtSlaveTryPartialResynchronization(crdtMaster, fd,1);
+    psync_result = crdtSlaveTryPartialResynchronization(crdtMaster,fd,1);
     if (psync_result == PSYNC_WAIT_REPLY) return; /* Try again later... */
 
     /* If the master is in an transient error, we should try to PSYNC
@@ -701,32 +703,16 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
     }
 
     if (psync_result == PSYNC_FULLRESYNC) {
-        freeReplicationBacklog(&server); /* Don't allow our chained slaves to PSYNC. */
+        crdtReplicationCreateMasterClient(crdtMaster, fd, -1);
     }
 
     /* Fall back to SYNC if needed. Otherwise psync_result == PSYNC_FULLRESYNC
      * and the crdtMaster->master_replid and master_initial_offset are
      * already populated. */
     if (psync_result == PSYNC_NOT_SUPPORTED) {
-        serverLog(LL_NOTICE,"Retrying with SYNC...");
-        if (syncWrite(fd,"SYNC\r\n",6,crdtServer.repl_syncio_timeout*1000) == -1) {
-            serverLog(LL_WARNING,"I/O error writing to MASTER: %s",
-                      strerror(errno));
-            goto error;
-        }
+        goto error;
+
     }
-
-
-    /* Setup the non blocking download of the bulk file. */
-    //todo: here
-//    if (aeCreateFileEvent(server.el,fd, AE_READABLE,readSyncBulkPayload,NULL)
-//        == AE_ERR)
-//    {
-//        serverLog(LL_WARNING,
-//                  "Can't create readable event for SYNC: %s (fd=%d)",
-//                  strerror(errno),fd);
-//        goto error;
-//    }
 
     crdtMaster->repl_state = REPL_STATE_TRANSFER;
     crdtMaster->repl_transfer_size = -1;
@@ -735,14 +721,14 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
     crdtMaster->repl_transfer_lastio = server.unixtime;
     return;
 
-    error:
+error:
     aeDeleteFileEvent(crdtServer.el,fd,AE_READABLE|AE_WRITABLE);
     close(fd);
     crdtMaster->repl_transfer_s = -1;
     crdtMaster->repl_state = REPL_STATE_CONNECT;
     return;
 
-    write_error: /* Handle sendSynchronousCommand(SYNC_CMD_WRITE) errors. */
+write_error: /* Handle sendSynchronousCommand(SYNC_CMD_WRITE) errors. */
     serverLog(LL_WARNING,"Sending command to master in replication handshake: %s", err);
     sdsfree(err);
     goto error;
@@ -818,6 +804,65 @@ void crdtCancelReplicationHandshake(long long gid) {
 
 }
 
+/* Turn the cached master into the current master, using the file descriptor
+ * passed as argument as the socket for the new master.
+ *
+ * This function is called when successfully setup a partial resynchronization
+ * so the stream of data that we'll receive will start from were this
+ * master left. */
+void crdtReplicationResurrectCachedMaster(CRDT_Master_Instance *crdtMaster, int newfd) {
+    crdtMaster->master = crdtMaster->cached_master;
+    crdtMaster->cached_master = NULL;
+    crdtMaster->master->fd = newfd;
+    crdtMaster->master->flags &= ~(CLIENT_CLOSE_AFTER_REPLY|CLIENT_CLOSE_ASAP);
+    crdtMaster->master->authenticated = 1;
+    crdtMaster->master->lastinteraction = server.unixtime;
+    crdtMaster->repl_state = REPL_STATE_CONNECTED;
+
+    /* Re-add to the list of clients. */
+    listAddNodeTail(server.clients,crdtMaster->master);
+    if (aeCreateFileEvent(server.el, newfd, AE_READABLE,
+                          readQueryFromClient, crdtMaster->master)) {
+        serverLog(LL_WARNING,"Error resurrecting the cached master, impossible to add the readable handler: %s", strerror(errno));
+        freeClientAsync(crdtMaster->master); /* Close ASAP. */
+    }
+
+    /* We may also need to install the write handler as well if there is
+     * pending data in the write buffers. */
+    if (clientHasPendingReplies(crdtMaster->master)) {
+        if (aeCreateFileEvent(server.el, newfd, AE_WRITABLE,
+                              sendReplyToClient, crdtMaster->master)) {
+            serverLog(LL_WARNING,"Error resurrecting the cached master, impossible to add the writable handler: %s", strerror(errno));
+            freeClientAsync(crdtMaster->master); /* Close ASAP. */
+        }
+    }
+}
+
+/* Free a cached master, called when there are no longer the conditions for
+ * a partial resync on reconnection. */
+void crdtReplicationDiscardCachedMaster(CRDT_Master_Instance *crdtMaster) {
+    if (crdtMaster->cached_master == NULL) return;
+
+    serverLog(LL_NOTICE,"Discarding previously cached master state.");
+    crdtMaster->cached_master->flags &= ~CLIENT_CRDT_MASTER;
+    freeClient(crdtMaster->cached_master);
+    crdtMaster->cached_master = NULL;
+}
+
+/* Once we have a link with the master and the synchroniziation was
+ * performed, this function materializes the master client we store
+ * at server.master, starting from the specified file descriptor. */
+void crdtReplicationCreateMasterClient(CRDT_Master_Instance *crdtMaster, int fd, int dbid) {
+    crdtMaster->master = createClient(fd);
+    crdtMaster->master->flags |= CLIENT_CRDT_MASTER;
+    crdtMaster->master->authenticated = 1;
+    crdtMaster->master->reploff = crdtMaster->master_initial_offset;
+    crdtMaster->master->read_reploff = crdtMaster->master->reploff;
+    memcpy(crdtMaster->master->replid, crdtMaster->master_replid,
+           sizeof(crdtMaster->master_replid));
+    if (dbid != -1) selectDb(crdtMaster->master,dbid);
+}
+
 
 /* --------------------------- REPLICATION CRON  ---------------------------- */
 
@@ -877,6 +922,62 @@ void crdtReplicationSendAck(CRDT_Master_Instance *masterInstance) {
         addReplyBulkCString(c,vectorClockToSds(c->vectorClock));
         c->flags &= ~CLIENT_MASTER_FORCE_REPLY;
     }
+}
+
+void crdtReplicationCacheMaster(client *c) {
+    if (!(c->flags & CLIENT_CRDT_MASTER)) {
+        return;
+    }
+    CRDT_Master_Instance *crdtMaster = getPeerMaster(c->gid);
+    if (crdtMaster == NULL) {
+        crdtMaster = createPeerMaster(c, c->gid);
+    }
+    serverLog(LL_NOTICE,"Caching the disconnected master state.");
+
+    /* Unlink the client from the server structures. */
+    unlinkClient(c);
+
+    /* Reset the master client so that's ready to accept new commands:
+     * we want to discard te non processed query buffers and non processed
+     * offsets, including pending transactions, already populated arguments,
+     * pending outputs to the master. */
+    sdsclear(crdtMaster->master->querybuf);
+    sdsclear(crdtMaster->master->pending_querybuf);
+    crdtMaster->master->read_reploff = crdtMaster->master->reploff;
+    if (c->flags & CLIENT_MULTI) discardTransaction(c);
+    listEmpty(c->reply);
+    c->bufpos = 0;
+    resetClient(c);
+
+    /* Save the master. crdtMaster->master will be set to null later by
+     * replicationHandleMasterDisconnection(). */
+    crdtMaster->cached_master = crdtMaster->master;
+
+    /* Invalidate the Peer ID cache. */
+    if (c->peerid) {
+        sdsfree(c->peerid);
+        c->peerid = NULL;
+    }
+
+    /* Caching the master happens instead of the actual freeClient() call,
+     * so make sure to adjust the replication state. This function will
+     * also set crdtMaster->master to NULL. */
+    crdtReplicationHandleMasterDisconnection(c);
+}
+
+/* This function is called when the slave lose the connection with the
+ * master into an unexpected way. */
+void crdtReplicationHandleMasterDisconnection(client *c) {
+    CRDT_Master_Instance *masterInstance = getPeerMaster(c->gid);
+    if (masterInstance == NULL) {
+        return;
+    }
+    masterInstance->master = NULL;
+    masterInstance->repl_state = REPL_STATE_CONNECT;
+    masterInstance->repl_down_since = server.unixtime;
+    /* We lost connection with our master, don't disconnect slaves yet,
+     * maybe we'll be able to PSYNC with our master later. We'll disconnect
+     * the slaves only if we'll have to do a full resync with our master. */
 }
 
 /* Replication cron function, called 1 time per second. */

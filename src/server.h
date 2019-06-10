@@ -743,7 +743,7 @@ typedef struct client {
 
     /* Crdt Stuff*/
     VectorClock *vectorClock;
-
+    long long gid;
 } client;
 
 struct saveparam {
@@ -1580,6 +1580,8 @@ void crdtMergeStartCommand(client *c);
 void crdtMergeEndCommand(client *c);
 void peerofCommand(client *c);
 void crdtReplicationSetMaster(long long gid, char *ip, int port);
+void crdtReplicationCacheMaster(client *c);
+void crdtReplicationHandleMasterDisconnection(client *c);
 
 /* Macro to initialize an IO context. Note that the 'ver' field is populated
  * inside rdb.c according to the version of the value to load. */
