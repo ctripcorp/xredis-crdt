@@ -31,7 +31,6 @@
 //
 
 #include "ctrip_crdt_common.h"
-#include "zmalloc.h"
 #include "sds.h"
 
 #include <stdlib.h>
@@ -49,8 +48,8 @@ typedef struct nickObject {
 }nickObject;
 
 void*
-mergeFunc (const void *value) {
-    if(value == NULL) {
+mergeFunc (void *curVal, void *value) {
+    if(value == NULL || curVal == NULL) {
         return NULL;
     }
     void *dup = zmalloc(1);

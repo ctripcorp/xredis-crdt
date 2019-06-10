@@ -128,8 +128,8 @@ volatile unsigned long lru_clock; /* Server global current LRU time. */
  */
 struct redisCommand redisCommandTable[] = {
     {"module",moduleCommand,-2,"as",0,NULL,0,0,0,0,0},
-    {"get",getCommand,2,"rF",0,NULL,1,1,1,0,0},
-    {"set",setCommand,-3,"wm",0,NULL,1,1,1,0,0},
+//    {"get",getCommand,2,"rF",0,NULL,1,1,1,0,0},
+//    {"set",setCommand,-3,"wm",0,NULL,1,1,1,0,0},
     {"setnx",setnxCommand,3,"wmF",0,NULL,1,1,1,0,0},
     {"setex",setexCommand,4,"wm",0,NULL,1,1,1,0,0},
     {"psetex",psetexCommand,4,"wm",0,NULL,1,1,1,0,0},
@@ -1560,6 +1560,8 @@ void initServerConfig(struct redisServer *srv) {
     srv->watchdog_period = 0;
 
     //TODO: Specialize Crdt Server Configs
+    srv->crdt_gid = 1;
+    srv->vectorClock = sdsToVectorClock(sdsnew("1:0"));
     if (srv == &crdtServer) {
         srv->repl_syncio_timeout = CONFIG_REPL_SYNCIO_TIMEOUT;
         srv->repl_timeout = CONFIG_DEFAULT_REPL_TIMEOUT;

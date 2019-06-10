@@ -1348,6 +1348,17 @@ int RM_CrdtReplicateAlsoNormReplicate(RedisModuleCtx *ctx, const char *cmdname, 
     return REDISMODULE_OK;
 }
 
+RedisModuleString * RM_CurrentVectorClock(RedisModuleCtx *ctx) {
+    sds vc = vectorClockToSds(crdtServer.vectorClock);
+    RedisModuleString *result = RM_CreateString(ctx, vc, sdslen(vc));
+    sdsfree(vc);
+    return result;
+}
+
+long long RM_CurrentGid(void) {
+    return crdtServer.crdt_gid;
+}
+
 
 /* --------------------------------------------------------------------------
  * DB and Key APIs -- Generic API
@@ -4144,4 +4155,6 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(ReplicateStraightForward);
     REGISTER_API(CrdtReplicate);
     REGISTER_API(CrdtReplicateAlsoNormReplicate);
+    REGISTER_API(CurrentVectorClock);
+    REGISTER_API(CurrentGid);
 }
