@@ -158,6 +158,17 @@ crdtMergeStartCommand(client *c) {
     memcpy(peerMaster->master_replid, c->argv[3]->ptr, sizeof(peerMaster->master_replid));
 }
 
+void
+crdtAckVectorClock(client *c) {
+    if (c != NULL) {
+        c->flags |= CLIENT_MASTER_FORCE_REPLY;
+        addReplyMultiBulkLen(c,3);
+        addReplyBulkCString(c,"CRDT.REPLCONF");
+        addReplyBulkCString(c,"ACK-VC");
+        addReplyBulkLongLong(c,c->reploff);
+        c->flags &= ~CLIENT_MASTER_FORCE_REPLY;
+    }
+}
 //CRDT.END_MERGE <gid> <vector-clock> <repl_id> <offset>
 // 0               1        2            3          4
 void
@@ -169,14 +180,17 @@ crdtMergeEndCommand(client *c) {
     if (!peerMaster) goto err;
 
     peerMaster->vectorClock = sdsToVectorClock(c->argv[2]->ptr);
+    VectorClock *currentVectorClock = crdtServer.vectorClock;
+    crdtServer.vectorClock = vectorClockMerge(currentVectorClock, peerMaster->vectorClock);
+    freeVectorClock(currentVectorClock);
     memcpy(peerMaster->master_replid, c->argv[3]->ptr, sizeof(peerMaster->master_replid));
     if (getLongLongFromObjectOrReply(c, c->argv[4], &offset, NULL) != C_OK) return;
     peerMaster->master_initial_offset = offset;
-    addReply(c, shared.ok);
+
+    crdtAckVectorClock(c);
     return;
 
 err:
-    addReply(c, shared.crdtmergeerr);
     crdtCancelReplicationHandshake(sourceGid);
     return;
 }
@@ -344,7 +358,7 @@ int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, i
         if (reply != NULL) {
             serverLog(LL_WARNING,"Unable to send PSYNC to master: %s",reply);
             sdsfree(reply);
-            aeDeleteFileEvent(server.el,fd,AE_READABLE);
+            aeDeleteFileEvent(crdtServer.el,fd,AE_READABLE);
             return PSYNC_WRITE_ERROR;
         }
         return PSYNC_WAIT_REPLY;
@@ -359,7 +373,7 @@ int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, i
         return PSYNC_WAIT_REPLY;
     }
 
-    aeDeleteFileEvent(server.el,fd,AE_READABLE);
+    aeDeleteFileEvent(crdtServer.el,fd,AE_READABLE);
 
     if (!strncmp(reply,"+FULLRESYNC",11)) {
         char *replid = NULL, *offset = NULL;
@@ -462,8 +476,7 @@ int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, i
 /* This handler fires when the non blocking connect was able to
  * establish a connection with the master. */
 void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
-    char tmpfile[256], *err = NULL;
-    int maxtries = 5;
+    char *err = NULL;
     int sockerr = 0, psync_result;
     socklen_t errlen = sizeof(sockerr);
     UNUSED(el);
@@ -698,7 +711,7 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
      * uninstalling the read handler from the file descriptor. */
 
     if (psync_result == PSYNC_CONTINUE) {
-        serverLog(LL_NOTICE, "MASTER <-> SLAVE sync: Master accepted a Partial Resynchronization.");
+        serverLog(LL_NOTICE, "MASTER <-> SLAVE sync: Crdt Master accepted a Partial Resynchronization.");
         return;
     }
 
@@ -765,7 +778,7 @@ int crdtConnectWithMaster(CRDT_Master_Instance *masterInstance) {
  * Never call this function directly, use cancelReplicationHandshake() instead.
  */
 void crdtUndoConnectWithMaster(CRDT_Master_Instance *masterInstance) {
-    int fd = server.repl_transfer_s;
+    int fd = masterInstance->repl_transfer_s;
 
     aeDeleteFileEvent(crdtServer.el,fd,AE_READABLE|AE_WRITABLE);
     close(fd);
@@ -854,6 +867,7 @@ void crdtReplicationDiscardCachedMaster(CRDT_Master_Instance *crdtMaster) {
  * at server.master, starting from the specified file descriptor. */
 void crdtReplicationCreateMasterClient(CRDT_Master_Instance *crdtMaster, int fd, int dbid) {
     crdtMaster->master = createClient(fd);
+    crdtMaster->master->gid = crdtMaster->gid;
     crdtMaster->master->flags |= CLIENT_CRDT_MASTER;
     crdtMaster->master->authenticated = 1;
     crdtMaster->master->reploff = crdtMaster->master_initial_offset;
@@ -916,10 +930,6 @@ void crdtReplicationSendAck(CRDT_Master_Instance *masterInstance) {
         addReplyBulkCString(c,"CRDT.REPLCONF");
         addReplyBulkCString(c,"ACK");
         addReplyBulkLongLong(c,c->reploff);
-        addReplyMultiBulkLen(c,3);
-        addReplyBulkCString(c,"CRDT.REPLCONF");
-        addReplyBulkCString(c,"ack-vc");
-        addReplyBulkCString(c,vectorClockToSds(c->vectorClock));
         c->flags &= ~CLIENT_MASTER_FORCE_REPLY;
     }
 }

@@ -1723,13 +1723,13 @@ void backgroundSaveDoneHandlerDisk(int exitcode, int bysignal) {
     server.rdb_save_time_start = -1;
     /* Possibly there are slaves waiting for a BGSAVE in order to be served
      * (the first stage of SYNC is a bulk transfer of dump.rdb) */
-    updateSlavesWaitingBgsave((!bysignal && exitcode == 0) ? C_OK : C_ERR, RDB_CHILD_TYPE_DISK);
+    updateSlavesWaitingBgsave(&server, (!bysignal && exitcode == 0) ? C_OK : C_ERR, RDB_CHILD_TYPE_DISK);
 }
 
 /* A background saving child (BGSAVE) terminated its work. Handle this.
  * This function covers the case of RDB -> Salves socket transfers for
  * diskless replication. */
-void backgroundSaveDoneHandlerSocket(int exitcode, int bysignal) {
+void backgroundSaveDoneHandlerSocket(struct redisServer *srv, int exitcode, int bysignal) {
     uint64_t *ok_slaves;
 
     if (!bysignal && exitcode == 0) {
@@ -1741,9 +1741,9 @@ void backgroundSaveDoneHandlerSocket(int exitcode, int bysignal) {
         serverLog(LL_WARNING,
             "Background transfer terminated by signal %d", bysignal);
     }
-    server.rdb_child_pid = -1;
-    server.rdb_child_type = RDB_CHILD_TYPE_NONE;
-    server.rdb_save_time_start = -1;
+    srv->rdb_child_pid = -1;
+    srv->rdb_child_type = RDB_CHILD_TYPE_NONE;
+    srv->rdb_save_time_start = -1;
 
     /* If the child returns an OK exit code, read the set of slave client
      * IDs and the associated status code. We'll terminate all the slaves
@@ -1757,7 +1757,7 @@ void backgroundSaveDoneHandlerSocket(int exitcode, int bysignal) {
     if (!bysignal && exitcode == 0) {
         int readlen = sizeof(uint64_t);
 
-        if (read(server.rdb_pipe_read_result_from_child, ok_slaves, readlen) ==
+        if (read(srv->rdb_pipe_read_result_from_child, ok_slaves, readlen) ==
                  readlen)
         {
             readlen = ok_slaves[0]*sizeof(uint64_t)*2;
@@ -1766,7 +1766,7 @@ void backgroundSaveDoneHandlerSocket(int exitcode, int bysignal) {
              * uint64_t element in the array. */
             ok_slaves = zrealloc(ok_slaves,sizeof(uint64_t)+readlen);
             if (readlen &&
-                read(server.rdb_pipe_read_result_from_child, ok_slaves+1,
+                read(srv->rdb_pipe_read_result_from_child, ok_slaves+1,
                      readlen) != readlen)
             {
                 ok_slaves[0] = 0;
@@ -1774,15 +1774,15 @@ void backgroundSaveDoneHandlerSocket(int exitcode, int bysignal) {
         }
     }
 
-    close(server.rdb_pipe_read_result_from_child);
-    close(server.rdb_pipe_write_result_to_parent);
+    close(srv->rdb_pipe_read_result_from_child);
+    close(srv->rdb_pipe_write_result_to_parent);
 
     /* We can continue the replication process with all the slaves that
      * correctly received the full payload. Others are terminated. */
     listNode *ln;
     listIter li;
 
-    listRewind(server.slaves,&li);
+    listRewind(srv->slaves,&li);
     while((ln = listNext(&li))) {
         client *slave = ln->value;
 
@@ -1818,17 +1818,17 @@ void backgroundSaveDoneHandlerSocket(int exitcode, int bysignal) {
     }
     zfree(ok_slaves);
 
-    updateSlavesWaitingBgsave((!bysignal && exitcode == 0) ? C_OK : C_ERR, RDB_CHILD_TYPE_SOCKET);
+    updateSlavesWaitingBgsave(srv, (!bysignal && exitcode == 0) ? C_OK : C_ERR, RDB_CHILD_TYPE_SOCKET);
 }
 
 /* When a background RDB saving/transfer terminates, call the right handler. */
-void backgroundSaveDoneHandler(int exitcode, int bysignal) {
-    switch(server.rdb_child_type) {
+void backgroundSaveDoneHandler(struct redisServer *srv, int exitcode, int bysignal) {
+    switch(srv->rdb_child_type) {
     case RDB_CHILD_TYPE_DISK:
         backgroundSaveDoneHandlerDisk(exitcode,bysignal);
         break;
     case RDB_CHILD_TYPE_SOCKET:
-        backgroundSaveDoneHandlerSocket(exitcode,bysignal);
+        backgroundSaveDoneHandlerSocket(srv,exitcode,bysignal);
         break;
     default:
         serverPanic("Unknown RDB child type.");

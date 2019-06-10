@@ -1487,10 +1487,8 @@ void *RM_OpenKey(RedisModuleCtx *ctx, robj *keyname, int mode) {
     robj *value;
 
     if (mode & REDISMODULE_WRITE) {
-        serverLog(LL_WARNING, "before open write key");
         value = lookupKeyWrite(ctx->client->db,keyname);
     } else {
-        serverLog(LL_WARNING, "before open read key");
         value = lookupKeyRead(ctx->client->db,keyname);
         if (value == NULL) {
             return NULL;

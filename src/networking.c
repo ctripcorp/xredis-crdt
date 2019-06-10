@@ -172,7 +172,7 @@ int prepareClientToWrite(client *c) {
 
     /* Masters don't receive replies, unless CLIENT_MASTER_FORCE_REPLY flag
      * is set. */
-    if ((c->flags & CLIENT_MASTER) &&
+    if ((c->flags & CLIENT_MASTER || c->flags & CLIENT_CRDT_MASTER) &&
         !(c->flags & CLIENT_MASTER_FORCE_REPLY)) return C_ERR;
 
     if (c->fd <= 0) return C_ERR; /* Fake client for AOF loading. */

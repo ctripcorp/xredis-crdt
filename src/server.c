@@ -128,8 +128,8 @@ volatile unsigned long lru_clock; /* Server global current LRU time. */
  */
 struct redisCommand redisCommandTable[] = {
     {"module",moduleCommand,-2,"as",0,NULL,0,0,0,0,0},
-//    {"get",getCommand,2,"rF",0,NULL,1,1,1,0,0},
-//    {"set",setCommand,-3,"wm",0,NULL,1,1,1,0,0},
+    {"get",getCommand,2,"rF",0,NULL,1,1,1,0,0},
+    {"set",setCommand,-3,"wm",0,NULL,1,1,1,0,0},
     {"setnx",setnxCommand,3,"wmF",0,NULL,1,1,1,0,0},
     {"setex",setexCommand,4,"wm",0,NULL,1,1,1,0,0},
     {"psetex",psetexCommand,4,"wm",0,NULL,1,1,1,0,0},
@@ -758,7 +758,7 @@ int incrementallyRehash(int dbid) {
  * for dict.c to resize the hash tables accordingly to the fact we have o not
  * running childs. */
 void updateDictResizePolicy(void) {
-    if (server.rdb_child_pid == -1 && server.aof_child_pid == -1)
+    if (server.rdb_child_pid == -1 && server.aof_child_pid == -1 && crdtServer.rdb_child_pid == -1)
         dictEnableResize();
     else
         dictDisableResize();
@@ -1084,7 +1084,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
                     (int) server.rdb_child_pid,
                     (int) server.aof_child_pid);
             } else if (pid == server.rdb_child_pid) {
-                backgroundSaveDoneHandler(exitcode,bysignal);
+                backgroundSaveDoneHandler(&server, exitcode,bysignal);
                 if (!bysignal && exitcode == 0) receiveChildInfo(&server);
             } else if (pid == server.aof_child_pid) {
                 backgroundRewriteDoneHandler(exitcode,bysignal);
@@ -1139,6 +1139,42 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
                 rewriteAppendOnlyFileBackground();
             }
          }
+    }
+
+    /* Check if a background saving for crdt replication in progress terminated. */
+    if (crdtServer.rdb_child_pid != -1)
+    {
+        int statloc;
+        pid_t pid;
+
+        if ((pid = wait3(&statloc,WNOHANG,NULL)) != 0) {
+            int exitcode = WEXITSTATUS(statloc);
+            int bysignal = 0;
+
+            if (WIFSIGNALED(statloc)) bysignal = WTERMSIG(statloc);
+
+            if (pid == -1) {
+                serverLog(LL_WARNING,"wait3() returned an error: %s. "
+                                     "rdb_child_pid = %d, aof_child_pid = %d",
+                          strerror(errno),
+                          (int) crdtServer.rdb_child_pid,
+                          (int) crdtServer.aof_child_pid);
+            } else if (pid == crdtServer.rdb_child_pid) {
+                backgroundSaveDoneHandler(&crdtServer, exitcode,bysignal);
+                if (!bysignal && exitcode == 0) receiveChildInfo(&crdtServer);
+            } else if (pid == crdtServer.aof_child_pid) {
+                backgroundRewriteDoneHandler(exitcode,bysignal);
+                if (!bysignal && exitcode == 0) receiveChildInfo(&crdtServer);
+            } else {
+                if (!ldbRemoveChild(pid)) {
+                    serverLog(LL_WARNING,
+                              "Warning, detected child with unmatched pid: %ld",
+                              (long)pid);
+                }
+            }
+            updateDictResizePolicy();
+            closeChildInfoPipe(&crdtServer);
+        }
     }
 
 
@@ -1560,8 +1596,7 @@ void initServerConfig(struct redisServer *srv) {
     srv->watchdog_period = 0;
 
     //TODO: Specialize Crdt Server Configs
-    srv->crdt_gid = 1;
-    srv->vectorClock = sdsToVectorClock(sdsnew("1:0"));
+    srv->crdt_gid = random();
     if (srv == &crdtServer) {
         srv->repl_syncio_timeout = CONFIG_REPL_SYNCIO_TIMEOUT;
         srv->repl_timeout = CONFIG_DEFAULT_REPL_TIMEOUT;
@@ -2030,6 +2065,10 @@ void initServer(struct redisServer *srv) {
         srv->crdt_gid = server.crdt_gid;
         srv->rdb_child_type = RDB_CHILD_TYPE_SOCKET;
     }
+    VectorClock *vc = newVectorClock(1);
+    vc->clocks[0].gid = crdtServer.crdt_gid;
+    vc->clocks[0].logic_time = 0;
+    srv->vectorClock = vc;
 }
 
 /* Populates the Redis Command Table starting from the hard coded list
@@ -3916,6 +3955,7 @@ int main(int argc, char **argv) {
     initServer(&server);
     //init crdt server also
     initServer(&crdtServer);
+
     if (background || server.pidfile) createPidFile();
     redisSetProcTitle(argv[0]);
     redisAsciiArt();

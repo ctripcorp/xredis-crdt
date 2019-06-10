@@ -164,6 +164,7 @@ typedef long long mstime_t; /* millisecond time type. */
 #define CONFIG_DEFAULT_DEFRAG_CYCLE_MIN 25 /* 25% CPU min (at lower threshold) */
 #define CONFIG_DEFAULT_DEFRAG_CYCLE_MAX 75 /* 75% CPU max (at upper threshold) */
 #define CONFIG_DEFAULT_PROTO_MAX_BULK_LEN (512ll*1024*1024) /* Bulk request max size */
+#define CONFIG_DEFAULT_GID 1
 
 #define ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP 20 /* Loopkups per loop. */
 #define ACTIVE_EXPIRE_CYCLE_FAST_DURATION 1000 /* Microseconds */
@@ -742,8 +743,8 @@ typedef struct client {
     char buf[PROTO_REPLY_CHUNK_BYTES];
 
     /* Crdt Stuff*/
-    VectorClock *vectorClock;
-    long long gid;
+    VectorClock *vectorClock; // used for slave client only, when the client is a master, use crdtMasterInstance
+    long long gid; // use for master client only, to locate the crdtMasterInstance
 } client;
 
 struct saveparam {
@@ -1542,7 +1543,7 @@ ssize_t syncReadLine(int fd, char *ptr, ssize_t size, long long timeout);
 void replicationFeedSlaves(struct redisServer *srv, list *slaves, int dictid, robj **argv, int argc);
 void replicationFeedSlavesFromMasterStream(list *slaves, char *buf, size_t buflen);
 void replicationFeedMonitors(client *c, list *monitors, int dictid, robj **argv, int argc);
-void updateSlavesWaitingBgsave(int bgsaveerr, int type);
+void updateSlavesWaitingBgsave(struct redisServer *srv, int bgsaveerr, int type);
 void replicationCron(void);
 void freeReplicationBacklog(struct redisServer *srv);
 void replicationHandleMasterDisconnection(void);
