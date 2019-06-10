@@ -136,7 +136,7 @@ int rdbSave(char *filename, rdbSaveInfo *rsi);
 ssize_t rdbSaveObject(rio *rdb, robj *o);
 size_t rdbSavedObjectLen(robj *o);
 robj *rdbLoadObject(int type, rio *rdb);
-void backgroundSaveDoneHandler(int exitcode, int bysignal);
+void backgroundSaveDoneHandler(struct redisServer *srv, int exitcode, int bysignal);
 int rdbSaveKeyValuePair(rio *rdb, robj *key, robj *val, long long expiretime, long long now);
 robj *rdbLoadStringObject(rio *rdb);
 ssize_t rdbSaveStringObject(rio *rdb, robj *obj);

@@ -509,9 +509,13 @@ int masterTryPartialResynchronization(struct redisServer *srv, client *c) {
      * 1) Set client state to make it a slave.
      * 2) Inform the client we can continue with +CONTINUE
      * 3) Send the backlog data (from the offset to the end) to the slave. */
-    c->flags |= CLIENT_SLAVE;
+    if (&server == srv) {
+        c->flags |= CLIENT_SLAVE;
+    } else if (&crdtServer == srv) {
+        c->flags |= CLIENT_CRDT_SLAVE;
+    }
     c->replstate = SLAVE_STATE_ONLINE;
-    c->repl_ack_time = srv->unixtime;
+    c->repl_ack_time = server.unixtime;
     c->repl_put_online_on_ack = 0;
     listAddNodeTail(srv->slaves,c);
     /* We can't use the connection buffers since they are used to accumulate
@@ -873,10 +877,6 @@ void replconfCommand(client *c) {
              * internal only command that normal clients should never use. */
 
             if (!(c->flags & CLIENT_CRDT_SLAVE)) return;
-            if (c->vectorClock) {
-                freeVectorClock(c->vectorClock);
-            }
-            c->vectorClock = sdsToVectorClock(c->argv[j+1]->ptr);
             c->repl_ack_time = server.unixtime;
             /* If this was a diskless replication, we need to really put
              * the slave online when the first ACK is received (which
@@ -885,6 +885,14 @@ void replconfCommand(client *c) {
                 putSlaveOnline(c);
             /* Note: this command does not reply anything! */
             return;
+        }
+        else if (!strcasecmp(c->argv[j]->ptr,"gid")) {
+            if (!(c->flags & CLIENT_MASTER)) return;
+            long long gid;
+            if ((getLongLongFromObject(c->argv[j+1], &gid) != C_OK))
+                return;
+            crdtServer.crdt_gid = gid;
+            server.crdt_gid = gid;
         }
         else {
             addReplyErrorFormat(c,"Unrecognized REPLCONF option: %s",
@@ -996,13 +1004,13 @@ void sendBulkToSlave(aeEventLoop *el, int fd, void *privdata, int mask) {
  * otherwise C_ERR is passed to the function.
  * The 'type' argument is the type of the child that terminated
  * (if it had a disk or socket target). */
-void updateSlavesWaitingBgsave(int bgsaveerr, int type) {
+void updateSlavesWaitingBgsave(struct redisServer *srv, int bgsaveerr, int type) {
     listNode *ln;
     int startbgsave = 0;
     int mincapa = -1;
     listIter li;
 
-    listRewind(server.slaves,&li);
+    listRewind(srv->slaves,&li);
     while((ln = listNext(&li))) {
         client *slave = ln->value;
 
@@ -1036,7 +1044,7 @@ void updateSlavesWaitingBgsave(int bgsaveerr, int type) {
                     serverLog(LL_WARNING,"SYNC failed. BGSAVE child returned an error");
                     continue;
                 }
-                if ((slave->repldbfd = open(server.rdb_filename,O_RDONLY)) == -1 ||
+                if ((slave->repldbfd = open(srv->rdb_filename,O_RDONLY)) == -1 ||
                     redis_fstat(slave->repldbfd,&buf) == -1) {
                     freeClient(slave);
                     serverLog(LL_WARNING,"SYNC failed. Can't open/stat DB after BGSAVE: %s", strerror(errno));
@@ -1048,8 +1056,8 @@ void updateSlavesWaitingBgsave(int bgsaveerr, int type) {
                 slave->replpreamble = sdscatprintf(sdsempty(),"$%lld\r\n",
                     (unsigned long long) slave->repldbsize);
 
-                aeDeleteFileEvent(server.el,slave->fd,AE_WRITABLE);
-                if (aeCreateFileEvent(server.el, slave->fd, AE_WRITABLE, sendBulkToSlave, slave) == AE_ERR) {
+                aeDeleteFileEvent(srv->el,slave->fd,AE_WRITABLE);
+                if (aeCreateFileEvent(srv->el, slave->fd, AE_WRITABLE, sendBulkToSlave, slave) == AE_ERR) {
                     freeClient(slave);
                     continue;
                 }
