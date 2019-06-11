@@ -869,7 +869,6 @@ void replconfCommand(client *c) {
         }  // minimum vector clock I could handle with
         else if (!strcasecmp(c->argv[j]->ptr,"min-vc")) {
             c->vectorClock = sdsToVectorClock(c->argv[j+1]->ptr);
-            return;
         }
         else if (!strcasecmp(c->argv[j]->ptr,"ack-vc")) {
             /* REPLCONF ACK is used by slave to inform the master the amount

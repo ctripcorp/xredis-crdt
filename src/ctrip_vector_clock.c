@@ -190,6 +190,15 @@ vectorClockCmp(VectorClock *vc1, VectorClock *vc2, long long gid) {
 
 }
 
+void mergeVectorClockUnit(VectorClock *vc, VectorClockUnit *vcu) {
+    VectorClockUnit *original = getVectorClockUnit(vc, vcu->gid);
+    if (original == NULL) {
+        addVectorClockUnit(vc, vcu->gid, vcu->logic_time);
+        return;
+    }
+    original->logic_time = max(original->logic_time, vcu->logic_time);
+}
+
 
 
 
@@ -315,6 +324,18 @@ int testvectorClockMerge(void) {
     return 0;
 }
 
+int testStrCmp(void) {
+    sds psync = sdsnew("CRDT.PSYNC");
+    if (!strcasecmp(psync,"psync")) {
+        printf("psync: %d\r\n", strcasecmp(psync,"psync"));
+    } else if (!strcasecmp(psync,"crdt.psync")) {
+        printf("crdt.psync: %d\r\n", strcasecmp(psync,"crdt.psync"));
+    }
+
+
+    return 0;
+}
+
 int vectorClockTest(void) {
     int result = 0;
     {
@@ -327,6 +348,7 @@ int vectorClockTest(void) {
         result |= testAddVectorClockUnit();
         result |= testvectorClockMerge();
     }
+    testStrCmp();
     test_report();
     return result;
 }

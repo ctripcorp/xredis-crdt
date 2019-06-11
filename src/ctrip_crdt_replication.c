@@ -46,6 +46,7 @@ void crdtReplicationCreateMasterClient(CRDT_Master_Instance *crdtMaster, int fd,
 
 
 /**---------------------------CRDT Master Instance Related--------------------------------*/
+
 CRDT_Master_Instance *createPeerMaster(client *c, long long gid) {
     CRDT_Master_Instance *masterInstance = zmalloc(sizeof(CRDT_Master_Instance));
     masterInstance->gid = gid;
@@ -108,7 +109,7 @@ void peerofCommand(client *c) {
 
     /* There was no previous master or the user specified a different one,
      * we can continue. */
-    crdtReplicationSetMaster(gid, c->argv[1]->ptr, port);
+    crdtReplicationSetMaster(gid, c->argv[2]->ptr, port);
     peerMaster = getPeerMaster(gid);
     sds client = catClientInfoString(sdsempty(),c);
     serverLog(LL_NOTICE,"PEER OF %s:%d enabled (user request from '%s')",
@@ -123,9 +124,11 @@ void crdtReplicationSetMaster(long long gid, char *ip, int port) {
     CRDT_Master_Instance *peerMaster = getPeerMaster(gid);
     if (!peerMaster) {
         peerMaster = createPeerMaster(NULL, gid);
+        listAddNodeTail(crdtServer.crdtMasters, peerMaster);
     }
-
-    sdsfree(peerMaster->masterhost);
+    if (peerMaster->masterhost) {
+        sdsfree(peerMaster->masterhost);
+    }
     peerMaster->masterhost = sdsnew(ip);
     peerMaster->masterport = port;
     if (peerMaster->master) {
@@ -568,7 +571,7 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
     if (crdtMaster->repl_state == REPL_STATE_SEND_PORT) {
         sds port = sdsfromlonglong(crdtServer.slave_announce_port ?
                                    crdtServer.slave_announce_port : server.port);
-        err = crdtSendSynchronousCommand(SYNC_CMD_WRITE, fd, "REPLCONF",
+        err = crdtSendSynchronousCommand(SYNC_CMD_WRITE, fd, "CRDT.REPLCONF",
                                          "listening-port", port, NULL);
         sdsfree(port);
         if (err) goto write_error;
@@ -600,7 +603,7 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
     /* Set the slave ip, so that Master's INFO command can list the
      * slave IP address port correctly in case of port forwarding or NAT. */
     if (crdtMaster->repl_state == REPL_STATE_SEND_IP) {
-        err = crdtSendSynchronousCommand(SYNC_CMD_WRITE, fd, "REPLCONF",
+        err = crdtSendSynchronousCommand(SYNC_CMD_WRITE, fd, "CRDT.REPLCONF",
                                          "ip-address", server.slave_announce_ip, NULL);
         if (err) goto write_error;
         sdsfree(err);
@@ -654,7 +657,7 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
      * The master will ignore capabilities it does not understand. */
     if (crdtMaster->repl_state == REPL_STATE_SEND_VC) {
         sds vc = vectorClockToSds(crdtServer.vectorClock);
-        err = crdtSendSynchronousCommand(SYNC_CMD_WRITE, fd, "REPLCONF",
+        err = crdtSendSynchronousCommand(SYNC_CMD_WRITE, fd, "CRDT.REPLCONF",
                                          "min-vc", vc, NULL);
         sdsfree(vc);
         if (err) goto write_error;
@@ -1071,21 +1074,21 @@ void crdtReplicationCron(void) {
      * last interaction timer preventing a timeout. In this case we ignore the
      * ping period and refresh the connection once per second since certain
      * timeouts are set at a few seconds (example: PSYNC response). */
-    listRewind(crdtServer.slaves,&li);
-    while((ln = listNext(&li))) {
-        client *slave = ln->value;
-
-        int is_presync =
-                (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START ||
-                 (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_END &&
-                  crdtServer.rdb_child_type != RDB_CHILD_TYPE_SOCKET));
-
-        if (is_presync) {
-            if (write(slave->fd, "\n", 1) == -1) {
-                /* Don't worry about socket errors, it's just a ping. */
-            }
-        }
-    }
+//    listRewind(crdtServer.slaves,&li);
+//    while((ln = listNext(&li))) {
+//        client *slave = ln->value;
+//
+//        int is_presync =
+//                (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START ||
+//                 (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_END &&
+//                  crdtServer.rdb_child_type != RDB_CHILD_TYPE_SOCKET));
+//
+//        if (is_presync) {
+//            if (write(slave->fd, "\n", 1) == -1) {
+//                /* Don't worry about socket errors, it's just a ping. */
+//            }
+//        }
+//    }
 
     /* Disconnect timedout slaves. */
     if (listLength(crdtServer.slaves)) {

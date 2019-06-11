@@ -128,8 +128,8 @@ volatile unsigned long lru_clock; /* Server global current LRU time. */
  */
 struct redisCommand redisCommandTable[] = {
     {"module",moduleCommand,-2,"as",0,NULL,0,0,0,0,0},
-    {"get",getCommand,2,"rF",0,NULL,1,1,1,0,0},
-    {"set",setCommand,-3,"wm",0,NULL,1,1,1,0,0},
+//    {"get",getCommand,2,"rF",0,NULL,1,1,1,0,0},
+//    {"set",setCommand,-3,"wm",0,NULL,1,1,1,0,0},
     {"setnx",setnxCommand,3,"wmF",0,NULL,1,1,1,0,0},
     {"setex",setexCommand,4,"wm",0,NULL,1,1,1,0,0},
     {"psetex",psetexCommand,4,"wm",0,NULL,1,1,1,0,0},
@@ -319,14 +319,10 @@ struct redisCommand redisCommandTable[] = {
 
 /*============================ CRDT functions ============================ */
 
-VectorClockUnit*
-getLocalVcUnit() {
-    return crdtServer.localVcu;
-}
-
 void
 incrLocalVcUnit(long delta) {
-    crdtServer.localVcu->logic_time += delta;
+    VectorClockUnit *localVcu = getVectorClockUnit(crdtServer.vectorClock, crdtServer.crdt_gid);
+    localVcu->logic_time += delta;
 }
 
 /*============================ Utility functions ============================ */
@@ -2061,9 +2057,7 @@ void initServer(struct redisServer *srv) {
 
     if(srv == &crdtServer) {
         srv->crdtMasters = listCreate();
-//        listSetMatchMethod(srv->crdtMasters, listMatchCrdtMaster);
         srv->crdt_gid = server.crdt_gid;
-        srv->rdb_child_type = RDB_CHILD_TYPE_SOCKET;
     }
     VectorClock *vc = newVectorClock(1);
     vc->clocks[0].gid = crdtServer.crdt_gid;
@@ -3622,7 +3616,7 @@ void setupSignalHandlers(void) {
 #ifdef HAVE_BACKTRACE
     sigemptyset(&act.sa_mask);
     act.sa_flags = SA_NODEFER | SA_RESETHAND | SA_SIGINFO;
-    act.sa_sigaction = sigsegvHandler;
+//    act.sa_sigaction = sigsegvHandler;
     sigaction(SIGSEGV, &act, NULL);
     sigaction(SIGBUS, &act, NULL);
     sigaction(SIGFPE, &act, NULL);
