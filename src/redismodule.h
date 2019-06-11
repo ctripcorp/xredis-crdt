@@ -244,6 +244,8 @@ void REDISMODULE_API_FUNC(RedisModule_DigestEndSequence)(RedisModuleDigest *md);
 /* Experimental APIs */
 RedisModuleString *REDISMODULE_API_FUNC(RedisModule_CurrentVectorClock)(RedisModuleCtx *ctx);
 long long REDISMODULE_API_FUNC(RedisModule_CurrentGid)(void);
+void REDISMODULE_API_FUNC(RedisModule_IncrLocalVectorClock) (long long delta);
+void REDISMODULE_API_FUNC(RedisModule_MergeVectorClock) (RedisModuleCtx *ctx, long long gid, RedisModuleString *str);
 
 /* Experimental APIs */
 #ifdef REDISMODULE_EXPERIMENTAL_API
@@ -371,6 +373,8 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(DigestEndSequence);
     REDISMODULE_GET_API(CurrentVectorClock);
     REDISMODULE_GET_API(CurrentGid);
+    REDISMODULE_GET_API(IncrLocalVectorClock);
+    REDISMODULE_GET_API(MergeVectorClock);
 
 #ifdef REDISMODULE_EXPERIMENTAL_API
     REDISMODULE_GET_API(GetThreadSafeContext);

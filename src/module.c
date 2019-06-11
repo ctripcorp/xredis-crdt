@@ -1359,6 +1359,18 @@ long long RM_CurrentGid(void) {
     return crdtServer.crdt_gid;
 }
 
+void RM_IncrLocalVectorClock (long long delta) {
+    incrLocalVcUnit(delta);
+}
+
+void RM_MergeVectorClock (RedisModuleCtx *ctx, long long gid, RedisModuleString *str) {
+    sds vcStr = str->ptr;
+    VectorClock *vc = sdsToVectorClock(vcStr);
+    mergeVectorClockUnit(crdtServer.vectorClock, getVectorClockUnit(vc, gid));
+    VectorClockUnit *crdtMasterClientVcu = getVectorClockUnit(ctx->client->vectorClock, gid);
+    crdtMasterClientVcu->logic_time = max(getVectorClockUnit(vc, gid)->logic_time, crdtMasterClientVcu->logic_time);
+    freeVectorClock(vc);
+}
 
 /* --------------------------------------------------------------------------
  * DB and Key APIs -- Generic API
@@ -4155,4 +4167,6 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(CrdtReplicateAlsoNormReplicate);
     REGISTER_API(CurrentVectorClock);
     REGISTER_API(CurrentGid);
+    REGISTER_API(IncrLocalVectorClock);
+    REGISTER_API(MergeVectorClock);
 }

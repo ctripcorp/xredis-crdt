@@ -92,10 +92,7 @@ getVectorClockUnit(VectorClock *vc, long long gid);
 size_t
 vectorClockCmp(VectorClock *vc1, VectorClock *vc2, long long gid);
 
-VectorClockUnit*
-getLocalVcUnit();
-
 void
-incrLocalVcUnit(long delta);
+mergeVectorClockUnit(VectorClock *vc, VectorClockUnit *vcu);
 
 #endif //REDIS_VECTOR_CLOCK_H
