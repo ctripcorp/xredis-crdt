@@ -1348,7 +1348,7 @@ void processInputBuffer(client *c) {
         } else {
             /* Only reset the client when the command was executed. */
             if (processCommand(c) == C_OK) {
-                if (c->flags & CLIENT_MASTER && !(c->flags & CLIENT_MULTI)) {
+                if ((c->flags & CLIENT_MASTER || c->flags & CLIENT_CRDT_MASTER) && !(c->flags & CLIENT_MULTI)) {
                     /* Update the applied replication offset of our master. */
                     c->reploff = c->read_reploff - sdslen(c->querybuf);
                 }
@@ -1417,7 +1417,7 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
 
     sdsIncrLen(c->querybuf,nread);
     c->lastinteraction = server.unixtime;
-    if (c->flags & CLIENT_MASTER) c->read_reploff += nread;
+    if ((c->flags & CLIENT_MASTER) || (c->flags & CLIENT_CRDT_MASTER)) c->read_reploff += nread;
     server.stat_net_input_bytes += nread;
     if (sdslen(c->querybuf) > server.client_max_querybuf_len) {
         sds ci = catClientInfoString(sdsempty(),c), bytes = sdsempty();

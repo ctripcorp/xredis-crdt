@@ -309,7 +309,7 @@ struct redisCommand redisCommandTable[] = {
     {"post",securityWarningCommand,-1,"lt",0,NULL,0,0,0,0,0},
     {"host:",securityWarningCommand,-1,"lt",0,NULL,0,0,0,0,0},
     {"latency",latencyCommand,-2,"aslt",0,NULL,0,0,0,0,0},
-    {"crdt.psync",syncCommand,3,"ars",0,NULL,0,0,0,0,0},
+    {"crdt.psync",crdtPsyncCommand,3,"ars",0,NULL,0,0,0,0,0},
     {"crdt.merge_start", crdtMergeStartCommand,-1,"ars",0,NULL,0,0,0,0,0},
     {"crdt.merge",crdtMergeCommand,-1,"ars",0,NULL,0,0,0,0,0},
     {"crdt.merge_end",crdtMergeEndCommand,-1,"ars",0,NULL,0,0,0,0,0},

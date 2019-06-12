@@ -75,7 +75,7 @@ char *replicationGetSlaveName(client *c) {
 
 void createReplicationBacklog(struct redisServer *srv) {
     serverAssert(srv->repl_backlog == NULL);
-    srv->repl_backlog = zmalloc(server.repl_backlog_size);
+    srv->repl_backlog = zmalloc(srv->repl_backlog_size);
     srv->repl_backlog_histlen = 0;
     srv->repl_backlog_idx = 0;
 
@@ -485,6 +485,13 @@ int masterTryPartialResynchronization(struct redisServer *srv, client *c) {
                     "up to %lld", psync_offset, srv->second_replid_offset);
             }
         } else {
+            serverLog(LL_NOTICE,"Partial resynchronization not accepted: "
+                                "Replication ID mismatch (Slave asked for '%s', my "
+                                "replication IDs are '%s' and '%s')",
+                      master_replid, srv->replid, srv->replid2);
+            serverLog(LL_NOTICE,"Partial resynchronization not accepted: "
+                                "Requested offset for second ID was %lld, but I can reply "
+                                "up to %lld", psync_offset, srv->second_replid_offset);
             serverLog(LL_NOTICE,"Full resync requested by slave %s",
                 replicationGetSlaveName(c));
         }
@@ -657,6 +664,7 @@ void refullSyncWithSlaves(struct redisServer *srv, client *c) {
         /* When we create the backlog from scratch, we always use a new
          * replication ID and clear the ID2, since there is no valid
          * past history. */
+
         changeReplicationId(srv);
         clearReplicationId2(srv);
         createReplicationBacklog(srv);
@@ -713,7 +721,7 @@ void refullSyncWithSlaves(struct redisServer *srv, client *c) {
             /* Target is disk (or the slave is not capable of supporting
              * diskless replication) and we don't have a BGSAVE in progress,
              * let's start one. */
-            if (srv->aof_child_pid == -1) {
+            if (srv->aof_child_pid == -1 && srv == &server) {
                 startBgsaveForReplication(c->slave_capa);
             } else {
                 serverLog(LL_NOTICE,
@@ -770,22 +778,6 @@ void syncCommand(client *c) {
              * resync. */
             if (master_replid[0] != '?') server.stat_sync_partial_err++;
         }
-    } else if (!strcasecmp(c->argv[0]->ptr,"crdt.psync")) {
-        if (masterTryPartialResynchronization(&crdtServer, c) == C_OK) {
-            crdtServer.stat_sync_partial_ok++;
-            return; /* No full resync needed, return. */
-        } else {
-            char *master_replid = c->argv[1]->ptr;
-
-            /* Increment stats for failed CRDT.PSYNCs, but only if the
-             * replid is not "?", as this is used by slaves to force a full
-             * resync on purpose when they are not albe to partially
-             * resync. */
-            if (master_replid[0] != '?') crdtServer.stat_sync_partial_err++;
-
-            refullSyncWithSlaves(&crdtServer, c);
-            return;
-        }
     } else {
         /* If a slave uses SYNC, we are dealing with an old implementation
          * of the replication protocol (like redis-cli --slave). Flag the client
@@ -794,6 +786,48 @@ void syncCommand(client *c) {
     }
 
     refullSyncWithSlaves(&server, c);
+}
+
+void crdtPsyncCommand(client *c) {
+    /* ignore SYNC if already slave or in monitor mode */
+    if (c->flags & CLIENT_SLAVE || c->flags & CLIENT_CRDT_SLAVE) return;
+    /* Refuse SYNC requests if we are a slave but the link with our master
+     * is not ok... */
+    if (server.masterhost && server.repl_state != REPL_STATE_CONNECTED) {
+        addReplySds(c,sdsnew("-NOMASTERLINK Can't SYNC while not connected with my master\r\n"));
+        return;
+    }
+
+    /* SYNC can't be issued when the server has pending data to send to
+     * the client about already issued commands. We need a fresh reply
+     * buffer registering the differences between the BGSAVE and the current
+     * dataset, so that we can copy to other slaves if needed. */
+    if (clientHasPendingReplies(c)) {
+        addReplyError(c,"SYNC and PSYNC are invalid with pending output");
+        return;
+    }
+
+    serverLog(LL_NOTICE,"Crdt Slave %s asks for synchronization",
+              replicationGetSlaveName(c));
+
+    serverAssert(&crdtServer != &server);
+
+    if (masterTryPartialResynchronization(&crdtServer, c) == C_OK) {
+        crdtServer.stat_sync_partial_ok++;
+        return; /* No full resync needed, return. */
+    } else {
+        char *master_replid = c->argv[1]->ptr;
+
+        /* Increment stats for failed CRDT.PSYNCs, but only if the
+         * replid is not "?", as this is used by slaves to force a full
+         * resync on purpose when they are not albe to partially
+         * resync. */
+        if (master_replid[0] != '?') crdtServer.stat_sync_partial_err++;
+
+        refullSyncWithSlaves(&crdtServer, c);
+        return;
+    }
+
 }
 
 /* REPLCONF <option> <value> <option> <value> ...
@@ -848,7 +882,7 @@ void replconfCommand(client *c) {
              * internal only command that normal clients should never use. */
             long long offset;
 
-            if (!(c->flags & CLIENT_SLAVE)) return;
+            if (!(c->flags & CLIENT_SLAVE) && !(c->flags & CLIENT_CRDT_SLAVE)) return;
             if ((getLongLongFromObject(c->argv[j+1], &offset) != C_OK))
                 return;
             if (offset > c->repl_ack_off)
@@ -857,7 +891,7 @@ void replconfCommand(client *c) {
             /* If this was a diskless replication, we need to really put
              * the slave online when the first ACK is received (which
              * confirms slave is online and ready to get more data). */
-            if (c->repl_put_online_on_ack && c->replstate == SLAVE_STATE_ONLINE)
+            if (c->repl_put_online_on_ack && c->replstate == SLAVE_STATE_ONLINE && (c->flags & CLIENT_SLAVE))
                 putSlaveOnline(c);
             /* Note: this command does not reply anything! */
             return;
@@ -874,14 +908,17 @@ void replconfCommand(client *c) {
             /* REPLCONF ACK is used by slave to inform the master the amount
              * of replication stream that it processed so far. It is an
              * internal only command that normal clients should never use. */
-
-            if (!(c->flags & CLIENT_CRDT_SLAVE)) return;
+//
+//            if (!(c->flags & CLIENT_CRDT_SLAVE)) return;
             c->repl_ack_time = server.unixtime;
+            serverLog(LL_NOTICE, "[CRDT][ack-vc] received");
             /* If this was a diskless replication, we need to really put
              * the slave online when the first ACK is received (which
              * confirms slave is online and ready to get more data). */
-            if (c->repl_put_online_on_ack && c->replstate == SLAVE_STATE_ONLINE)
+            if (c->repl_put_online_on_ack && c->replstate == SLAVE_STATE_ONLINE) {
+                serverLog(LL_NOTICE, "[CRDT][ack-vc] received, put slave online");
                 putSlaveOnline(c);
+            }
             /* Note: this command does not reply anything! */
             return;
         }

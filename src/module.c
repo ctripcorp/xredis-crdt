@@ -1367,8 +1367,8 @@ void RM_MergeVectorClock (RedisModuleCtx *ctx, long long gid, RedisModuleString 
     sds vcStr = str->ptr;
     VectorClock *vc = sdsToVectorClock(vcStr);
     mergeVectorClockUnit(crdtServer.vectorClock, getVectorClockUnit(vc, gid));
-    VectorClockUnit *crdtMasterClientVcu = getVectorClockUnit(ctx->client->vectorClock, gid);
-    crdtMasterClientVcu->logic_time = max(getVectorClockUnit(vc, gid)->logic_time, crdtMasterClientVcu->logic_time);
+//    VectorClockUnit *crdtMasterClientVcu = getVectorClockUnit(ctx->client->vectorClock, gid);
+//    crdtMasterClientVcu->logic_time = max(getVectorClockUnit(vc, gid)->logic_time, crdtMasterClientVcu->logic_time);
     freeVectorClock(vc);
 }
 
