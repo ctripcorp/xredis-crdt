@@ -1584,6 +1584,7 @@ void crdtReplicationSetMaster(long long gid, char *ip, int port);
 void crdtReplicationCacheMaster(client *c);
 void crdtReplicationHandleMasterDisconnection(client *c);
 void incrLocalVcUnit(long delta);
+void crdtPsyncCommand(client *c);
 
 /* Macro to initialize an IO context. Note that the 'ver' field is populated
  * inside rdb.c according to the version of the value to load. */
@@ -2099,7 +2100,7 @@ void _serverAssert(const char *estr, const char *file, int line);
 void _serverPanic(const char *file, int line, const char *msg, ...);
 void bugReportStart(void);
 void serverLogObjectDebugInfo(const robj *o);
-//void sigsegvHandler(int sig, siginfo_t *info, void *secret);
+void sigsegvHandler(int sig, siginfo_t *info, void *secret);
 sds genRedisInfoString(char *section);
 void enableWatchdog(int period);
 void disableWatchdog(void);

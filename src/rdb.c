@@ -1885,10 +1885,19 @@ int rdbSaveToSlavesSockets(void *rsi, struct redisServer *svr) {
         }
     }
 
+    if (svr == &crdtServer) {
+        crdtRdbSaveInfo *saveInfo = rsi;
+        saveInfo->vc = dupVectorClock(crdtServer.vectorClock);
+        saveInfo->repl_offset = getPsyncInitialOffset(svr);
+        memcpy(saveInfo->repl_id, crdtServer.replid, CONFIG_RUN_ID_SIZE);
+        saveInfo->repl_id[CONFIG_RUN_ID_SIZE] = '\0';
+    }
     /* Create the child process. */
     openChildInfoPipe(svr);
     start = ustime();
     if ((childpid = fork()) == 0) {
+        serverLog(LL_NOTICE,
+                  "[CRDT]CRDT Merge Backgroup started");
         /* Child */
         int retval = 0;
         rio slave_sockets;
@@ -1901,12 +1910,22 @@ int rdbSaveToSlavesSockets(void *rsi, struct redisServer *svr) {
 
 
         if(svr == &server) {
+            serverLog(LL_NOTICE,
+                      "[NON-CRDT]Diskless sync started");
             retval = rdbSaveRioWithEOFMark(&slave_sockets, NULL, rsi);
         } else if (svr == &crdtServer) {
+            serverLog(LL_NOTICE,
+                      "[CRDT]RDB: start crdt merge rdb style");
             retval = rdbSaveRioWithCrdtMerge(&slave_sockets, NULL, rsi);
+            serverLog(LL_NOTICE,
+                      "[CRDT][rdbSaveToSlavesSockets][result] %d", retval);
         }
-        if (retval == C_OK && rioFlush(&slave_sockets) == 0)
+
+        if (retval == C_OK && rioFlush(&slave_sockets) == 0) {
+            serverLog(LL_NOTICE,
+                      "[CRDT][ERROR] rioFlush fails");
             retval = C_ERR;
+        }
 
         if (retval == C_OK) {
             size_t private_dirty = zmalloc_get_private_dirty(-1);
