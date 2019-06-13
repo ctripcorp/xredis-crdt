@@ -285,7 +285,7 @@ crdtMergeCommand(client *c) {
     } else {
         mergedVal = common->merge(NULL, mv->value);
     }
-    dbAdd(c->db, key, createModuleObject(mt, mergedVal));
+    setKey(c->db, key, createModuleObject(mt, mergedVal));
     decrRefCount(val);
 
 
