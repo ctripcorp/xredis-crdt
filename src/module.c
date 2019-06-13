@@ -3027,6 +3027,8 @@ moduleType *RM_CreateDataType(RedisModuleCtx *ctx, const char *name, int encver,
         moduleTypeMemUsageFunc mem_usage;
         moduleTypeDigestFunc digest;
         moduleTypeFreeFunc free;
+        moduleTypeSerializeFunc serialize;
+        moduleTypeDeserializeFunc deserialize;
     } *tms = (struct typemethods*) typemethods_ptr;
 
     moduleType *mt = zcalloc(sizeof(*mt));
@@ -3038,6 +3040,8 @@ moduleType *RM_CreateDataType(RedisModuleCtx *ctx, const char *name, int encver,
     mt->mem_usage = tms->mem_usage;
     mt->digest = tms->digest;
     mt->free = tms->free;
+    mt->serialize = tms->serialize;
+    mt->deserialize = tms->deserialize;
     memcpy(mt->name,name,sizeof(mt->name));
     listAddNodeTail(ctx->module->types,mt);
     return mt;

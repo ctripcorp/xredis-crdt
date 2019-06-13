@@ -118,6 +118,8 @@ typedef void (*RedisModuleTypeRewriteFunc)(RedisModuleIO *aof, RedisModuleString
 typedef size_t (*RedisModuleTypeMemUsageFunc)(const void *value);
 typedef void (*RedisModuleTypeDigestFunc)(RedisModuleDigest *digest, void *value);
 typedef void (*RedisModuleTypeFreeFunc)(void *value);
+typedef void *(*moduleTypeSerializeFunc)(void *value);
+typedef void *(*moduleTypeDeserializeFunc)(RedisModuleString *value);
 
 #define REDISMODULE_TYPE_METHOD_VERSION 1
 typedef struct RedisModuleTypeMethods {
@@ -128,6 +130,8 @@ typedef struct RedisModuleTypeMethods {
     RedisModuleTypeMemUsageFunc mem_usage;
     RedisModuleTypeDigestFunc digest;
     RedisModuleTypeFreeFunc free;
+    moduleTypeSerializeFunc serialize;
+    moduleTypeDeserializeFunc deserialize;
 } RedisModuleTypeMethods;
 
 #define REDISMODULE_GET_API(name) \
