@@ -95,7 +95,10 @@ void peerofCommand(client *c) {
         addReplyError(c,"PEEROF not allowed in cluster mode.");
         return;
     }
-
+    if (server.masterhost || server.cached_master || server.master) {
+        addReplyError(c, "PEEROF not allowed on redis slave");
+        return;
+    }
 
     long port;
     long long gid;
