@@ -161,7 +161,7 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
             serverAssertWithInfo(NULL, &key, rioWriteBulkCount(rdb, '*', 7));
 
             serverAssertWithInfo(NULL, &key, rioWriteBulkString(rdb,"CRDT.Merge",10));
-            serverAssertWithInfo(NULL, &key, rioWriteBulkLongLong(rdb, crdtServer.crdt_gid) == 0);
+            serverAssertWithInfo(NULL, &key, rioWriteBulkLongLong(rdb, crdtServer.crdt_gid));
             serverAssertWithInfo(NULL, &key, rioWriteBulkString(rdb, (&key)->ptr,sdslen((&key)->ptr)));
             serverAssertWithInfo(NULL, &key, rioWriteBulkString(rdb, common->vectorClock, sdslen(common->vectorClock)));
             serverAssertWithInfo(NULL, &key, rioWriteBulkLongLong(rdb, common->timestamp));
