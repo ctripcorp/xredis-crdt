@@ -1031,49 +1031,53 @@ void crdtReplicationCron(void) {
     listIter li;
     listNode *ln;
     /* Non blocking connection timeout? */
+    /**!!!!Important!!!!!
+     * do connect crdt master if and only if I'm NOT a SLAVE here
+     * SLAVE SHOULD RECEIVE DATA from their masters*/
+    if (!(server.masterhost) && !(server.master)) {
+        listRewind(crdtServer.crdtMasters, &li);
+        while ((ln = listNext(&li)) != NULL) {
+            CRDT_Master_Instance *crdtMaster = ln->value;
 
-    listRewind(crdtServer.crdtMasters, &li);
-    while((ln = listNext(&li)) != NULL) {
-        CRDT_Master_Instance *crdtMaster = ln->value;
 
-
-        if (crdtMaster->masterhost &&
-            (crdtMaster->repl_state == REPL_STATE_CONNECTING || crdtSlaveIsInHandshakeState(crdtMaster)) &&
-            (time(NULL) - crdtMaster->repl_transfer_lastio) > crdtServer.repl_timeout) {
-            serverLog(LL_NOTICE, "[CRDT]Timeout connecting to the MASTER...");
-            crdtCancelReplicationHandshake(crdtMaster->gid);
-        }
-
-        /* Bulk transfer I/O timeout? */
-        if (crdtMaster->masterhost && crdtMaster->repl_state == REPL_STATE_TRANSFER &&
-            (time(NULL) - crdtMaster->repl_transfer_lastio) > crdtServer.repl_timeout) {
-            serverLog(LL_NOTICE,
-                      "[CRDT]Timeout receiving bulk data from MASTER... If the problem persists try to set the 'repl-timeout' parameter in redis.conf to a larger value.");
-            crdtCancelReplicationHandshake(crdtMaster->gid);
-        }
-
-        /* Timed out master when we are an already connected slave? */
-        if (crdtMaster->masterhost && crdtMaster->repl_state == REPL_STATE_CONNECTED &&
-            (time(NULL) - crdtMaster->master->lastinteraction) > crdtServer.repl_timeout) {
-            serverLog(LL_NOTICE, "[CRDT]MASTER timeout: no data nor PING received...");
-            freeClient(crdtMaster->master);
-        }
-
-        /* Check if we should connect to a MASTER */
-        if (crdtMaster->repl_state == REPL_STATE_CONNECT) {
-            serverLog(LL_NOTICE, "Crdt Connecting to MASTER %s:%d",
-                      crdtMaster->masterhost, crdtMaster->masterport);
-            if (crdtConnectWithMaster(crdtMaster) == C_OK) {
-                serverLog(LL_NOTICE, "[CRDT]MASTER <-> SLAVE sync started");
+            if (crdtMaster->masterhost &&
+                (crdtMaster->repl_state == REPL_STATE_CONNECTING || crdtSlaveIsInHandshakeState(crdtMaster)) &&
+                (time(NULL) - crdtMaster->repl_transfer_lastio) > crdtServer.repl_timeout) {
+                serverLog(LL_NOTICE, "[CRDT]Timeout connecting to the MASTER...");
+                crdtCancelReplicationHandshake(crdtMaster->gid);
             }
-        }
 
-        /* Send ACK to master from time to time.
-         * Note that we do not send periodic acks to masters that don't
-         * support PSYNC and replication offsets. */
-        if (crdtMaster->masterhost && crdtMaster->master &&
+            /* Bulk transfer I/O timeout? */
+            if (crdtMaster->masterhost && crdtMaster->repl_state == REPL_STATE_TRANSFER &&
+                (time(NULL) - crdtMaster->repl_transfer_lastio) > crdtServer.repl_timeout) {
+                serverLog(LL_NOTICE,
+                          "[CRDT]Timeout receiving bulk data from MASTER... If the problem persists try to set the 'repl-timeout' parameter in redis.conf to a larger value.");
+                crdtCancelReplicationHandshake(crdtMaster->gid);
+            }
+
+            /* Timed out master when we are an already connected slave? */
+            if (crdtMaster->masterhost && crdtMaster->repl_state == REPL_STATE_CONNECTED &&
+                (time(NULL) - crdtMaster->master->lastinteraction) > crdtServer.repl_timeout) {
+                serverLog(LL_NOTICE, "[CRDT]MASTER timeout: no data nor PING received...");
+                freeClient(crdtMaster->master);
+            }
+
+            /* Check if we should connect to a MASTER */
+            if (crdtMaster->repl_state == REPL_STATE_CONNECT) {
+                serverLog(LL_NOTICE, "Crdt Connecting to MASTER %s:%d",
+                          crdtMaster->masterhost, crdtMaster->masterport);
+                if (crdtConnectWithMaster(crdtMaster) == C_OK) {
+                    serverLog(LL_NOTICE, "[CRDT]MASTER <-> SLAVE sync started");
+                }
+            }
+
+            /* Send ACK to master from time to time.
+             * Note that we do not send periodic acks to masters that don't
+             * support PSYNC and replication offsets. */
+            if (crdtMaster->masterhost && crdtMaster->master &&
                 (crdtMaster->repl_state == REPL_STATE_CONNECTED)) {
-            crdtReplicationSendAck(crdtMaster);
+                crdtReplicationSendAck(crdtMaster);
+            }
         }
     }
     /* If we have attached slaves, PING them from time to time.
