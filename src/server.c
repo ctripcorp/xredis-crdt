@@ -126,6 +126,9 @@ volatile unsigned long lru_clock; /* Server global current LRU time. */
  *    Note that commands that may trigger a DEL as a side effect (like SET)
  *    are not fast commands.
  */
+
+void
+debugCrdtRdbSaveObjectCommand(client *c);
 struct redisCommand redisCommandTable[] = {
     {"module",moduleCommand,-2,"as",0,NULL,0,0,0,0,0},
 //    {"get",getCommand,2,"rF",0,NULL,1,1,1,0,0},
@@ -315,9 +318,29 @@ struct redisCommand redisCommandTable[] = {
     {"crdt.merge_end",crdtMergeEndCommand,-1,"ars",0,NULL,0,0,0,0,0},
     {"crdt.replconf",replconfCommand,-1,"aslt",0,NULL,0,0,0,0,0},
     {"peerof",peerofCommand,4,"ast",0,NULL,0,0,0,0,0},
+    {"debugCrdt",debugCrdtRdbSaveObjectCommand,-1,"ast",0,NULL,0,0,0,0,0}
 };
 
 /*============================ CRDT functions ============================ */
+//debugCrdt <key>
+void
+debugCrdtRdbSaveObjectCommand(client *c) {
+    c->db = server.db;
+    robj *val = lookupKeyRead(c->db, c->argv[1]);
+    if(val->type != OBJ_MODULE) {
+        addReplyError(c, "[CRDT] No such element");
+        return;
+    }
+    moduleValue *mv = val->ptr;
+    void *moduleValue = mv->value;
+
+    // write $N/r/n/compressed val/r/n
+    sds serializedVal = mv->type->serialize(moduleValue);
+    serverLog(LL_NOTICE, "[CRDT][before addReplyBulkCBuffer]");
+    addReplyBulkCBuffer(c, serializedVal, sdslen(serializedVal));
+    serverLog(LL_NOTICE, "[CRDT][after addReplyBulkCBuffer]");
+    sdsfree(serializedVal);
+}
 
 void
 incrLocalVcUnit(long delta) {

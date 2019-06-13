@@ -47,7 +47,7 @@
 
 
 //CRDT.MERGE_START <local-gid> <vector-clock> <repl_id>
-//CRDT.Merge <src-gid> <key> <vc> <timestamp/-1> <expire> <value>
+//CRDT.Merge <src-gid> <key> <vc> <timestamp/-1> <expire> <module-id> <value>
 //CRDT.MERGE_END <local-gid> <vector-clock> <repl_id> <offset>
 int
 rdbSaveRioWithCrdtMerge(rio *rdb, int *error, void *rsi) {
@@ -86,7 +86,8 @@ werr: /* Write error. */
     return C_ERR;
 }
 
-//CRDT.Merge <src-gid> <key> <vc> <timestamp/-1> <expire> <value>
+//CRDT.Merge <src-gid> <key> <vc> <timestamp/-1> <expire> <module-id> <value>
+//module-id for target to relocate the module type
 int
 crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
     dictIterator *di = NULL;
@@ -134,19 +135,15 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
             /* Check if the crdt module's vector clock on local gid is avaiable for crdt merge */
             moduleValue *mv = o->ptr;
             void *moduleValue = mv->value;
-            serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveRio] retrieve [CrdtCommon]");
             CrdtCommon *common = (CrdtCommon *) moduleValue;
-            serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveRio] retrieve [CrdtCommon.vc]");
             VectorClock *vc = sdsToVectorClock(common->vectorClock);
-            serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveRio] compare [CrdtCommon.vc]");
             int result = vectorClockCmp(vc, rsi->vc, crdtServer.crdt_gid);
-            serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveRio] vector clock compare: %d", result);
             freeVectorClock(vc);
             if (result < 0) {
                 continue;
             }
 
-            //CRDT.Merge <src-gid> <key> <vc> <timestamp/-1> <expire> <value>
+            //CRDT.Merge <src-gid> <key> <vc> <timestamp/-1> <expire> <module-id> <value>
             initStaticStringObject(key,keystr);
             expire = getExpire(db,&key);
             // not send if expired already
@@ -154,7 +151,7 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
                 continue;
             }
 
-            if (rioWrite(rdb, "*7\r\n", 4) == 0) goto werr;
+            if (rioWrite(rdb, "*8\r\n", 4) == 0) goto werr;
             if (rioWriteBulkString(rdb, "CRDT.Merge", 10) == 0) goto werr;
             if (rioWriteBulkLongLong(rdb, crdtServer.crdt_gid) == 0) goto werr;
             if (crdtRdbSaveKeyValuePair(rdb, &key, o, expire) == -1) goto werr;
@@ -174,85 +171,41 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
  * On error -1 is returned.
  * On success if the key was actually saved 1 is returned, otherwise 0
  * is returned (the key was already expired). */
-//<key> <vc> <timestamp/-1> <expire> <value>
+//<key> <vc> <timestamp/-1> <expire> <module-id> <value>
+//module-id for target to relocate the module type
 int
 crdtRdbSaveKeyValuePair(rio *rdb, robj *key, robj *val, long long expireTime) {
 
-    serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveKeyValuePair] write key");
     // write $N/r/nkey/r/n
     if (rioWriteBulkObject(rdb, key) == 0) return -1;
 
     moduleValue *mv = val->ptr;
     void *moduleValue = mv->value;
     CrdtCommon *common = (CrdtCommon *) moduleValue;
-    serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveKeyValuePair] write vc");
     // write $N/r/n/vc/r/n
     if (rioWriteBulkString(rdb, common->vectorClock, sdslen(common->vectorClock)) == 0) return -1;
 
-    serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveKeyValuePair] write timestamp");
     // write $N/r/ntimestamp/r/n
     if (rioWriteBulkLongLong(rdb, common->timestamp) == 0) return -1;
 
-    serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveKeyValuePair] write expire time");
     // write $N/r/n/expireTime/r/n
     if (rioWriteBulkLongLong(rdb, expireTime) == 0) return -1;
 
-    serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveKeyValuePair] write value");
+    if (rioWriteBulkLongLong(rdb, mv->type->id) == 0) return -1;
+
     // write $N/r/n/compressed val/r/n
-    if (crdtRdbSaveObject(rdb, val) == -1) return -1;
+    sds serializedVal = mv->type->serialize(moduleValue);
+    serverLog(LL_NOTICE, "compressed val: %s", serializedVal);
+    if (rioWriteBulkString(rdb, serializedVal, sdslen(serializedVal)) == 0) return -1;
+    sdsfree(serializedVal);
 
     return 1;
 }
 
-int
-crdtRdbSaveObject(rio *rdb, robj *val) {
-    if(val->type != OBJ_MODULE) {
-        return 0;
-    }
-    serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveObject] init buffer");
-    rio *buffer = NULL;
-    sds buf = sdsempty();
-    rioInitWithBuffer(buffer, buf);
-
-    /* Save a module-specific value. */
-    RedisModuleIO io;
-    moduleValue *mv = val->ptr;
-    moduleType *mt = mv->type;
-    moduleInitIOContext(io,mt,buffer);
-
-    /* Write the "module" identifier as prefix, so that we'll be able
-     * to call the right module during loading. */
-    int retval = rdbSaveLen(buffer,mt->id);
-    if (retval == -1) return -1;
-    io.bytes += retval;
-
-    /* Then write the module-specific representation + EOF marker. */
-    mt->rdb_save(&io,mv->value);
-    retval = rdbSaveLen(buffer, RDB_MODULE_OPCODE_EOF);
-    if (retval == -1) return -1;
-    io.bytes += retval;
-
-    serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveObject] compressed val: %lu", sdslen(buf));
-    if(rioWriteBulkString(rdb, buf, sdslen(buf)) == 0) {
-        serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveObject][ERROR] write compressed val ");
-        sdsfree(buf);
-        return -1;
-    }
-    serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveObject] write val success");
-    sdsfree(buf);
-
-    serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveObject] free buf");
-    if (io.ctx) {
-        moduleFreeContext(io.ctx);
-        zfree(io.ctx);
-    }
-    serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveObject] ok");
-    return io.error ? -1 : (ssize_t)io.bytes;
-}
 
 /**---------------------------CRDT Merge Command--------------------------------*/
-//CRDT.Merge <gid> <key> <vc> <timestamp/-1> <expire> <value>
-// 0           1    2     3      4             5        6
+//CRDT.Merge <src-gid> <key> <vc> <timestamp/-1> <expire> <module-id> <value>
+// 0           1         2     3       4            5        6           7
 void
 crdtMergeCommand(client *c) {
     long long sourceGid, timestamp, expire;
@@ -262,16 +215,21 @@ crdtMergeCommand(client *c) {
     if (getLongLongFromObjectOrReply(c, c->argv[4], &timestamp, NULL) != C_OK) goto error;
     if (getLongLongFromObjectOrReply(c, c->argv[5], &expire, NULL) != C_OK) goto error;
 
-    sds rdbVal = sdsdup(c->argv[6]->ptr);
-    rio *buf = NULL;
-    rioInitWithBuffer(buf, rdbVal);
-    /* Read value */
-    robj *val;
-    if ((val = rdbLoadObject(RDB_TYPE_MODULE_2, buf)) == NULL) goto error;
+    long long _mtid;
+    if (getLongLongFromObjectOrReply(c, c->argv[6], &_mtid, NULL) != C_OK) goto error;
+    uint64_t mtid = _mtid;
 
+    char name[10];
+    moduleType *mt = moduleTypeLookupModuleByID(mtid);
+    if (mt == NULL) {
+        moduleTypeNameByID(name,mtid);
+        serverLog(LL_WARNING,"The RDB file contains module data I can't load: no matching module '%s'", name);
+        goto error;
+    }
+    void *moduleval = mt->deserialize(c->argv[7]);
+    robj *val = createModuleObject(mt, moduleval);
     /* Merge the new object in the hash table */
     moduleValue *mv = val->ptr;
-    moduleType *mt = mv->type;
     void *moduleDataType = mv->value;
     CrdtCommon *common = (CrdtCommon *) moduleDataType;
 
@@ -285,17 +243,17 @@ crdtMergeCommand(client *c) {
     } else {
         mergedVal = common->merge(NULL, mv->value);
     }
-    dbAdd(c->db, key, createModuleObject(mt, mergedVal));
-    decrRefCount(val);
-
+    setKey(c->db, key, createModuleObject(mt, mergedVal));
 
     /* Set the expire time if needed */
     if (expire != -1 && getExpire(c->db, key) <= expire) {
         setExpire(NULL, c->db, key, expire);
     }
+    addReply(c, shared.ok);
     return;
 
 error:
+    addReply(c, shared.crdtmergeerr);
     crdtCancelReplicationHandshake(sourceGid);
     return;
 
