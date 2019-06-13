@@ -1857,6 +1857,8 @@ void clusterCron(void);
 void clusterPropagatePublish(robj *channel, robj *message);
 void migrateCloseTimedoutSockets(void);
 void clusterBeforeSleep(void);
+void createDumpPayload(rio *payload, robj *o);
+int verifyDumpPayload(unsigned char *p, size_t len);
 
 /* Sentinel */
 void initSentinelConfig(void);
