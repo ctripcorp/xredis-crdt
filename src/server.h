@@ -1589,6 +1589,8 @@ CRDT_Master_Instance *getPeerMaster(long long gid);
 void refreshVectorClock(client *c, sds vcStr);
 long long getMyGidLogicTime(VectorClock *vc);
 long long getMyLogicTime();
+void crdtReplicationUnsetMaster(long long gid);
+void debugCancelCrdt(client *c);
 
 
 /* Macro to initialize an IO context. Note that the 'ver' field is populated
