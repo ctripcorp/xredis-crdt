@@ -902,16 +902,17 @@ void replconfCommand(client *c) {
             return;
         }  // minimum vector clock I could handle with
         else if (!strcasecmp(c->argv[j]->ptr,"min-vc")) {
-            c->vectorClock = sdsToVectorClock(c->argv[j+1]->ptr);
+            refreshVectorClock(c, c->argv[j+1]->ptr);
         }
         else if (!strcasecmp(c->argv[j]->ptr,"ack-vc")) {
             /* REPLCONF ACK is used by slave to inform the master the amount
              * of replication stream that it processed so far. It is an
              * internal only command that normal clients should never use. */
-//
-//            if (!(c->flags & CLIENT_CRDT_SLAVE)) return;
+
+            if (!(c->flags & CLIENT_CRDT_SLAVE)) return;
             c->repl_ack_time = server.unixtime;
-            serverLog(LL_NOTICE, "[CRDT][ack-vc] received");
+            serverAssertWithInfo(c, NULL, sdsEncodedObject(c->argv[j+1]));
+            refreshVectorClock(c, c->argv[j+1]->ptr);
             /* If this was a diskless replication, we need to really put
              * the slave online when the first ACK is received (which
              * confirms slave is online and ready to get more data). */

@@ -86,6 +86,14 @@ CRDT_Master_Instance *getPeerMaster(long long gid) {
     return peerMaster;
 }
 
+void refreshVectorClock(client *c, sds vcStr) {
+    c->vectorClock = sdsToVectorClock(vcStr);
+    CRDT_Master_Instance *masterInstance = getPeerMaster(c->gid);
+    if (masterInstance) {
+        masterInstance->vectorClock = dupVectorClock(c->vectorClock);
+    }
+}
+
 // peerof <gid> <ip> <port>
 //  0       1    2    3
 void peerofCommand(client *c) {
@@ -216,12 +224,25 @@ err:
 
 /** ================================== CRDT Repl MASTER ================================== */
 
+long long getMyGidLogicTime(VectorClock *vc) {
+    if (vc == NULL) {
+        return 0;
+    }
+    VectorClockUnit *vcu = getVectorClockUnit(vc, crdtServer.crdt_gid);
+    if (vcu == NULL) {
+        return 0;
+    }
+    return vcu->logic_time;
+}
 
+long long getMyLogicTime() {
+    return getMyGidLogicTime(crdtServer.vectorClock);
+}
 
 
 ///*  =================================================================== CRDT Repl Slave ======================================================================  */
 crdtRdbSaveInfo*
-crdtRdbPopulateSaveInfo(crdtRdbSaveInfo *rsi) {
+crdtRdbPopulateSaveInfo(crdtRdbSaveInfo *rsi, long long min_logic_time) {
     crdtRdbSaveInfo rsi_init = CRDT_RDB_SAVE_INFO_INIT;
     *rsi = rsi_init;
 
@@ -232,9 +253,13 @@ crdtRdbPopulateSaveInfo(crdtRdbSaveInfo *rsi) {
          * to reload replication ID/offset, it's safe because the next write
          * command must generate a SELECT statement. */
         rsi->repl_stream_db = crdtServer.slaveseldb == -1 ? 0 : crdtServer.slaveseldb;
+        rsi->repl_offset = getPsyncInitialOffset(&crdtServer);
+        memcpy(rsi->repl_id, crdtServer.replid, CONFIG_RUN_ID_SIZE);
+        rsi->repl_id[CONFIG_RUN_ID_SIZE] = '\0';
+        rsi->logic_time = min_logic_time;
+        return rsi;
     }
-
-    return rsi;
+    return NULL;
 }
 
 /* Returns 1 if the given replication state is a handshake state,
@@ -915,7 +940,7 @@ void crdtReplicationCreateMasterClient(CRDT_Master_Instance *crdtMaster, int fd,
 
 /* --------------------------- REPLICATION CRON  ---------------------------- */
 
-int startCrdtBgsaveForReplication() {
+int startCrdtBgsaveForReplication(long long min_logic_time) {
     int retval;
     listIter li;
     listNode *ln;
@@ -923,7 +948,7 @@ int startCrdtBgsaveForReplication() {
     serverLog(LL_NOTICE,"Starting BGSAVE for SYNC with target: Crdt Merge");
 
     crdtRdbSaveInfo rsi, *rsiptr;
-    rsiptr = crdtRdbPopulateSaveInfo(&rsi);
+    rsiptr = crdtRdbPopulateSaveInfo(&rsi, min_logic_time);
     /* Only do rdbSave* when rsiptr is not NULL,
      * otherwise slave will miss repl-stream-db. */
     if (rsiptr) {
@@ -1141,6 +1166,10 @@ void crdtReplicationCron(void) {
             {
                 serverLog(LL_WARNING, "Disconnecting timedout slave: %s",
                           replicationGetSlaveName(slave));
+                if (slave->vectorClock) {
+                    freeVectorClock(slave->vectorClock);
+                    slave->vectorClock = NULL;
+                }
                 freeClient(slave);
             }
         }
@@ -1194,7 +1223,7 @@ void crdtReplicationCron(void) {
         int slaves_waiting = 0;
         listNode *ln = NULL;
         listIter li;
-
+        long long min_logic_time = getMyLogicTime();
         listRewind(crdtServer.slaves,&li);
         while((ln = listNext(&li))) {
             client *slave = ln->value;
@@ -1202,6 +1231,7 @@ void crdtReplicationCron(void) {
                 idle = server.unixtime - slave->lastinteraction;
                 if (idle > max_idle) max_idle = idle;
                 slaves_waiting++;
+                min_logic_time = min(min_logic_time, getMyGidLogicTime(slave->vectorClock));
             }
         }
 
@@ -1211,7 +1241,7 @@ void crdtReplicationCron(void) {
              * configuration and slaves capabilities. */
             serverLog(LL_NOTICE,
                       "[CRDT] crdt replication cron call startCrdtBgsaveForReplication().");
-            startCrdtBgsaveForReplication();
+            startCrdtBgsaveForReplication(min_logic_time);
         }
     }
 

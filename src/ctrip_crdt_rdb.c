@@ -58,7 +58,8 @@ rdbSaveRioWithCrdtMerge(rio *rdb, int *error, void *rsi) {
     if (rioWrite(rdb, "*4\r\n", 4) == 0) goto werr;
     if (rioWriteBulkString(rdb, "CRDT.MERGE_START", 16) == 0) goto werr;
     if (rioWriteBulkLongLong(rdb, crdtServer.crdt_gid) == 0) goto werr;
-    sds sdsVectorClock = vectorClockToSds(info->vc);
+
+    sds sdsVectorClock = vectorClockToSds(crdtServer.vectorClock);
     if (rioWriteBulkString(rdb, sdsVectorClock, sdslen(sdsVectorClock)) == 0) goto werr;
     if (rioWriteBulkString(rdb, info->repl_id, 41) == 0) goto werr;
     serverLog(LL_NOTICE, "[CRDT] [rdbSaveRioWithCrdtMerge] CRDT.MERGE_START %lld %s %s", crdtServer.crdt_gid, sdsVectorClock, info->repl_id);
@@ -127,7 +128,8 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
             sds keystr = dictGetKey(de);
             robj key, *o = dictGetVal(de);
             long long expire;
-            if(o->type != OBJ_MODULE || isModuleCrdt(o)) {
+            serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveRio] key: %s", keystr);
+            if(o->type != OBJ_MODULE || isModuleCrdt(o) != C_OK) {
                 serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveRio] NOT CRDT MODULE, SKIP");
                 continue;
             }
@@ -136,8 +138,11 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
             moduleValue *mv = o->ptr;
             void *moduleValue = mv->value;
             CrdtCommon *common = (CrdtCommon *) moduleValue;
+            if (common->gid != crdtServer.crdt_gid) {
+                continue;
+            }
             VectorClock *vc = sdsToVectorClock(common->vectorClock);
-            int result = vectorClockCmp(vc, rsi->vc, crdtServer.crdt_gid);
+            int result = getMyGidLogicTime(vc) - rsi->logic_time;
             freeVectorClock(vc);
 
             if (result < 0) {

@@ -1585,6 +1585,11 @@ void crdtReplicationCacheMaster(client *c);
 void crdtReplicationHandleMasterDisconnection(client *c);
 void incrLocalVcUnit(long delta);
 void crdtPsyncCommand(client *c);
+CRDT_Master_Instance *getPeerMaster(long long gid);
+void refreshVectorClock(client *c, sds vcStr);
+long long getMyGidLogicTime(VectorClock *vc);
+long long getMyLogicTime();
+
 
 /* Macro to initialize an IO context. Note that the 'ver' field is populated
  * inside rdb.c according to the version of the value to load. */
