@@ -94,6 +94,19 @@ void refreshVectorClock(client *c, sds vcStr) {
     }
 }
 
+void crdtReplicationSendAck(CRDT_Master_Instance *masterInstance) {
+    client *c = masterInstance->master;
+
+    if (c != NULL) {
+        c->flags |= CLIENT_MASTER_FORCE_REPLY;
+        addReplyMultiBulkLen(c,3);
+        addReplyBulkCString(c,"CRDT.REPLCONF");
+        addReplyBulkCString(c,"ACK-VC");
+        addReplyBulkLongLong(c,c->reploff);
+        c->flags &= ~CLIENT_MASTER_FORCE_REPLY;
+    }
+}
+
 // peerof <gid> <ip> <port>
 //  0       1    2    3
 void peerofCommand(client *c) {
@@ -181,17 +194,6 @@ crdtMergeStartCommand(client *c) {
     serverLog(LL_NOTICE, "[CRDT][crdtMergeStartCommand] master gid: %lld", sourceGid);
 }
 
-void
-crdtAckVectorClock(client *c) {
-    if (c != NULL) {
-        c->flags |= CLIENT_MASTER_FORCE_REPLY;
-        addReplyMultiBulkLen(c,3);
-        addReplyBulkCString(c,"CRDT.REPLCONF");
-        addReplyBulkCString(c,"ACK-VC");
-        addReplyBulkLongLong(c,c->reploff);
-        c->flags &= ~CLIENT_MASTER_FORCE_REPLY;
-    }
-}
 //CRDT.END_MERGE <gid> <vector-clock> <repl_id> <offset>
 // 0               1        2            3          4
 void
@@ -213,7 +215,7 @@ crdtMergeEndCommand(client *c) {
 
     peerMaster->repl_state = REPL_STATE_CONNECTED;
     if(!crdtServer.repl_backlog) createReplicationBacklog(&crdtServer);
-    crdtAckVectorClock(c);
+    crdtReplicationSendAck(getPeerMaster(c->gid));
     return;
 
 err:
@@ -979,19 +981,6 @@ int startCrdtBgsaveForReplication(long long min_logic_time) {
 
     return retval;
 
-}
-
-void crdtReplicationSendAck(CRDT_Master_Instance *masterInstance) {
-    client *c = masterInstance->master;
-
-    if (c != NULL) {
-        c->flags |= CLIENT_MASTER_FORCE_REPLY;
-        addReplyMultiBulkLen(c,3);
-        addReplyBulkCString(c,"CRDT.REPLCONF");
-        addReplyBulkCString(c,"ACK-VC");
-        addReplyBulkLongLong(c,c->reploff);
-        c->flags &= ~CLIENT_MASTER_FORCE_REPLY;
-    }
 }
 
 void crdtReplicationCacheMaster(client *c) {

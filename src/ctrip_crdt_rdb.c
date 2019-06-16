@@ -128,7 +128,6 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
             sds keystr = dictGetKey(de);
             robj key, *o = dictGetVal(de);
             long long expire;
-            serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveRio] key: %s", keystr);
             if(o->type != OBJ_MODULE || isModuleCrdt(o) != C_OK) {
                 serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveRio] NOT CRDT MODULE, SKIP");
                 continue;
@@ -183,6 +182,7 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
         }
         dictReleaseIterator(di);
     }
+    serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveRio] end");
     return C_OK;
 
     werr:
