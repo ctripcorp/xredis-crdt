@@ -63,11 +63,50 @@ CRDT_Master_Instance *createPeerMaster(client *c, long long gid) {
 }
 
 void freePeerMaster(CRDT_Master_Instance *masterInstance) {
-    zfree(masterInstance->vectorClock);
+    list *l = crdtServer.crdtMasters;
+    listNode *ln = listSearchKey(l, masterInstance);
+    serverAssert(ln != NULL);
+    listDelNode(l,ln);
+
+    if(masterInstance->vectorClock) {
+        freeVectorClock(masterInstance->vectorClock);
+        masterInstance->vectorClock = NULL;
+    }
     if (masterInstance->cached_master) {
         zfree(masterInstance->cached_master);
+        masterInstance->cached_master = NULL;
+    }
+    if (masterInstance->master) {
+        freeClient(masterInstance->master);
+        masterInstance->master = NULL;
     }
     zfree(masterInstance);
+
+}
+
+void debugCancelCrdt(client *c) {
+    if (c->argc != 3) {
+        addReply(c, shared.syntaxerr);
+        return;
+    }
+
+    if (strcasecmp(c->argv[2]->ptr,"chenzhu") != 0) {
+        addReply(c, shared.syntaxerr);
+        return;
+    }
+    long long gid;
+    if ((getLongLongFromObjectOrReply(c, c->argv[1], &gid, NULL) != C_OK)) {
+        addReply(c, shared.syntaxerr);
+        return;
+    }
+    CRDT_Master_Instance *masterInstance;
+    if((masterInstance = getPeerMaster(gid)) == NULL) {
+        addReply(c, shared.syntaxerr);
+        return;
+    }
+
+    freeClient(masterInstance->master);
+    addReply(c, shared.ok);
 }
 
 CRDT_Master_Instance *getPeerMaster(long long gid) {
@@ -126,6 +165,19 @@ void peerofCommand(client *c) {
     if ((getLongLongFromObjectOrReply(c, c->argv[1], &gid, NULL) != C_OK))
         return;
 
+    if (!strcasecmp(c->argv[1]->ptr,"no") &&
+        !strcasecmp(c->argv[2]->ptr,"one")) {
+
+        if (getPeerMaster(gid)) {
+            crdtReplicationUnsetMaster(gid);
+            replicationUnsetMaster();
+            sds client = catClientInfoString(sdsempty(),c);
+            serverLog(LL_NOTICE,"[CRDT] REMOVE MASTER %lld enabled (user request from '%s')",
+                      gid, client);
+            sdsfree(client);
+        }
+    }
+
     if ((getLongFromObjectOrReply(c, c->argv[3], &port, NULL) != C_OK))
         return;
 
@@ -133,7 +185,7 @@ void peerofCommand(client *c) {
     CRDT_Master_Instance *peerMaster = getPeerMaster(gid);
     if(peerMaster && !strcasecmp(peerMaster->masterhost, c->argv[2]->ptr)
        && peerMaster->masterport == port) {
-        serverLog(LL_NOTICE,"PEER OF would result into synchronization with the master we are already connected with. No operation performed.");
+        serverLog(LL_NOTICE,"[CRDT]PEER OF would result into synchronization with the master we are already connected with. No operation performed.");
         addReplySds(c,sdsnew("+OK Already connected to specified master\r\n"));
         return;
     }
@@ -144,8 +196,8 @@ void peerofCommand(client *c) {
     crdtReplicationSetMaster(gid, c->argv[2]->ptr, port);
     peerMaster = getPeerMaster(gid);
     sds client = catClientInfoString(sdsempty(),c);
-    serverLog(LL_NOTICE,"PEER OF %s:%d enabled (user request from '%s')",
-              peerMaster->masterhost, peerMaster->masterport, client);
+    serverLog(LL_NOTICE,"[CRDT]PEER OF %lld %s:%d enabled (user request from '%s')",
+              gid, peerMaster->masterhost, peerMaster->masterport, client);
     sdsfree(client);
 
     addReply(c,shared.ok);
@@ -170,6 +222,14 @@ void crdtReplicationSetMaster(long long gid, char *ip, int port) {
     peerMaster->repl_state = REPL_STATE_CONNECT;
     peerMaster->repl_down_since = 0;
 }
+
+/* Cancel replication, setting the instance as a master itself. */
+void crdtReplicationUnsetMaster(long long gid) {
+    CRDT_Master_Instance *peerMaster;
+    if ((peerMaster = getPeerMaster(gid)) == NULL) return;
+    freePeerMaster(peerMaster);
+}
+
 
 /**---------------------------CRDT RDB Start/End Mark--------------------------------*/
 
@@ -392,9 +452,9 @@ int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, i
         if (masterInstance->cached_master) {
             psync_replid = masterInstance->cached_master->replid;
             snprintf(psync_offset,sizeof(psync_offset),"%lld", masterInstance->cached_master->reploff+1);
-            serverLog(LL_NOTICE,"Trying a partial resynchronization (request %s:%s).", psync_replid, psync_offset);
+            serverLog(LL_NOTICE,"[CRDT]Trying a partial resynchronization (request %s:%s).", psync_replid, psync_offset);
         } else {
-            serverLog(LL_NOTICE,"Partial resynchronization not possible (no cached master)");
+            serverLog(LL_NOTICE,"[CRDT]Partial resynchronization not possible (no cached master)");
             psync_replid = "?";
             memcpy(psync_offset,"-1",3);
         }
@@ -402,7 +462,7 @@ int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, i
         /* Issue the PSYNC command */
         reply = crdtSendSynchronousCommand(SYNC_CMD_WRITE, fd, "CRDT.PSYNC", psync_replid, psync_offset, NULL);
         if (reply != NULL) {
-            serverLog(LL_WARNING,"Unable to send PSYNC to master: %s",reply);
+            serverLog(LL_WARNING,"[CRDT]Unable to send PSYNC to master: %s",reply);
             sdsfree(reply);
             aeDeleteFileEvent(crdtServer.el,fd,AE_READABLE);
             return PSYNC_WRITE_ERROR;
@@ -434,7 +494,7 @@ int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, i
         }
         if (!replid || !offset || (offset-replid-1) != CONFIG_RUN_ID_SIZE) {
             serverLog(LL_WARNING,
-                      "Master replied with wrong +FULLRESYNC syntax.");
+                      "[CRDT]Master replied with wrong +FULLRESYNC syntax.");
             /* This is an unexpected condition, actually the +FULLRESYNC
              * reply means that the master supports PSYNC, but the reply
              * format seems wrong. To stay safe we blank the master
@@ -444,7 +504,7 @@ int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, i
             memcpy(masterInstance->master_replid, replid, offset-replid-1);
             masterInstance->master_replid[CONFIG_RUN_ID_SIZE] = '\0';
             masterInstance->master_initial_offset = strtoll(offset,NULL,10);
-            serverLog(LL_NOTICE,"Crdt Full resync from master: %s:%lld",
+            serverLog(LL_NOTICE,"[CRDT] Full resync from master: %s:%lld",
                       masterInstance->master_replid,
                       masterInstance->master_initial_offset);
         }
@@ -458,7 +518,7 @@ int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, i
     if (!strncmp(reply,"+CONTINUE",9)) {
         /* Partial resync was accepted. */
         serverLog(LL_NOTICE,
-                  "Successful partial resynchronization with master.");
+                  "[CRDT] Successful partial resynchronization with master.");
 
         /* Check the new replication ID advertised by the master. If it
          * changed, we need to set the new ID as primary ID, and set or
@@ -500,7 +560,7 @@ int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, i
         !strncmp(reply,"-LOADING",8))
     {
         serverLog(LL_NOTICE,
-                  "Master is currently unable to PSYNC "
+                  "[CRDT] Master is currently unable to PSYNC "
                   "but should be in the future: %s", reply);
         sdsfree(reply);
         return PSYNC_TRY_LATER;
@@ -509,10 +569,10 @@ int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, i
     if (strncmp(reply,"-ERR",4)) {
         /* If it's not an error, log the unexpected event. */
         serverLog(LL_WARNING,
-                  "Unexpected reply to CRDT.PSYNC from master: %s", reply);
+                  "[CRDT] Unexpected reply to CRDT.PSYNC from master: %s", reply);
     } else {
         serverLog(LL_NOTICE,
-                  "Master does not support CRDT.PSYNC or is in "
+                  "[CRDT] Master does not support CRDT.PSYNC or is in "
                   "error state (reply: %s)", reply);
     }
     sdsfree(reply);
@@ -542,14 +602,14 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
     if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &sockerr, &errlen) == -1)
         sockerr = errno;
     if (sockerr) {
-        serverLog(LL_WARNING,"Error condition on socket for SYNC: %s",
+        serverLog(LL_WARNING,"[CRDT] Error condition on socket for SYNC: %s",
                   strerror(sockerr));
         goto error;
     }
 
     /* Send a PING to check the master is able to reply without errors. */
     if (crdtMaster->repl_state == REPL_STATE_CONNECTING) {
-        serverLog(LL_NOTICE,"[CRDT]Non blocking connect for SYNC fired the event.");
+        serverLog(LL_NOTICE,"[CRDT] Non blocking connect for SYNC fired the event.");
         /* Delete the writable event so that the readable event remains
          * registered and we can wait for the PONG reply. */
         aeDeleteFileEvent(crdtServer.el,fd,AE_WRITABLE);
@@ -633,7 +693,7 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
         /* Ignore the error if any, not all the Redis versions support
          * REPLCONF listening-port. */
         if (err[0] == '-') {
-            serverLog(LL_NOTICE,"(Non critical) Master does not understand "
+            serverLog(LL_NOTICE,"[CRDT] (Non critical) Master does not understand "
                                 "REPLCONF listening-port: %s", err);
         }
         sdsfree(err);
@@ -664,7 +724,7 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
         /* Ignore the error if any, not all the Redis versions support
          * REPLCONF listening-port. */
         if (err[0] == '-') {
-            serverLog(LL_NOTICE,"(Non critical) Master does not understand "
+            serverLog(LL_NOTICE,"[CRDT] (Non critical) Master does not understand "
                                 "REPLCONF ip-address: %s", err);
         }
         sdsfree(err);
@@ -692,11 +752,11 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
         /* Ignore the error if any, not all the Redis versions support
          * REPLCONF capa. */
         if (err[0] == '-') {
-            serverLog(LL_NOTICE,"(Non critical) Master does not understand "
+            serverLog(LL_NOTICE,"[CRDT] (Non critical) Master does not understand "
                                 "REPLCONF capa: %s", err);
         } else {
             serverLog(LL_NOTICE,
-                      "Crdt Master: %s:%d, accept capa eof/psync2", crdtMaster->masterhost, crdtMaster->masterport);
+                      "[CRDT] Master: %s:%d, accept capa eof/psync2", crdtMaster->masterhost, crdtMaster->masterport);
         }
         sdsfree(err);
         crdtMaster->repl_state = REPL_STATE_SEND_VC;
@@ -711,7 +771,7 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
                                          "min-vc", vc, NULL);
 
         serverLog(LL_NOTICE,
-                "Crdt Master: %s:%d, accept min-vc: %s", crdtMaster->masterhost, crdtMaster->masterport, vc);
+                "[CRDT] Master: %s:%d, send master my min-vc: %s", crdtMaster->masterhost, crdtMaster->masterport, vc);
         sdsfree(vc);
         if (err) goto write_error;
         sdsfree(err);
@@ -729,7 +789,7 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
                                 "REPLCONF capa: %s", err);
         } else {
             serverLog(LL_NOTICE,
-                      "Crdt Master: %s:%d, accept min-vc", crdtMaster->masterhost, crdtMaster->masterport);
+                      "[CRDT] Master: %s:%d, accept min-vc", crdtMaster->masterhost, crdtMaster->masterport);
         }
         sdsfree(err);
         crdtMaster->repl_state = REPL_STATE_SEND_PSYNC;
@@ -751,7 +811,7 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
 
     /* If reached this point, we should be in REPL_STATE_RECEIVE_PSYNC. */
     if (crdtMaster->repl_state != REPL_STATE_RECEIVE_PSYNC) {
-        serverLog(LL_WARNING,"crdtSyncWithMaster(): state machine error, "
+        serverLog(LL_WARNING,"[CRDT] crdtSyncWithMaster(): state machine error, "
                              "state should be RECEIVE_PSYNC but is %d",
                   crdtMaster->repl_state);
         goto error;
@@ -770,12 +830,12 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
      * uninstalling the read handler from the file descriptor. */
 
     if (psync_result == PSYNC_CONTINUE) {
-        serverLog(LL_NOTICE, "Crdt MASTER <-> SLAVE sync: Crdt Master accepted a Partial Resynchronization.");
+        serverLog(LL_NOTICE, "[CRDT] MASTER <-> SLAVE sync: Crdt Master accepted a Partial Resynchronization.");
         return;
     }
 
     if (psync_result == PSYNC_FULLRESYNC) {
-        serverLog(LL_NOTICE, "Crdt MASTER <-> SLAVE sync: Crdt Master accepted a Full Resynchronization.");
+        serverLog(LL_NOTICE, "[CRDT] MASTER <-> SLAVE sync: Crdt Master accepted a Full Resynchronization.");
         crdtReplicationCreateMasterClient(crdtMaster, fd, -1);
     }
 
@@ -783,11 +843,11 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
      * and the crdtMaster->master_replid and master_initial_offset are
      * already populated. */
     if (psync_result == PSYNC_NOT_SUPPORTED) {
-        serverLog(LL_NOTICE, "Crdt MASTER <-> SLAVE sync: PSYNC_NOT_SUPPORTED.");
+        serverLog(LL_NOTICE, "[CRDT] MASTER <-> SLAVE sync: PSYNC_NOT_SUPPORTED.");
         goto error;
 
     }
-    serverLog(LL_NOTICE, "[CRDT]Crdt Replication: Master Client create successfully: %lld", crdtMaster->master->gid);
+    serverLog(LL_NOTICE, "[CRDT] Replication: Master Client create successfully: %lld", crdtMaster->master->gid);
     crdtMaster->repl_state = REPL_STATE_TRANSFER;
     crdtMaster->repl_transfer_size = -1;
     crdtMaster->repl_transfer_read = 0;
@@ -803,7 +863,7 @@ error:
     return;
 
 write_error: /* Handle sendSynchronousCommand(SYNC_CMD_WRITE) errors. */
-    serverLog(LL_WARNING,"Sending command to master in replication handshake: %s", err);
+    serverLog(LL_WARNING,"[CRDT]Sending command to master in replication handshake: %s", err);
     sdsfree(err);
     goto error;
 }
@@ -867,7 +927,7 @@ void crdtCancelReplicationHandshake(long long gid) {
     if(masterInstance == NULL) {
         return;
     }
-    serverLog(LL_WARNING, "crdtCancelReplicationHandshake: %lld", gid);
+    serverLog(LL_WARNING, "[CRDT] crdtCancelReplicationHandshake: %lld", gid);
     if (masterInstance->repl_state == REPL_STATE_TRANSFER) {
         crdtReplicationAbortSyncTransfer(masterInstance);
         masterInstance->repl_state = REPL_STATE_CONNECT;
@@ -898,7 +958,7 @@ void crdtReplicationResurrectCachedMaster(CRDT_Master_Instance *crdtMaster, int 
     listAddNodeTail(server.clients,crdtMaster->master);
     if (aeCreateFileEvent(server.el, newfd, AE_READABLE,
                           readQueryFromClient, crdtMaster->master)) {
-        serverLog(LL_WARNING,"Error resurrecting the cached master, impossible to add the readable handler: %s", strerror(errno));
+        serverLog(LL_WARNING,"[CRDT]Error resurrecting the cached master, impossible to add the readable handler: %s", strerror(errno));
         freeClientAsync(crdtMaster->master); /* Close ASAP. */
     }
 
@@ -907,7 +967,7 @@ void crdtReplicationResurrectCachedMaster(CRDT_Master_Instance *crdtMaster, int 
     if (clientHasPendingReplies(crdtMaster->master)) {
         if (aeCreateFileEvent(server.el, newfd, AE_WRITABLE,
                               sendReplyToClient, crdtMaster->master)) {
-            serverLog(LL_WARNING,"Error resurrecting the cached master, impossible to add the writable handler: %s", strerror(errno));
+            serverLog(LL_WARNING,"[CRDT]Error resurrecting the cached master, impossible to add the writable handler: %s", strerror(errno));
             freeClientAsync(crdtMaster->master); /* Close ASAP. */
         }
     }
@@ -918,7 +978,7 @@ void crdtReplicationResurrectCachedMaster(CRDT_Master_Instance *crdtMaster, int 
 void crdtReplicationDiscardCachedMaster(CRDT_Master_Instance *crdtMaster) {
     if (crdtMaster->cached_master == NULL) return;
 
-    serverLog(LL_NOTICE,"Discarding previously cached master state.");
+    serverLog(LL_NOTICE,"[CRDT]Discarding previously cached master state.");
     crdtMaster->cached_master->flags &= ~CLIENT_CRDT_MASTER;
     freeClient(crdtMaster->cached_master);
     crdtMaster->cached_master = NULL;
@@ -947,7 +1007,7 @@ int startCrdtBgsaveForReplication(long long min_logic_time) {
     listIter li;
     listNode *ln;
 
-    serverLog(LL_NOTICE,"Starting BGSAVE for SYNC with target: Crdt Merge");
+    serverLog(LL_NOTICE,"[CRDT]Starting BGSAVE for SYNC with target: [CRDT] Merge");
 
     crdtRdbSaveInfo rsi, *rsiptr;
     rsiptr = crdtRdbPopulateSaveInfo(&rsi, min_logic_time);
@@ -1078,7 +1138,7 @@ void crdtReplicationCron(void) {
 
             /* Check if we should connect to a MASTER */
             if (crdtMaster->repl_state == REPL_STATE_CONNECT) {
-                serverLog(LL_NOTICE, "Crdt Connecting to MASTER %s:%d",
+                serverLog(LL_NOTICE, "[CRDT] Connecting to MASTER %s:%d",
                           crdtMaster->masterhost, crdtMaster->masterport);
                 if (crdtConnectWithMaster(crdtMaster) == C_OK) {
                     serverLog(LL_NOTICE, "[CRDT]MASTER <-> SLAVE sync started");
@@ -1153,7 +1213,7 @@ void crdtReplicationCron(void) {
             if (slave->flags & CLIENT_PRE_PSYNC) continue;
             if ((server.unixtime - slave->repl_ack_time) > crdtServer.repl_timeout)
             {
-                serverLog(LL_WARNING, "Disconnecting timedout slave: %s",
+                serverLog(LL_WARNING, "[CRDT] Disconnecting timedout slave: %s",
                           replicationGetSlaveName(slave));
                 if (slave->vectorClock) {
                     freeVectorClock(slave->vectorClock);
@@ -1195,7 +1255,7 @@ void crdtReplicationCron(void) {
             clearReplicationId2(&crdtServer);
             freeReplicationBacklog(&crdtServer);
             serverLog(LL_NOTICE,
-                      "Crdt Replication backlog freed after %d seconds "
+                      "[CRDT] Replication backlog freed after %d seconds "
                       "without connected slaves.",
                       (int) crdtServer.repl_backlog_time_limit);
         }
