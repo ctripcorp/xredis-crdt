@@ -1885,13 +1885,6 @@ int rdbSaveToSlavesSockets(void *rsi, struct redisServer *svr) {
         }
     }
 
-    if (svr == &crdtServer) {
-        crdtRdbSaveInfo *saveInfo = rsi;
-        saveInfo->vc = dupVectorClock(crdtServer.vectorClock);
-        saveInfo->repl_offset = getPsyncInitialOffset(svr);
-        memcpy(saveInfo->repl_id, crdtServer.replid, CONFIG_RUN_ID_SIZE);
-        saveInfo->repl_id[CONFIG_RUN_ID_SIZE] = '\0';
-    }
     /* Create the child process. */
     openChildInfoPipe(svr);
     start = ustime();
