@@ -165,8 +165,8 @@ void peerofCommand(client *c) {
     if ((getLongLongFromObjectOrReply(c, c->argv[1], &gid, NULL) != C_OK))
         return;
 
-    if (!strcasecmp(c->argv[1]->ptr,"no") &&
-        !strcasecmp(c->argv[2]->ptr,"one")) {
+    if (!strcasecmp(c->argv[2]->ptr,"no") &&
+        !strcasecmp(c->argv[3]->ptr,"one")) {
 
         if (getPeerMaster(gid)) {
             crdtReplicationUnsetMaster(gid);
@@ -176,6 +176,8 @@ void peerofCommand(client *c) {
                       gid, client);
             sdsfree(client);
         }
+        addReply(c, shared.ok);
+        return;
     }
 
     if ((getLongFromObjectOrReply(c, c->argv[3], &port, NULL) != C_OK))
