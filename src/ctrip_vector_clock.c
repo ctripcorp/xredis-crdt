@@ -199,7 +199,25 @@ void mergeVectorClockUnit(VectorClock *vc, VectorClockUnit *vcu) {
     original->logic_time = max(original->logic_time, vcu->logic_time);
 }
 
+int
+isVectorClockMonoIncr(VectorClock *current, VectorClock *future) {
+    if (current == NULL || future == NULL) {
+        return 0;
+    }
 
+    if(current->length > future->length) {
+        return 1;
+    }
+
+    for (int i = 0; i < current->length; i++) {
+        VectorClockUnit *vcu1 = &current->clocks[i];
+        VectorClockUnit *vcu2 = getVectorClockUnit(future, vcu1->gid);
+        if (vcu2 == NULL || vcu2->logic_time < vcu1->logic_time) {
+            return 0;
+        }
+    }
+    return 1;
+}
 
 
 #if defined(VECTOR_CLOCK_TEST_MAIN)
