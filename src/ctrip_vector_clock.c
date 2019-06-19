@@ -79,24 +79,23 @@ sdsToVectorClockUnit(sds vcUnitStr, VectorClockUnit *vcUnit);
 // "<gid>:<clock>;<gid>:<clock>"
 VectorClock*
 sdsToVectorClock(sds vcStr) {
-    int numVcUnits;
+    int numVcUnits, clockNum;
     sds *vcUnits = sdssplitlen(vcStr, sdslen(vcStr), VECTOR_CLOCK_SEPARATOR, 1, &numVcUnits);
     if(numVcUnits <= 0 || !vcUnits) {
         return NULL;
     }
+    clockNum = numVcUnits;
     sdstrim(vcUnits[numVcUnits-1], "");
     if(sdslen(vcUnits[numVcUnits-1]) < 1) {
-        numVcUnits--;
+        clockNum = numVcUnits - 1;
     }
-    VectorClock *result = newVectorClock(numVcUnits);
-    for(int i = 0; i < numVcUnits; i++) {
+    VectorClock *result = newVectorClock(clockNum);
+    for(int i = 0; i < clockNum; i++) {
         sdsToVectorClockUnit(vcUnits[i], &(result->clocks[i]));
     }
 
     //clean up
-    for(int i = 0; i < numVcUnits; i++) {
-        sdsfree(vcUnits[i]);
-    }
+    sdsfreesplitres(vcUnits, numVcUnits);
     return result;
 }
 
@@ -109,11 +108,10 @@ sdsToVectorClockUnit(sds vcUnitStr, VectorClockUnit *vcUnit) {
     }
     string2ll(vcUnits[0], sdslen(vcUnits[0]), &(vcUnit->gid));
     string2ll(vcUnits[1], sdslen(vcUnits[1]), &(vcUnit->logic_time));
-    goto cleanup;
-    cleanup:
+
+cleanup:
     {
-        int i;
-        for (i = 0; i < numElements; i++) sdsfree(vcUnits[i]);
+        sdsfreesplitres(vcUnits, numElements);
     }
 }
 
