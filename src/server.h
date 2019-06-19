@@ -1587,6 +1587,13 @@ void crdtReplicationCacheMaster(client *c);
 void crdtReplicationHandleMasterDisconnection(client *c);
 void incrLocalVcUnit(long delta);
 void crdtPsyncCommand(client *c);
+CRDT_Master_Instance *getPeerMaster(long long gid);
+void refreshVectorClock(client *c, sds vcStr);
+long long getMyGidLogicTime(VectorClock *vc);
+long long getMyLogicTime();
+void crdtReplicationUnsetMaster(long long gid);
+void debugCancelCrdt(client *c);
+
 
 /* Macro to initialize an IO context. Note that the 'ver' field is populated
  * inside rdb.c according to the version of the value to load. */
@@ -1859,6 +1866,8 @@ void clusterCron(void);
 void clusterPropagatePublish(robj *channel, robj *message);
 void migrateCloseTimedoutSockets(void);
 void clusterBeforeSleep(void);
+void createDumpPayload(rio *payload, robj *o);
+int verifyDumpPayload(unsigned char *p, size_t len);
 
 /* Sentinel */
 void initSentinelConfig(void);

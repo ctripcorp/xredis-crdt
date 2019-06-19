@@ -35,21 +35,17 @@
 
 #include "server.h"
 typedef struct crdtRdbSaveInfo {
-    /* Used saving and loading. */
     int repl_stream_db;  /* DB to select in server.master client. */
-
-    /* Used only loading. */
     int repl_id_is_set;  /* True if repl_id field is set. */
     char repl_id[CONFIG_RUN_ID_SIZE+1];     /* Replication ID. */
     long long repl_offset;                  /* Replication offset. */
-
     /* CRDT Specialized param */
-    VectorClock *vc;
+    long long logic_time;
 } crdtRdbSaveInfo;
-#define CRDT_RDB_SAVE_INFO_INIT {-1,0,"000000000000000000000000000000",-1,NULL}
+#define CRDT_RDB_SAVE_INFO_INIT {-1,0,"000000000000000000000000000000",-1,0}
 
 crdtRdbSaveInfo*
-crdtRdbPopulateSaveInfo(crdtRdbSaveInfo *rsi);
+crdtRdbPopulateSaveInfo(crdtRdbSaveInfo *rsi, long long min_logic_time);
 
 int
 crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi);
