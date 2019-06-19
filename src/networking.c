@@ -739,6 +739,7 @@ void unlinkClient(client *c) {
 
     /* If this is marked as current client unset it. */
     if (server.current_client == c) server.current_client = NULL;
+    if (crdtServer.current_client == c) crdtServer.current_client = NULL;
 
     /* Certain operations must be done only if the client has an active socket.
      * If the client was already unlinked or if it's a "fake client" the
@@ -859,9 +860,27 @@ void freeClient(client *c) {
         refreshGoodSlavesCount(&server);
     }
 
+    if (c->flags & CLIENT_CRDT_SLAVE) {
+        if (c->replstate == SLAVE_STATE_SEND_BULK) {
+            if (c->repldbfd != -1) close(c->repldbfd);
+            if (c->replpreamble) sdsfree(c->replpreamble);
+        }
+        list *l = crdtServer.slaves;
+        ln = listSearchKey(l,c);
+        serverAssert(ln != NULL);
+        listDelNode(l,ln);
+        /* We need to remember the time when we started to have zero
+         * attached slaves, as after some time we'll free the replication
+         * backlog. */
+        if (c->flags & CLIENT_CRDT_SLAVE && listLength(crdtServer.slaves) == 0)
+            crdtServer.repl_no_slaves_since = server.unixtime;
+        refreshGoodSlavesCount(&crdtServer);
+    }
+
     /* Master/slave cleanup Case 2:
      * we lost the connection with the master. */
     if (c->flags & CLIENT_MASTER) replicationHandleMasterDisconnection();
+    if (c->flags & CLIENT_CRDT_MASTER) crdtReplicationHandleMasterDisconnection(c);
 
     /* If this client was scheduled for async freeing we need to remove it
      * from the queue. */
@@ -979,7 +998,7 @@ int writeToClient(int fd, client *c, int handler_installed) {
          * as an interaction, since we always send REPLCONF ACK commands
          * that take some time to just fill the socket output buffer.
          * We just rely on data / pings received for timeout detection. */
-        if (!(c->flags & CLIENT_MASTER)) c->lastinteraction = server.unixtime;
+        if (!(c->flags & CLIENT_MASTER) && !(c->flags & CLIENT_CRDT_MASTER)) c->lastinteraction = server.unixtime;
     }
     if (!clientHasPendingReplies(c)) {
         c->sentlen = 0;
@@ -1348,7 +1367,9 @@ void processInputBuffer(client *c) {
         } else {
             /* Only reset the client when the command was executed. */
             if (processCommand(c) == C_OK) {
-                if ((c->flags & CLIENT_MASTER || c->flags & CLIENT_CRDT_MASTER) && !(c->flags & CLIENT_MULTI)) {
+                if ((c->flags & CLIENT_MASTER
+                    || ((c->flags & CLIENT_CRDT_MASTER) && getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED))
+                    && !(c->flags & CLIENT_MULTI)) {
                     /* Update the applied replication offset of our master. */
                     c->reploff = c->read_reploff - sdslen(c->querybuf);
                 }
@@ -1405,6 +1426,12 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
         }
     } else if (nread == 0) {
         serverLog(LL_VERBOSE, "Client closed connection");
+        if (c->flags & CLIENT_CRDT_SLAVE) {
+            serverLog(LL_NOTICE, "[CRDT]slave disconnect: %s:%d", c->slave_ip, c->slave_listening_port);
+        } else if (c->flags & CLIENT_CRDT_MASTER) {
+            CRDT_Master_Instance *masterInstance = getPeerMaster(c->gid);
+            serverLog(LL_NOTICE, "[CRDT]master disconnect: %s:%d", masterInstance->masterhost, masterInstance->masterport);
+        }
         freeClient(c);
         return;
     } else if (c->flags & CLIENT_MASTER) {
@@ -1417,7 +1444,14 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
 
     sdsIncrLen(c->querybuf,nread);
     c->lastinteraction = server.unixtime;
-    if ((c->flags & CLIENT_MASTER) || (c->flags & CLIENT_CRDT_MASTER)) c->read_reploff += nread;
+    if (c->flags & CLIENT_MASTER) {
+        c->read_reploff += nread;
+    } else if (c->flags & CLIENT_CRDT_MASTER) {
+        if (getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED)  {
+            serverLog(LL_NOTICE, "[CRDT] slave receive master commands");
+            c->read_reploff += nread;
+        }
+    }
     server.stat_net_input_bytes += nread;
     if (sdslen(c->querybuf) > server.client_max_querybuf_len) {
         sds ci = catClientInfoString(sdsempty(),c), bytes = sdsempty();
