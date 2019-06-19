@@ -1363,12 +1363,19 @@ void RM_IncrLocalVectorClock (long long delta) {
     incrLocalVcUnit(delta);
 }
 
-void RM_MergeVectorClock (RedisModuleCtx *ctx, long long gid, RedisModuleString *str) {
+int RM_IsVectorClockMonoIncr (RedisModuleString *current, RedisModuleString *future) {
+    VectorClock *vc1 = sdsToVectorClock(current->ptr);
+    VectorClock *vc2 = sdsToVectorClock(future->ptr);
+    int result = isVectorClockMonoIncr(vc1, vc2);
+    freeVectorClock(vc1);
+    freeVectorClock(vc2);
+    return result;
+}
+
+void RM_MergeVectorClock (long long gid, RedisModuleString *str) {
     sds vcStr = str->ptr;
     VectorClock *vc = sdsToVectorClock(vcStr);
     mergeVectorClockUnit(crdtServer.vectorClock, getVectorClockUnit(vc, gid));
-//    VectorClockUnit *crdtMasterClientVcu = getVectorClockUnit(ctx->client->vectorClock, gid);
-//    crdtMasterClientVcu->logic_time = max(getVectorClockUnit(vc, gid)->logic_time, crdtMasterClientVcu->logic_time);
     freeVectorClock(vc);
 }
 
@@ -4169,4 +4176,5 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(CurrentGid);
     REGISTER_API(IncrLocalVectorClock);
     REGISTER_API(MergeVectorClock);
+    REGISTER_API(IsVectorClockMonoIncr);
 }
