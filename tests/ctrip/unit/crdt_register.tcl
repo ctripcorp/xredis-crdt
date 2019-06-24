@@ -43,7 +43,7 @@ start_server {tags {"crdt-register"} overrides {crdt-gid 1} config {crdt.conf} m
         r CRDT.SET key val 1 [clock milliseconds] "1:100"
         r CRDT.SET key val2 2 [expr [clock milliseconds] - 2000] "1:101;2:100"
         r get key
-    } {val2}
+    } {val}
 
     test {"[crdt_register.tcl]Test Concurrent-3"} {
         r CRDT.SET key val 1 [clock milliseconds] "1:100"
