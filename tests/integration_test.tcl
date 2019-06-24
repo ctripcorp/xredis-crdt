@@ -13,7 +13,7 @@ source tests/support/util.tcl
 
 set ::all_tests {
     integration/replication
-integration/replication-2
+    integration/replication-2
     integration/replication-3
     integration/replication-4
     integration/replication-psync

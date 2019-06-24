@@ -2925,12 +2925,13 @@ sds genRedisInfoString(char *section) {
     int j;
     struct rusage self_ru, c_ru;
     unsigned long lol, bib;
-    int allsections = 0, defsections = 0;
+    int allsections = 0, defsections = 0, crdtsections = 0;
     int sections = 0;
 
     if (section == NULL) section = "default";
     allsections = strcasecmp(section,"all") == 0;
     defsections = strcasecmp(section,"default") == 0;
+    crdtsections = strcasecmp(section, "crdt") == 0;
 
     getrusage(RUSAGE_SELF, &self_ru);
     getrusage(RUSAGE_CHILDREN, &c_ru);
@@ -3368,6 +3369,160 @@ sds genRedisInfoString(char *section) {
             server.repl_backlog_size,
             server.repl_backlog_off,
             server.repl_backlog_histlen);
+    }
+
+    /* CRDT Persistence */
+    if (crdtsections || !strcasecmp(section,"crdt persistence")) {
+        if (sections++) info = sdscat(info,"\r\n");
+        info = sdscatprintf(info,
+                            "# CRDT Persistence\r\n"
+                            "rdb_bgsave_in_progress:%d\r\n"
+                            "rdb_last_save_time:%jd\r\n"
+                            "rdb_last_bgsave_status:%s\r\n"
+                            "rdb_last_bgsave_time_sec:%jd\r\n"
+                            "rdb_current_bgsave_time_sec:%jd\r\n"
+                            "rdb_last_cow_size:%zu\r\n",
+                            crdtServer.rdb_child_pid != -1,
+                            (intmax_t)crdtServer.lastsave,
+                            (crdtServer.lastbgsave_status == C_OK) ? "ok" : "err",
+                            (intmax_t)crdtServer.rdb_save_time_last,
+                            (intmax_t)((crdtServer.rdb_child_pid == -1) ?
+                                       -1 : time(NULL)-crdtServer.rdb_save_time_start),
+                            crdtServer.stat_rdb_cow_bytes);
+
+    }
+
+    /* CRDT Stats */
+    if (crdtsections || !strcasecmp(section,"crdt stats")) {
+        if (sections++) info = sdscat(info,"\r\n");
+        info = sdscatprintf(info,
+                            "# CRDT Stats\r\n"
+                            "sync_full:%lld\r\n"
+                            "sync_partial_ok:%lld\r\n"
+                            "sync_partial_err:%lld\r\n"
+                            "latest_fork_usec:%lld\r\n",
+                            crdtServer.stat_sync_full,
+                            crdtServer.stat_sync_partial_ok,
+                            crdtServer.stat_sync_partial_err,
+                            crdtServer.stat_fork_time);
+    }
+
+    /* CRDT Replication */
+    if (crdtsections || !strcasecmp(section,"crdt replication")) {
+        if (sections++) info = sdscat(info,"\r\n");
+        info = sdscatprintf(info,
+                            "# [CRDT] Replication\r\n");
+        if (listLength(crdtServer.crdtMasters)) {
+            listNode *ln;
+            listIter li;
+            int masterid = 0;
+
+            listRewind(crdtServer.crdtMasters,&li);
+            while((ln = listNext(&li))) {
+
+                CRDT_Master_Instance *masterInstance = listNodeValue(ln);
+
+
+                long long slave_repl_offset = 1;
+
+                if (masterInstance->master)
+                    slave_repl_offset = masterInstance->master->reploff;
+                else if (masterInstance->cached_master)
+                    slave_repl_offset = masterInstance->cached_master->reploff;
+
+
+                info = sdscatprintf(info,
+                                    "#Peer_Master_%d\r\n"
+                                    "peer_%d_host:%s\r\n"
+                                    "peer_%d_port:%d\r\n"
+                                    "peer_%d_link_status:%s\r\n"
+                                    "peer_%d_last_io_seconds_ago:%d\r\n"
+                                    "peer_%d_sync_in_progress:%d\r\n"
+                                    "peer_%d_repl_offset:%lld\r\n",
+                                    masterid,
+                                    masterid, masterInstance->masterhost,
+                                    masterid, masterInstance->masterport,
+                                    masterid, (masterInstance->repl_state == REPL_STATE_CONNECTED) ?
+                                    "up" : "down",
+                                    masterid, masterInstance->master ?
+                                    ((int) (server.unixtime - masterInstance->master->lastinteraction)) : -1,
+                                    masterid, masterInstance->repl_state == REPL_STATE_TRANSFER,
+                                    masterid, slave_repl_offset
+                );
+
+                if (masterInstance->repl_state != REPL_STATE_CONNECTED) {
+                    info = sdscatprintf(info,
+                                        "peer_%d_link_down_since_seconds:%jd\r\n",
+                                        masterid, (intmax_t) server.unixtime - masterInstance->repl_down_since);
+                }
+                masterid ++;
+            }
+
+        }
+
+        info = sdscatprintf(info,
+                            "connected_slaves:%lu\r\n",
+                            listLength(crdtServer.slaves));
+
+        if (listLength(crdtServer.slaves)) {
+            int slaveid = 0;
+            listNode *ln;
+            listIter li;
+
+            listRewind(crdtServer.slaves,&li);
+            while((ln = listNext(&li))) {
+                client *slave = listNodeValue(ln);
+                char *state = NULL;
+                char ip[NET_IP_STR_LEN], *slaveip = slave->slave_ip;
+                int port;
+                long lag = 0;
+
+                if (slaveip[0] == '\0') {
+                    if (anetPeerToString(slave->fd,ip,sizeof(ip),&port) == -1)
+                        continue;
+                    slaveip = ip;
+                }
+                switch(slave->replstate) {
+                    case SLAVE_STATE_WAIT_BGSAVE_START:
+                    case SLAVE_STATE_WAIT_BGSAVE_END:
+                        state = "wait_bgsave";
+                        break;
+                    case SLAVE_STATE_SEND_BULK:
+                        state = "send_bulk";
+                        break;
+                    case SLAVE_STATE_ONLINE:
+                        state = "online";
+                        break;
+                }
+                if (state == NULL) continue;
+                if (slave->replstate == SLAVE_STATE_ONLINE)
+                    lag = time(NULL) - slave->repl_ack_time;
+
+                info = sdscatprintf(info,
+                                    "slave%d:ip=%s,port=%d,state=%s,"
+                                    "offset=%lld,lag=%ld\r\n",
+                                    slaveid,slaveip,slave->slave_listening_port,state,
+                                    slave->repl_ack_off, lag);
+                slaveid++;
+            }
+        }
+        info = sdscatprintf(info,
+                            "master_replid:%s\r\n"
+                            "master_replid2:%s\r\n"
+                            "master_repl_offset:%lld\r\n"
+                            "second_repl_offset:%lld\r\n"
+                            "repl_backlog_active:%d\r\n"
+                            "repl_backlog_size:%lld\r\n"
+                            "repl_backlog_first_byte_offset:%lld\r\n"
+                            "repl_backlog_histlen:%lld\r\n",
+                            crdtServer.replid,
+                            crdtServer.replid2,
+                            crdtServer.master_repl_offset,
+                            crdtServer.second_replid_offset,
+                            crdtServer.repl_backlog != NULL,
+                            crdtServer.repl_backlog_size,
+                            crdtServer.repl_backlog_off,
+                            crdtServer.repl_backlog_histlen);
     }
 
     /* CPU */
