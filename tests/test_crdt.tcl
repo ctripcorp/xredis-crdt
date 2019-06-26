@@ -15,14 +15,14 @@ source tests/support/util.tcl
 
 set ::all_tests {
     ctrip/unit/crdt_register
-    ctrip/integration/replication
-    ctrip/integration/replication-1
-    ctrip/integration/replication-2
-    ctrip/integration/replication-3
-    ctrip/integration/replication-4
-    ctrip/integration/psync2
-    ctrip/integration/psync2-reg
-    ctrip/integration/replication-psync
+    ctrip/integration/master-slave/replication
+    ctrip/integration/master-slave/replication-1
+    ctrip/integration/master-slave/replication-2
+    ctrip/integration/master-slave/replication-3
+    ctrip/integration/master-slave/replication-4
+    ctrip/integration/master-slave/psync2
+    ctrip/integration/master-slave/psync2-reg
+    ctrip/integration/master-slave/replication-psync
 }
 
 
