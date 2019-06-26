@@ -501,8 +501,6 @@ typedef void (*moduleTypeRewriteFunc)(struct RedisModuleIO *io, struct redisObje
 typedef void (*moduleTypeDigestFunc)(struct RedisModuleDigest *digest, void *value);
 typedef size_t (*moduleTypeMemUsageFunc)(const void *value);
 typedef void (*moduleTypeFreeFunc)(void *value);
-typedef void *(*moduleTypeSerializeFunc)(void *value);
-typedef void *(*moduleTypeDeserializeFunc)(struct redisObject *value);
 /* The module type, which is referenced in each value of a given type, defines
  * the methods and links to the module exporting the type. */
 typedef struct RedisModuleType {
@@ -514,8 +512,6 @@ typedef struct RedisModuleType {
     moduleTypeMemUsageFunc mem_usage;
     moduleTypeDigestFunc digest;
     moduleTypeFreeFunc free;
-    moduleTypeSerializeFunc serialize;
-    moduleTypeDeserializeFunc deserialize;
     char name[10]; /* 9 bytes name + null term. Charset: A-Z a-z 0-9 _- */
 } moduleType;
 

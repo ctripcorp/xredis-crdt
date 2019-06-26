@@ -140,11 +140,10 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
             if (common->gid != crdtServer.crdt_gid) {
                 continue;
             }
-            VectorClock *vc = sdsToVectorClock(common->vectorClock);
+            VectorClock *vc = common->vectorClock;
             int result = getMyGidLogicTime(vc) - rsi->logic_time;
-            freeVectorClock(vc);
 
-            if (result < 0) {
+            if (result <= 0) {
                 continue;
             }
 
@@ -167,7 +166,9 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
             serverAssertWithInfo(NULL, &key, rioWriteBulkString(rdb,"CRDT.Merge",10));
             serverAssertWithInfo(NULL, &key, rioWriteBulkLongLong(rdb, crdtServer.crdt_gid));
             serverAssertWithInfo(NULL, &key, rioWriteBulkString(rdb, (&key)->ptr,sdslen((&key)->ptr)));
-            serverAssertWithInfo(NULL, &key, rioWriteBulkString(rdb, common->vectorClock, sdslen(common->vectorClock)));
+            sds vclockStr = vectorClockToSds(common->vectorClock);
+            serverAssertWithInfo(NULL, &key, rioWriteBulkString(rdb, vclockStr, sdslen(vclockStr)));
+            sdsfree(vclockStr);
             serverAssertWithInfo(NULL, &key, rioWriteBulkLongLong(rdb, common->timestamp));
             serverAssertWithInfo(NULL, &key, rioWriteBulkLongLong(rdb, ttl));
 

@@ -53,7 +53,7 @@ freeVectorClock(VectorClock *vc) {
     zfree(vc);
 }
 
-void
+VectorClock*
 addVectorClockUnit(VectorClock *vc, long long gid, long long logic_time) {
     int newLength = vc->length + 1;
     VectorClockUnit *vcus = zmalloc(sizeof(VectorClockUnit) * newLength);
@@ -64,6 +64,7 @@ addVectorClockUnit(VectorClock *vc, long long gid, long long logic_time) {
     vc->clocks[newLength-1].logic_time = logic_time;
     vc->length = newLength;
     sortVectorClock(vc);
+    return vc;
 }
 
 VectorClock*

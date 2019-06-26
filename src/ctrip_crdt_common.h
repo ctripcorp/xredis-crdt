@@ -36,15 +36,16 @@
 #define CRDT_MODULE_OBJECT_PREFIX "crdt"
 
 #include "sds.h"
+#include "ctrip_vector_clock.h"
 
 typedef void *(*crdtMergeFunc)(void *curVal, void *value);
 typedef struct CrdtCommon {
-    sds vectorClock;
-    long long gid;
+    int gid;
+    VectorClock *vectorClock;
     long long timestamp;
 
     //CRDT Merge Function
     crdtMergeFunc merge;
-} CrdtCommon;
+} __attribute__((packed, aligned(4))) CrdtCommon;
 
 #endif //REDIS_CTRIP_CRDT_COMMON_H
