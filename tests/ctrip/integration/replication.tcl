@@ -51,17 +51,18 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
     }
 }
 
-start_server {tags {"repl"} } {
+start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so}} {
     set A [srv 0 client]
     set A_host [srv 0 host]
     set A_port [srv 0 port]
-    start_server {overrides {crdt-gid 1} config {crdt.conf} module {crdt.so}} {
+    start_server {overrides {crdt-gid 1} module {crdt.so}} {
         set B [srv 0 client]
         set B_host [srv 0 host]
         set B_port [srv 0 port]
 
         test {Set instance A as slave of B} {
             $A slaveof $B_host $B_port
+            puts [$A role]
             wait_for_condition 50 100 {
                 [lindex [$A role] 0] eq {slave} &&
                 [string match {*master_link_status:up*} [$A info replication]]
@@ -128,3 +129,77 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
 }
 
 
+foreach dl {no yes} {
+    start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so}} {
+        set master [srv 0 client]
+        $master config set repl-diskless-sync $dl
+        set master_host [srv 0 host]
+        set master_port [srv 0 port]
+        set slaves {}
+        set load_handle0 [start_write_load $master_host $master_port 3]
+        set load_handle1 [start_write_load $master_host $master_port 5]
+        set load_handle2 [start_write_load $master_host $master_port 20]
+        set load_handle3 [start_write_load $master_host $master_port 8]
+        set load_handle4 [start_write_load $master_host $master_port 4]
+        start_server {overrides {crdt-gid 1} module {crdt.so}} {
+            lappend slaves [srv 0 client]
+            start_server {overrides {crdt-gid 1} module {crdt.so}} {
+                lappend slaves [srv 0 client]
+                start_server {overrides {crdt-gid 1} module {crdt.so}} {
+                    lappend slaves [srv 0 client]
+                    test "Connect multiple slaves at the same time (issue #141), diskless=$dl" {
+                        # Send SLAVEOF commands to slaves
+                        [lindex $slaves 0] slaveof $master_host $master_port
+                        [lindex $slaves 1] slaveof $master_host $master_port
+                        [lindex $slaves 2] slaveof $master_host $master_port
+
+                        # Wait for all the three slaves to reach the "online"
+                        # state from the POV of the master.
+                        set retry 500
+                        while {$retry} {
+                            set info [r -3 info]
+                            if {[string match {*slave0:*state=online*slave1:*state=online*slave2:*state=online*} $info]} {
+                                break
+                            } else {
+                                incr retry -1
+                                after 100
+                            }
+                        }
+                        if {$retry == 0} {
+                            error "assertion:Slaves not correctly synchronized"
+                        }
+
+                        # Wait that slaves acknowledge they are online so
+                        # we are sure that DBSIZE and DEBUG DIGEST will not
+                        # fail because of timing issues.
+                        wait_for_condition 500 100 {
+                            [lindex [[lindex $slaves 0] role] 3] eq {connected} &&
+                            [lindex [[lindex $slaves 1] role] 3] eq {connected} &&
+                            [lindex [[lindex $slaves 2] role] 3] eq {connected}
+                        } else {
+                            fail "Slaves still not connected after some time"
+                        }
+
+                        # Stop the write load
+                        stop_write_load $load_handle0
+                        stop_write_load $load_handle1
+                        stop_write_load $load_handle2
+                        stop_write_load $load_handle3
+                        stop_write_load $load_handle4
+
+                        # Make sure that slaves and master have same
+                        # number of keys
+                        wait_for_condition 500 100 {
+                            [$master dbsize] == [[lindex $slaves 0] dbsize] &&
+                            [$master dbsize] == [[lindex $slaves 1] dbsize] &&
+                            [$master dbsize] == [[lindex $slaves 2] dbsize]
+                        } else {
+                            fail "Different number of keys between masted and slave after too long time."
+                        }
+
+                    }
+               }
+            }
+        }
+    }
+}
