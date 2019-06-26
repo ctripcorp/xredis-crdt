@@ -178,14 +178,13 @@ void replicationFeedSlaves(struct redisServer *srv, list *slaves, int dictid, ro
     int j, len;
     char llstr[LONG_STR_SIZE];
 
-    if(srv == &server) {
-        /* If the instance is not a top level master, return ASAP: we'll just proxy
-         * the stream of data we receive from our master instead, in order to
-         * propagate *identical* replication stream. In this way this slave can
-         * advertise the same replication ID as the master (since it shares the
-         * master replication history and has the same backlog and offsets). */
-        if (srv->masterhost != NULL && !srv->repl_slave_repl_all) return;
-    }
+    /* If the instance is not a top level master, return ASAP: we'll just proxy
+     * the stream of data we receive from our master instead, in order to
+     * propagate *identical* replication stream. In this way this slave can
+     * advertise the same replication ID as the master (since it shares the
+     * master replication history and has the same backlog and offsets). */
+    if (server.masterhost != NULL && !server.repl_slave_repl_all) return;
+
 
     /* If there aren't slaves, and there is no backlog buffer to populate,
      * we can return ASAP. */

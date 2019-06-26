@@ -14,11 +14,9 @@ source tests/support/util.tcl
 
 
 set ::all_tests {
-    ctrip/unit/crdt_register
-    ctrip/integration/replication
-    ctrip/integration/replication-1
+
+
 }
-#ctrip/integration/psync2
 
 
 # Index to the next test to run in the ::all_tests list.
