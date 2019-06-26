@@ -5,12 +5,12 @@ proc log_file_matches {log pattern} {
     string match $pattern $content
 }
 
-start_server {tags {"repl"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
+start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
     set slave [srv 0 client]
     set slave_host [srv 0 host]
     set slave_port [srv 0 port]
     set slave_log [srv 0 stdout]
-    start_server {} {
+    start_server {overrides {crdt-gid 1} module {crdt.so}} {
         set master [srv 0 client]
         set master_host [srv 0 host]
         set master_port [srv 0 port]
@@ -51,11 +51,11 @@ start_server {tags {"repl"} overrides {crdt-gid 1} config {crdt.conf} module {cr
     }
 }
 
-start_server {tags {"repl"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
+start_server {tags {"repl"} } {
     set A [srv 0 client]
     set A_host [srv 0 host]
     set A_port [srv 0 port]
-    start_server {} {
+    start_server {overrides {crdt-gid 1} config {crdt.conf} module {crdt.so}} {
         set B [srv 0 client]
         set B_host [srv 0 host]
         set B_port [srv 0 port]
@@ -69,63 +69,13 @@ start_server {tags {"repl"} overrides {crdt-gid 1} config {crdt.conf} module {cr
                 fail "Can't turn the instance into a slave"
             }
         }
-
-        test {BRPOPLPUSH replication, when blocking against empty list} {
-            set rd [redis_deferring_client]
-            $rd brpoplpush a b 5
-            r lpush a foo
-            wait_for_condition 50 100 {
-                [$A debug digest] eq [$B debug digest]
-            } else {
-                fail "Master and slave have different digest: [$A debug digest] VS [$B debug digest]"
-            }
-        }
-
-        test {BRPOPLPUSH replication, list exists} {
-            set rd [redis_deferring_client]
-            r lpush c 1
-            r lpush c 2
-            r lpush c 3
-            $rd brpoplpush c d 5
-            after 1000
-            assert_equal [$A debug digest] [$B debug digest]
-        }
-
-        test {BLPOP followed by role change, issue #2473} {
-            set rd [redis_deferring_client]
-            $rd blpop foo 0 ; # Block while B is a master
-
-            # Turn B into master of A
-            $A slaveof no one
-            $B slaveof $A_host $A_port
-            wait_for_condition 50 100 {
-                [lindex [$B role] 0] eq {slave} &&
-                [string match {*master_link_status:up*} [$B info replication]]
-            } else {
-                fail "Can't turn the instance into a slave"
-            }
-
-            # Push elements into the "foo" list of the new slave.
-            # If the client is still attached to the instance, we'll get
-            # a desync between the two instances.
-            $A rpush foo a b c
-            after 100
-
-            wait_for_condition 50 100 {
-                [$A debug digest] eq [$B debug digest] &&
-                [$A lrange foo 0 -1] eq {a b c} &&
-                [$B lrange foo 0 -1] eq {a b c}
-            } else {
-                fail "Master and slave have different digest: [$A debug digest] VS [$B debug digest]"
-            }
-        }
     }
 }
 
-start_server {tags {"repl"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
+start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
     r set mykey foo
 
-    start_server {overrides {crdt-gid 1} config {crdt.conf} module {crdt.so}} {
+    start_server {overrides {crdt-gid 1} module {crdt.so}} {
         test {Second server should have role master at first} {
             s role
         } {master}
@@ -158,12 +108,6 @@ start_server {tags {"repl"} overrides {crdt-gid 1} config {crdt.conf} module {cr
             }
         }
 
-        test {FLUSHALL should replicate} {
-            r -1 flushall
-            if {$::valgrind} {after 2000}
-            list [r -1 dbsize] [r 0 dbsize]
-        } {0 0}
-
         test {ROLE in master reports master with a slave} {
             set res [r -1 role]
             lassign $res role offset slaves
@@ -183,86 +127,4 @@ start_server {tags {"repl"} overrides {crdt-gid 1} config {crdt.conf} module {cr
     }
 }
 
-foreach dl {no yes} {
-    start_server {tags {"repl"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so}} {
-        set master [srv 0 client]
-        $master config set repl-diskless-sync $dl
-        set master_host [srv 0 host]
-        set master_port [srv 0 port]
-        set slaves {}
-        set load_handle0 [start_write_load $master_host $master_port 3]
-        set load_handle1 [start_write_load $master_host $master_port 5]
-        set load_handle2 [start_write_load $master_host $master_port 20]
-        set load_handle3 [start_write_load $master_host $master_port 8]
-        set load_handle4 [start_write_load $master_host $master_port 4]
-        start_server {} {
-            lappend slaves [srv 0 client]
-            start_server {} {
-                lappend slaves [srv 0 client]
-                start_server {} {
-                    lappend slaves [srv 0 client]
-                    test "Connect multiple slaves at the same time (issue #141), diskless=$dl" {
-                        # Send SLAVEOF commands to slaves
-                        [lindex $slaves 0] slaveof $master_host $master_port
-                        [lindex $slaves 1] slaveof $master_host $master_port
-                        [lindex $slaves 2] slaveof $master_host $master_port
 
-                        # Wait for all the three slaves to reach the "online"
-                        # state from the POV of the master.
-                        set retry 500
-                        while {$retry} {
-                            set info [r -3 info]
-                            if {[string match {*slave0:*state=online*slave1:*state=online*slave2:*state=online*} $info]} {
-                                break
-                            } else {
-                                incr retry -1
-                                after 100
-                            }
-                        }
-                        if {$retry == 0} {
-                            error "assertion:Slaves not correctly synchronized"
-                        }
-
-                        # Wait that slaves acknowledge they are online so
-                        # we are sure that DBSIZE and DEBUG DIGEST will not
-                        # fail because of timing issues.
-                        wait_for_condition 500 100 {
-                            [lindex [[lindex $slaves 0] role] 3] eq {connected} &&
-                            [lindex [[lindex $slaves 1] role] 3] eq {connected} &&
-                            [lindex [[lindex $slaves 2] role] 3] eq {connected}
-                        } else {
-                            fail "Slaves still not connected after some time"
-                        }
-
-                        # Stop the write load
-                        stop_write_load $load_handle0
-                        stop_write_load $load_handle1
-                        stop_write_load $load_handle2
-                        stop_write_load $load_handle3
-                        stop_write_load $load_handle4
-
-                        # Make sure that slaves and master have same
-                        # number of keys
-                        wait_for_condition 500 100 {
-                            [$master dbsize] == [[lindex $slaves 0] dbsize] &&
-                            [$master dbsize] == [[lindex $slaves 1] dbsize] &&
-                            [$master dbsize] == [[lindex $slaves 2] dbsize]
-                        } else {
-                            fail "Different number of keys between masted and slave after too long time."
-                        }
-
-                        # Check digests
-                        set digest [$master debug digest]
-                        set digest0 [[lindex $slaves 0] debug digest]
-                        set digest1 [[lindex $slaves 1] debug digest]
-                        set digest2 [[lindex $slaves 2] debug digest]
-                        assert {$digest ne 0000000000000000000000000000000000000000}
-                        assert {$digest eq $digest0}
-                        assert {$digest eq $digest1}
-                        assert {$digest eq $digest2}
-                    }
-               }
-            }
-        }
-    }
-}

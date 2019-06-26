@@ -1,8 +1,8 @@
-start_server {tags {"psync2"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
-start_server {overrides {crdt-gid 1} config {crdt.conf} module {crdt.so}} {
-start_server {overrides {crdt-gid 1} config {crdt.conf} module {crdt.so}} {
-start_server {overrides {crdt-gid 1} config {crdt.conf} module {crdt.so}} {
-start_server {overrides {crdt-gid 1} config {crdt.conf} module {crdt.so}} {
+start_server {tags {"psync2"} overrides {crdt-gid 1} module {crdt.so} } {
+start_server {overrides {crdt-gid 1} module {crdt.so}} {
+start_server {overrides {crdt-gid 1} module {crdt.so}} {
+start_server {overrides {crdt-gid 1} module {crdt.so}} {
+start_server {overrides {crdt-gid 1} module {crdt.so}} {
     set master_id 0                 ; # Current master
     set start_time [clock seconds]  ; # Test start time
     set counter_value 0             ; # Current value of the Redis counter "x"
