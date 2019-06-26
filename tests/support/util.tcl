@@ -252,6 +252,36 @@ proc createComplexDataset {r ops {opt {}}} {
     }
 }
 
+proc createAllStringDataset {r ops {opt {}}} {
+    for {set j 0} {$j < $ops} {incr j} {
+        set k [randomKey]
+        set k2 [randomKey]
+        set f [randomValue]
+        set v [randomValue]
+
+        if {[lsearch -exact $opt useexpire] != -1} {
+            if {rand() < 0.1} {
+                {*}$r expire [randomKey] [randomInt 2]
+            }
+        }
+
+        randpath {
+            set d [expr {rand()}]
+        } {
+            set d [expr {rand()}]
+        } {
+            set d [expr {rand()}]
+        } {
+            set d [expr {rand()}]
+        } {
+            set d [expr {rand()}]
+        } {
+            randpath {set d +inf} {set d -inf}
+        }
+        {*}$r set $k $v
+    }
+}
+
 proc formatCommand {args} {
     set cmd "*[llength $args]\r\n"
     foreach a $args {
