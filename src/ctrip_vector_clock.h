@@ -46,12 +46,12 @@
 typedef struct VectorClockUnit {
     long long gid;
     long long logic_time;
-}VectorClockUnit;
+}__attribute__((packed, aligned(4))) VectorClockUnit;
 
 typedef struct VectorClock {
     VectorClockUnit *clocks;
     int length;
-}VectorClock;
+}__attribute__((packed, aligned(4)))VectorClock;
 
 /**------------------------Vector Clock Lifecycle--------------------------------------*/
 VectorClock*
@@ -60,7 +60,7 @@ newVectorClock(int numVcUnits);
 void
 freeVectorClock(VectorClock *vc);
 
-void
+VectorClock*
 addVectorClockUnit(VectorClock *vc, long long gid, long long logic_time);
 
 VectorClock*
