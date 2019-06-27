@@ -885,9 +885,6 @@ typedef struct CRDT_Master_Instance {
     client *master;     /* current crdt master as I'm acting as a slave */
     client *cached_master; /* Cached master to be reused for CRDT.PSYNC. */
     int repl_state;          /* Replication status if the instance is acting as a slave */
-    off_t repl_transfer_size; /* Size of RDB to read from master during sync. */
-    off_t repl_transfer_read; /* Amount of RDB read from master during sync. */
-    off_t repl_transfer_last_fsync_off; /* Offset when we fsync-ed last time. */
     int repl_transfer_s;     /* Slave -> Master SYNC socket */
     time_t repl_transfer_lastio; /* Unix time of the latest read, for timeout */
     int repl_serve_stale_data; /* Serve stale data when link is down? */
@@ -1589,6 +1586,7 @@ long long getMyGidLogicTime(VectorClock *vc);
 long long getMyLogicTime();
 void crdtReplicationUnsetMaster(long long gid);
 void debugCancelCrdt(client *c);
+void crdtRoleCommand(client *c);
 
 
 /* Macro to initialize an IO context. Note that the 'ver' field is populated

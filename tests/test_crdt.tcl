@@ -14,6 +14,10 @@ source tests/support/util.tcl
 
 
 set ::all_tests {
+    ctrip/integration/master-master/replication
+}
+
+set ::temp_tests {
     ctrip/unit/crdt_register
     ctrip/integration/master-slave/replication
     ctrip/integration/master-slave/replication-1

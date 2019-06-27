@@ -53,6 +53,12 @@ proc status {r property} {
     }
 }
 
+proc crdt_status {r property} {
+    if {[regexp "\r\n$property:(.*?)\r\n" [{*}$r info crdt] _ value]} {
+        set _ $value
+    }
+}
+
 proc waitForBgsave r {
     while 1 {
         if {[status r rdb_bgsave_in_progress] eq 1} {
@@ -84,6 +90,16 @@ proc waitForBgrewriteaof r {
 proc wait_for_sync r {
     while 1 {
         if {[status $r master_link_status] eq "down"} {
+            after 10
+        } else {
+            break
+        }
+    }
+}
+
+proc wait_for_peer_sync r {
+    while 1 {
+        if {[crdt_status $r peer_0_link_status] eq "down"} {
             after 10
         } else {
             break
