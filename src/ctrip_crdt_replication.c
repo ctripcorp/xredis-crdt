@@ -84,31 +84,6 @@ void freePeerMaster(CRDT_Master_Instance *masterInstance) {
 
 }
 
-void debugCancelCrdt(client *c) {
-    if (c->argc != 3) {
-        addReply(c, shared.syntaxerr);
-        return;
-    }
-
-    if (strcasecmp(c->argv[2]->ptr,"chenzhu") != 0) {
-        addReply(c, shared.syntaxerr);
-        return;
-    }
-    long long gid;
-    if ((getLongLongFromObjectOrReply(c, c->argv[1], &gid, NULL) != C_OK)) {
-        addReply(c, shared.syntaxerr);
-        return;
-    }
-    CRDT_Master_Instance *masterInstance;
-    if((masterInstance = getPeerMaster(gid)) == NULL) {
-        addReply(c, shared.syntaxerr);
-        return;
-    }
-
-    freeClient(masterInstance->master);
-    addReply(c, shared.ok);
-}
-
 CRDT_Master_Instance *getPeerMaster(long long gid) {
     listIter li;
     listNode *ln;
@@ -126,11 +101,11 @@ CRDT_Master_Instance *getPeerMaster(long long gid) {
 }
 
 void refreshVectorClock(client *c, sds vcStr) {
-    c->vectorClock = sdsToVectorClock(vcStr);
-    CRDT_Master_Instance *masterInstance = getPeerMaster(c->gid);
-    if (masterInstance) {
-        masterInstance->vectorClock = dupVectorClock(c->vectorClock);
-    }
+//    c->vectorClock = sdsToVectorClock(vcStr);
+//    CRDT_Master_Instance *masterInstance = getPeerMaster(c->gid);
+//    if (masterInstance) {
+//        masterInstance->vectorClock = dupVectorClock(c->vectorClock);
+//    }
 }
 
 void crdtReplicationSendAck(CRDT_Master_Instance *masterInstance) {
@@ -369,13 +344,13 @@ char *crdtSendSynchronousCommand(int flags, int fd, ...) {
     if (flags & SYNC_CMD_READ) {
         char buf[256];
 
-        if (syncReadLine(fd,buf,sizeof(buf),server.repl_syncio_timeout*1000)
+        if (syncReadLine(fd,buf,sizeof(buf),crdtServer.repl_syncio_timeout*1000)
             == -1)
         {
             return sdscatprintf(sdsempty(),"-Reading from master: %s",
                                 strerror(errno));
         }
-        server.repl_transfer_lastio = server.unixtime;
+        crdtServer.repl_transfer_lastio = server.unixtime;
         return sdsnew(buf);
     }
     return NULL;
@@ -849,9 +824,6 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
     }
     serverLog(LL_NOTICE, "[CRDT] Replication: Master Client create successfully: %lld", crdtMaster->master->gid);
     crdtMaster->repl_state = REPL_STATE_TRANSFER;
-    crdtMaster->repl_transfer_size = -1;
-    crdtMaster->repl_transfer_read = 0;
-    crdtMaster->repl_transfer_last_fsync_off = 0;
     crdtMaster->repl_transfer_lastio = server.unixtime;
     return;
 
@@ -1106,7 +1078,7 @@ void crdtReplicationCron(void) {
     listNode *ln;
     /* Non blocking connection timeout? */
     /**!!!!Important!!!!!
-     * do connect crdt master if and only if I'm NOT a SLAVE here
+     * Connect crdt master if and only if I'm NOT a SLAVE here
      * SLAVE SHOULD RECEIVE DATA from their masters*/
     if (!(server.masterhost) && !(server.master)) {
         listRewind(crdtServer.crdtMasters, &li);
@@ -1184,21 +1156,6 @@ void crdtReplicationCron(void) {
      * last interaction timer preventing a timeout. In this case we ignore the
      * ping period and refresh the connection once per second since certain
      * timeouts are set at a few seconds (example: PSYNC response). */
-//    listRewind(crdtServer.slaves,&li);
-//    while((ln = listNext(&li))) {
-//        client *slave = ln->value;
-//
-//        int is_presync =
-//                (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START ||
-//                 (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_END &&
-//                  crdtServer.rdb_child_type != RDB_CHILD_TYPE_SOCKET));
-//
-//        if (is_presync) {
-//            if (write(slave->fd, "\n", 1) == -1) {
-//                /* Don't worry about socket errors, it's just a ping. */
-//            }
-//        }
-//    }
 
     /* Disconnect timedout slaves. */
     if (listLength(crdtServer.slaves)) {
@@ -1297,4 +1254,90 @@ void crdtReplicationCron(void) {
     /* Refresh the number of slaves with lag <= min-slaves-max-lag. */
     refreshGoodSlavesCount(&crdtServer);
     replication_cron_loops++; /* Incremented with frequency 1 HZ. */
+}
+
+/*------------------------CRDT Info Commands-------------*/
+void debugCancelCrdt(client *c) {
+    if (c->argc != 3) {
+        addReply(c, shared.syntaxerr);
+        return;
+    }
+
+    if (strcasecmp(c->argv[2]->ptr,"chenzhu") != 0) {
+        addReply(c, shared.syntaxerr);
+        return;
+    }
+    long long gid;
+    if ((getLongLongFromObjectOrReply(c, c->argv[1], &gid, NULL) != C_OK)) {
+        addReply(c, shared.syntaxerr);
+        return;
+    }
+    CRDT_Master_Instance *masterInstance;
+    if((masterInstance = getPeerMaster(gid)) == NULL) {
+        addReply(c, shared.syntaxerr);
+        return;
+    }
+
+    freeClient(masterInstance->master);
+    addReply(c, shared.ok);
+}
+
+void crdtRoleCommand(client *c) {
+
+    long long gid;
+    if ((getLongLongFromObjectOrReply(c, c->argv[2], &gid, NULL) != C_OK))
+        return;
+
+    if (!strcasecmp(c->argv[1]->ptr,"master")) {
+        listIter li;
+        listNode *ln;
+        void *mbcount;
+        int slaves = 0;
+
+        addReplyMultiBulkLen(c,3);
+        addReplyBulkCBuffer(c,"master",6);
+        addReplyLongLong(c,crdtServer.master_repl_offset);
+        mbcount = addDeferredMultiBulkLength(c);
+        listRewind(crdtServer.slaves,&li);
+        while((ln = listNext(&li))) {
+            client *slave = ln->value;
+            char ip[NET_IP_STR_LEN], *slaveip = slave->slave_ip;
+
+            if (slaveip[0] == '\0') {
+                if (anetPeerToString(slave->fd,ip,sizeof(ip),NULL) == -1)
+                    continue;
+                slaveip = ip;
+            }
+            if (slave->replstate != SLAVE_STATE_ONLINE) continue;
+            addReplyMultiBulkLen(c,3);
+            addReplyBulkCString(c,slaveip);
+            addReplyBulkLongLong(c,slave->slave_listening_port);
+            addReplyBulkLongLong(c,slave->repl_ack_off);
+            slaves++;
+        }
+        setDeferredMultiBulkLength(c,mbcount,slaves);
+    }
+    else if (!strcasecmp(c->argv[1]->ptr,"slave")) {
+        CRDT_Master_Instance *masterInstance = getPeerMaster(gid);
+        char *slavestate = NULL;
+
+        addReplyMultiBulkLen(c,5);
+        addReplyBulkCBuffer(c,"slave",5);
+        addReplyBulkCString(c,masterInstance->masterhost);
+        addReplyLongLong(c,masterInstance->masterport);
+        if (crdtSlaveIsInHandshakeState(masterInstance)) {
+            slavestate = "handshake";
+        } else {
+            switch(masterInstance->repl_state) {
+                case REPL_STATE_NONE: slavestate = "none"; break;
+                case REPL_STATE_CONNECT: slavestate = "connect"; break;
+                case REPL_STATE_CONNECTING: slavestate = "connecting"; break;
+                case REPL_STATE_TRANSFER: slavestate = "sync"; break;
+                case REPL_STATE_CONNECTED: slavestate = "connected"; break;
+                default: slavestate = "unknown"; break;
+            }
+        }
+        addReplyBulkCString(c,slavestate);
+        addReplyLongLong(c,masterInstance->master ? masterInstance->master->reploff : -1);
+    }
 }

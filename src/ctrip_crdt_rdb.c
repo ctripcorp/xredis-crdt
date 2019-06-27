@@ -230,11 +230,12 @@ crdtMergeCommand(client *c) {
         moduleValue *cmv = currentVal->ptr;
         // call merge function, and store the merged val
         mergedVal = common->merge(cmv->value, mv->value);
+        currentVal = NULL;
         dbDelete(c->db, key);
     } else {
         mergedVal = common->merge(NULL, mv->value);
     }
-
+    decrRefCount(obj);
     /* Create the key and set the TTL if any */
     dbAdd(c->db, key, createModuleObject(mt, mergedVal));
 
