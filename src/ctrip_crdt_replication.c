@@ -101,11 +101,12 @@ CRDT_Master_Instance *getPeerMaster(long long gid) {
 }
 
 void refreshVectorClock(client *c, sds vcStr) {
-//    c->vectorClock = sdsToVectorClock(vcStr);
-//    CRDT_Master_Instance *masterInstance = getPeerMaster(c->gid);
-//    if (masterInstance) {
-//        masterInstance->vectorClock = dupVectorClock(c->vectorClock);
-//    }
+    VectorClock *vclock = sdsToVectorClock(vcStr);
+    if(c->vectorClock) {
+        freeVectorClock(c->vectorClock);
+        c->vectorClock = NULL;
+    }
+    c->vectorClock = vclock;
 }
 
 void crdtReplicationSendAck(CRDT_Master_Instance *masterInstance) {
@@ -116,6 +117,13 @@ void crdtReplicationSendAck(CRDT_Master_Instance *masterInstance) {
         addReplyMultiBulkLen(c,3);
         addReplyBulkCString(c,"CRDT.REPLCONF");
         addReplyBulkCString(c,"ACK-VC");
+        sds vclockSds = vectorClockToSds(crdtServer.vectorClock);
+        addReplyBulkCBuffer(c, vclockSds, sdslen(vclockSds));
+        sdsfree(vclockSds);
+
+        addReplyMultiBulkLen(c,3);
+        addReplyBulkCString(c,"CRDT.REPLCONF");
+        addReplyBulkCString(c,"ACK");
         addReplyBulkLongLong(c,c->reploff);
         c->flags &= ~CLIENT_MASTER_FORCE_REPLY;
     }
