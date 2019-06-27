@@ -893,6 +893,10 @@ void freeClient(client *c) {
     /* Release other dynamically allocated client structure fields,
      * and finally release the client structure itself. */
     if (c->name) decrRefCount(c->name);
+    if(c->vectorClock) {
+        freeVectorClock(c->vectorClock);
+        c->vectorClock = NULL;
+    }
     zfree(c->argv);
     freeClientMultiState(c);
     sdsfree(c->peerid);

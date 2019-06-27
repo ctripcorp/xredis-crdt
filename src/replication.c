@@ -901,6 +901,7 @@ void replconfCommand(client *c) {
             return;
         }  // minimum vector clock I could handle with
         else if (!strcasecmp(c->argv[j]->ptr,"min-vc")) {
+            serverAssertWithInfo(c, NULL, sdsEncodedObject(c->argv[j+1]));
             refreshVectorClock(c, c->argv[j+1]->ptr);
         }
         else if (!strcasecmp(c->argv[j]->ptr,"ack-vc")) {
