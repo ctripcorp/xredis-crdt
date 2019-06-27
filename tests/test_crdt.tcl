@@ -14,7 +14,21 @@ source tests/support/util.tcl
 
 
 set ::all_tests {
+    ctrip/unit/crdt_register
+    ctrip/integration/master-slave/replication
+    ctrip/integration/master-slave/replication-1
+    ctrip/integration/master-slave/replication-2
+    ctrip/integration/master-slave/replication-3
+    ctrip/integration/master-slave/replication-4
+    ctrip/integration/master-slave/psync2
+    ctrip/integration/master-slave/psync2-reg
+    ctrip/integration/master-slave/replication-psync
+
     ctrip/integration/master-master/replication
+    ctrip/integration/master-master/full_sync
+    ctrip/integration/master-master/full_sync-2
+    ctrip/integration/master-master/partial-sync
+    ctrip/integration/master-master/replication-2
 }
 
 set ::temp_tests {
@@ -27,6 +41,11 @@ set ::temp_tests {
     ctrip/integration/master-slave/psync2
     ctrip/integration/master-slave/psync2-reg
     ctrip/integration/master-slave/replication-psync
+
+    ctrip/integration/master-master/replication
+    ctrip/integration/master-master/full_sync
+    ctrip/integration/master-master/full_sync-2
+    ctrip/integration/master-master/partial-sync
 }
 
 
