@@ -3201,7 +3201,7 @@ numargserr:
     if (defsections || allsections || !strcasecmp(section,section_name)) { \
         sds redissection; \
         if (sections++) info = sdscat(info,"\r\n"); \
-        redissection = genRedisInfoString(section_name); \
+        redissection = genRedisInfoString(section_name, &server); \
         info = sdscatlen(info,redissection,sdslen(redissection)); \
         sdsfree(redissection); \
     } \

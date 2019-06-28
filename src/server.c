@@ -315,6 +315,7 @@ struct redisCommand redisCommandTable[] = {
     {"crdt.merge_end",crdtMergeEndCommand,-1,"ars",0,NULL,0,0,0,0,0},
     {"crdt.replconf",replconfCommand,-1,"aslt",0,NULL,0,0,0,0,0},
     {"crdt.role",crdtRoleCommand,3,"lst",0,NULL,0,0,0,0,0},
+    {"crdt.info",crdtinfoCommand,-1,"lt",0,NULL,0,0,0,0,0},
     {"peerof",peerofCommand,4,"ast",0,NULL,0,0,0,0,0},
     {"debugCancelCrdt",debugCancelCrdt,3,"ast",0,NULL,0,0,0,0,0}
 };
@@ -2920,19 +2921,18 @@ void bytesToHuman(char *s, unsigned long long n) {
 /* Create the string returned by the INFO command. This is decoupled
  * by the INFO command itself as we need to report the same information
  * on memory corruption problems. */
-sds genRedisInfoString(char *section) {
+sds genRedisInfoString(char *section, struct redisServer *srv) {
     sds info = sdsempty();
     time_t uptime = server.unixtime-server.stat_starttime;
     int j;
     struct rusage self_ru, c_ru;
     unsigned long lol, bib;
-    int allsections = 0, defsections = 0, crdtsections = 0;
+    int allsections = 0, defsections = 0;
     int sections = 0;
 
     if (section == NULL) section = "default";
     allsections = strcasecmp(section,"all") == 0;
     defsections = strcasecmp(section,"default") == 0;
-    crdtsections = strcasecmp(section, "crdt") == 0;
 
     getrusage(RUSAGE_SELF, &self_ru);
     getrusage(RUSAGE_CHILDREN, &c_ru);
@@ -3015,7 +3015,7 @@ sds genRedisInfoString(char *section) {
             "client_longest_output_list:%lu\r\n"
             "client_biggest_input_buf:%lu\r\n"
             "blocked_clients:%d\r\n",
-            listLength(server.clients)-listLength(server.slaves),
+            listLength(server.clients)-listLength(server.slaves) - listLength(crdtServer.slaves),
             lol, bib,
             server.bpop_blocked_clients);
     }
@@ -3120,24 +3120,24 @@ sds genRedisInfoString(char *section) {
             "aof_last_bgrewrite_status:%s\r\n"
             "aof_last_write_status:%s\r\n"
             "aof_last_cow_size:%zu\r\n",
-            server.loading,
-            server.dirty,
-            server.rdb_child_pid != -1,
-            (intmax_t)server.lastsave,
-            (server.lastbgsave_status == C_OK) ? "ok" : "err",
-            (intmax_t)server.rdb_save_time_last,
-            (intmax_t)((server.rdb_child_pid == -1) ?
-                -1 : time(NULL)-server.rdb_save_time_start),
-            server.stat_rdb_cow_bytes,
-            server.aof_state != AOF_OFF,
-            server.aof_child_pid != -1,
-            server.aof_rewrite_scheduled,
-            (intmax_t)server.aof_rewrite_time_last,
-            (intmax_t)((server.aof_child_pid == -1) ?
-                -1 : time(NULL)-server.aof_rewrite_time_start),
-            (server.aof_lastbgrewrite_status == C_OK) ? "ok" : "err",
-            (server.aof_last_write_status == C_OK) ? "ok" : "err",
-            server.stat_aof_cow_bytes);
+            srv->loading,
+            srv->dirty,
+            srv->rdb_child_pid != -1,
+            (intmax_t)srv->lastsave,
+            (srv->lastbgsave_status == C_OK) ? "ok" : "err",
+            (intmax_t)srv->rdb_save_time_last,
+            (intmax_t)((srv->rdb_child_pid == -1) ?
+                -1 : time(NULL)-srv->rdb_save_time_start),
+            srv->stat_rdb_cow_bytes,
+            srv->aof_state != AOF_OFF,
+            srv->aof_child_pid != -1,
+            srv->aof_rewrite_scheduled,
+            (intmax_t)srv->aof_rewrite_time_last,
+            (intmax_t)((srv->aof_child_pid == -1) ?
+                -1 : time(NULL)-srv->aof_rewrite_time_start),
+            (srv->aof_lastbgrewrite_status == C_OK) ? "ok" : "err",
+            (srv->aof_last_write_status == C_OK) ? "ok" : "err",
+            srv->stat_aof_cow_bytes);
 
         if (server.aof_state != AOF_OFF) {
             info = sdscatprintf(info,
@@ -3190,7 +3190,7 @@ sds genRedisInfoString(char *section) {
     }
 
     /* Stats */
-    if (allsections || defsections || !strcasecmp(section,"stats")) {
+    if ((srv == &server) && (allsections || defsections || !strcasecmp(section,"stats"))) {
         if (sections++) info = sdscat(info,"\r\n");
         info = sdscatprintf(info,
             "# Stats\r\n"
@@ -3245,7 +3245,7 @@ sds genRedisInfoString(char *section) {
     }
 
     /* Replication */
-    if (allsections || defsections || !strcasecmp(section,"replication")) {
+    if (&server == srv && (allsections || defsections || !strcasecmp(section,"replication"))) {
         if (sections++) info = sdscat(info,"\r\n");
         info = sdscatprintf(info,
             "# Replication\r\n"
@@ -3372,29 +3372,10 @@ sds genRedisInfoString(char *section) {
             server.repl_backlog_histlen);
     }
 
-    /* CRDT Persistence */
-    if (crdtsections || !strcasecmp(section,"crdt persistence")) {
-        if (sections++) info = sdscat(info,"\r\n");
-        info = sdscatprintf(info,
-                            "# CRDT Persistence\r\n"
-                            "rdb_bgsave_in_progress:%d\r\n"
-                            "rdb_last_save_time:%jd\r\n"
-                            "rdb_last_bgsave_status:%s\r\n"
-                            "rdb_last_bgsave_time_sec:%jd\r\n"
-                            "rdb_current_bgsave_time_sec:%jd\r\n"
-                            "rdb_last_cow_size:%zu\r\n",
-                            crdtServer.rdb_child_pid != -1,
-                            (intmax_t)crdtServer.lastsave,
-                            (crdtServer.lastbgsave_status == C_OK) ? "ok" : "err",
-                            (intmax_t)crdtServer.rdb_save_time_last,
-                            (intmax_t)((crdtServer.rdb_child_pid == -1) ?
-                                       -1 : time(NULL)-crdtServer.rdb_save_time_start),
-                            crdtServer.stat_rdb_cow_bytes);
 
-    }
 
     /* CRDT Stats */
-    if (crdtsections || !strcasecmp(section,"crdt stats")) {
+    if ((srv == &crdtServer) && !strcasecmp(section,"stats")) {
         if (sections++) info = sdscat(info,"\r\n");
         info = sdscatprintf(info,
                             "# CRDT Stats\r\n"
@@ -3409,10 +3390,10 @@ sds genRedisInfoString(char *section) {
     }
 
     /* CRDT Replication */
-    if (crdtsections || !strcasecmp(section,"crdt replication")) {
+    if ((srv == &crdtServer) && !strcasecmp(section,"replication")) {
         if (sections++) info = sdscat(info,"\r\n");
         info = sdscatprintf(info,
-                            "# [CRDT] Replication\r\n");
+                            "# CRDT Replication\r\n");
         if (listLength(crdtServer.crdtMasters)) {
             listNode *ln;
             listIter li;
@@ -3434,12 +3415,12 @@ sds genRedisInfoString(char *section) {
 
                 info = sdscatprintf(info,
                                     "#Peer_Master_%d\r\n"
-                                    "peer_%d_host:%s\r\n"
-                                    "peer_%d_port:%d\r\n"
-                                    "peer_%d_link_status:%s\r\n"
-                                    "peer_%d_last_io_seconds_ago:%d\r\n"
-                                    "peer_%d_sync_in_progress:%d\r\n"
-                                    "peer_%d_repl_offset:%lld\r\n",
+                                    "peer%d_host:%s\r\n"
+                                    "peer%d_port:%d\r\n"
+                                    "peer%d_link_status:%s\r\n"
+                                    "peer%d_last_io_seconds_ago:%d\r\n"
+                                    "peer%d_sync_in_progress:%d\r\n"
+                                    "peer%d_repl_offset:%lld\r\n",
                                     masterid,
                                     masterid, masterInstance->masterhost,
                                     masterid, masterInstance->masterport,
@@ -3453,7 +3434,7 @@ sds genRedisInfoString(char *section) {
 
                 if (masterInstance->repl_state != REPL_STATE_CONNECTED) {
                     info = sdscatprintf(info,
-                                        "peer_%d_link_down_since_seconds:%jd\r\n",
+                                        "peer%d_link_down_since_seconds:%jd\r\n",
                                         masterid, (intmax_t) server.unixtime - masterInstance->repl_down_since);
                 }
                 masterid ++;
@@ -3596,7 +3577,18 @@ void infoCommand(client *c) {
         addReply(c,shared.syntaxerr);
         return;
     }
-    addReplyBulkSds(c, genRedisInfoString(section));
+    addReplyBulkSds(c, genRedisInfoString(section, &server));
+}
+
+
+void crdtinfoCommand(client *c) {
+    char *section = c->argc == 2 ? c->argv[1]->ptr : "default";
+
+    if (c->argc > 2) {
+        addReply(c,shared.syntaxerr);
+        return;
+    }
+    addReplyBulkSds(c, genRedisInfoString(section, &crdtServer));
 }
 
 void monitorCommand(client *c) {

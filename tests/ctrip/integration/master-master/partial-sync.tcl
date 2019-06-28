@@ -67,7 +67,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                 # state from the POV of the master.
                 set retry 500
                 while {$retry} {
-                    set info [r -2 info crdt]
+                    set info [r -2 crdt.info replication]
                     if {[string match {*slave0:*state=online*slave1:*state=online*} $info]} {
                         break
                     } else {
@@ -81,7 +81,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
 
                 set retry 500
                 while {$retry} {
-                    set info [r -1 info crdt]
+                    set info [r -1 crdt.info replication]
                     if {[string match {*slave0:*state=online*slave1:*state=online*} $info]} {
                         break
                     } else {
@@ -95,7 +95,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
 
                 set retry 500
                 while {$retry} {
-                    set info [r info crdt]
+                    set info [r crdt.info replication]
                     if {[string match {*slave0:*state=online*slave1:*state=online*} $info]} {
                         break
                     } else {

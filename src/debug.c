@@ -1046,7 +1046,7 @@ void sigsegvHandler(int sig, siginfo_t *info, void *secret) {
 
     /* Log INFO and CLIENT LIST */
     serverLogRaw(LL_WARNING|LL_RAW, "\n------ INFO OUTPUT ------\n");
-    infostring = genRedisInfoString("all");
+    infostring = genRedisInfoString("all", &server);
     serverLogRaw(LL_WARNING|LL_RAW, infostring);
     serverLogRaw(LL_WARNING|LL_RAW, "\n------ CLIENT LIST OUTPUT ------\n");
     clients = getAllClientsInfoString();
