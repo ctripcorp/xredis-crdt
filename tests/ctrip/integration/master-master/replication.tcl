@@ -77,7 +77,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
             $A peerof $B_gid $B_host $B_port
             after 1000
             wait_for_condition 50 100 {
-                [string match {*peer_*_link_status:up*} [$A info crdt]]
+                [string match {*peer0_link_status:up*} [$A crdt.info replication]]
             } else {
                 fail "Can't turn the instance into a slave"
             }
@@ -95,7 +95,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
 
         test {PEEROF should start with link status "down"} {
             r peerof 1 [srv -1 host] [srv -1 port]
-            crdt_status r peer_0_link_status
+            crdt_status r peer0_link_status
         } {down}
 
         wait_for_peer_sync r
@@ -104,7 +104,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
         } {foo}
 
         test {The link status should be up} {
-            crdt_status r peer_0_link_status
+            crdt_status r peer0_link_status
         } {up}
 
         test {SET on the master should immediately propagate} {
@@ -151,7 +151,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                     # state from the POV of the master.
                     set retry 500
                     while {$retry} {
-                        set info [r -3 info crdt]
+                        set info [r -3 crdt.info replication]
                         if {[string match {*slave0:*state=online*slave1:*state=online*slave2:*state=online*} $info]} {
                             break
                         } else {

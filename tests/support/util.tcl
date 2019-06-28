@@ -54,7 +54,7 @@ proc status {r property} {
 }
 
 proc crdt_status {r property} {
-    if {[regexp "\r\n$property:(.*?)\r\n" [{*}$r info crdt] _ value]} {
+    if {[regexp "\r\n$property:(.*?)\r\n" [{*}$r crdt.info replication] _ value]} {
         set _ $value
     }
 }
@@ -99,7 +99,7 @@ proc wait_for_sync r {
 
 proc wait_for_peer_sync r {
     while 1 {
-        if {[crdt_status $r peer_0_link_status] eq "down"} {
+        if {[crdt_status $r peer0_link_status] eq "down"} {
             after 10
         } else {
             break
