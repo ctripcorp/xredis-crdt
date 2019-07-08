@@ -2074,6 +2074,7 @@ void replicationUnsetMaster(void) {
      * the slaves will be able to partially resync with us, so it will be
      * a very fast reconnection. */
     disconnectSlaves();
+    disconnectCrdtSlaves();
     server.repl_state = REPL_STATE_NONE;
 
     /* We need to make sure the new master will start the replication stream

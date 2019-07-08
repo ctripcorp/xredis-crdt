@@ -38,6 +38,7 @@
 
 /* The current RDB version. When the format changes in a way that is no longer
  * backward compatible this number gets incremented. */
+#define CTRIP_RDB_PREFIX 1000
 #define RDB_VERSION 8
 
 /* Defines related to the dump file format. To store 32 bits lengths for short

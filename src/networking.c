@@ -731,6 +731,13 @@ void disconnectSlaves(void) {
     }
 }
 
+void disconnectCrdtSlaves(void) {
+    while (listLength(crdtServer.slaves)) {
+        listNode *ln = listFirst(server.slaves);
+        freeClient((client*)ln->value);
+    }
+}
+
 /* Remove the specified client from global lists where the client could
  * be referenced, not including the Pub/Sub channels.
  * This is used by freeClient() and replicationCacheMaster(). */

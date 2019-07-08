@@ -139,8 +139,10 @@ void peerofCommand(client *c) {
         return;
     }
     if (server.masterhost || server.cached_master || server.master) {
-        addReplyError(c, "PEEROF not allowed on redis slave");
-        return;
+        if(!(c->flags & CLIENT_MASTER)) {
+            addReplyError(c, "PEEROF not allowed on redis slave");
+            return;
+        }
     }
 
     long port;
@@ -153,12 +155,13 @@ void peerofCommand(client *c) {
 
         if (getPeerMaster(gid)) {
             crdtReplicationUnsetMaster(gid);
-            replicationUnsetMaster();
             sds client = catClientInfoString(sdsempty(),c);
             serverLog(LL_NOTICE,"[CRDT] REMOVE MASTER %lld enabled (user request from '%s')",
                       gid, client);
             sdsfree(client);
         }
+
+        server.dirty ++;
         addReply(c, shared.ok);
         return;
     }
@@ -180,11 +183,13 @@ void peerofCommand(client *c) {
      * we can continue. */
     crdtReplicationSetMaster(gid, c->argv[2]->ptr, port);
     peerMaster = getPeerMaster(gid);
-    sds client = catClientInfoString(sdsempty(),c);
-    serverLog(LL_NOTICE,"[CRDT]PEER OF %lld %s:%d enabled (user request from '%s')",
-              gid, peerMaster->masterhost, peerMaster->masterport, client);
-    sdsfree(client);
-
+    if (!server.masterhost) {
+        sds client = catClientInfoString(sdsempty(), c);
+        serverLog(LL_NOTICE, "[CRDT]PEER OF %lld %s:%d enabled (user request from '%s')",
+                  gid, peerMaster->masterhost, peerMaster->masterport, client);
+        sdsfree(client);
+    }
+    server.dirty ++;
     addReply(c,shared.ok);
 }
 
@@ -212,6 +217,7 @@ void crdtReplicationSetMaster(long long gid, char *ip, int port) {
 void crdtReplicationUnsetMaster(long long gid) {
     CRDT_Master_Instance *peerMaster;
     if ((peerMaster = getPeerMaster(gid)) == NULL) return;
+    crdtCancelReplicationHandshake(gid);
     freePeerMaster(peerMaster);
 }
 
@@ -233,9 +239,14 @@ crdtMergeStartCommand(client *c) {
 
     CRDT_Master_Instance *peerMaster = getPeerMaster(sourceGid);
     if (!peerMaster) {
-        peerMaster = createPeerMaster(c, sourceGid);
+        if (!server.masterhost) {
+            peerMaster = createPeerMaster(c, sourceGid);
+        } else {
+            peerMaster = createPeerMaster(NULL, sourceGid);
+        }
         listAddNodeTail(crdtServer.crdtMasters, peerMaster);
     }
+    server.dirty++;
     serverLog(LL_NOTICE, "[CRDT][crdtMergeStartCommand] master gid: %lld", sourceGid);
 }
 
