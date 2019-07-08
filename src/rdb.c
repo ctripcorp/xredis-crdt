@@ -851,6 +851,24 @@ ssize_t rdbSaveAuxFieldStrInt(rio *rdb, char *key, long long val) {
     return rdbSaveAuxField(rdb,key,strlen(key),buf,vlen);
 }
 
+int rdbSaveAuxFieldCrdt(rio *rdb) {
+    if(listLength(crdtServer.crdtMasters)) {
+        listIter li;
+        listNode *ln;
+
+        listRewind(crdtServer.crdtMasters, &li);
+        while((ln = listNext(&li))) {
+            CRDT_Master_Instance *masterInstance = ln->value;
+            if (rdbSaveAuxFieldStrInt(rdb, "peer-master-gid", masterInstance->gid)
+                == -1)  return -1;
+            if (rdbSaveAuxFieldStrStr(rdb, "peer-master-host", masterInstance->masterhost)
+                == -1)  return -1;
+            if (rdbSaveAuxFieldStrInt(rdb, "peer-master-port", masterInstance->masterport)
+                == -1)  return -1;
+        }
+    }
+    return 0;
+}
 /* Save a few default AUX fields with information about the RDB generated. */
 int rdbSaveInfoAuxFields(rio *rdb, int flags, rdbSaveInfo *rsi) {
     int redis_bits = (sizeof(void*) == 8) ? 64 : 32;
@@ -870,8 +888,23 @@ int rdbSaveInfoAuxFields(rio *rdb, int flags, rdbSaveInfo *rsi) {
             == -1) return -1;
         if (rdbSaveAuxFieldStrInt(rdb,"repl-offset",server.master_repl_offset)
             == -1) return -1;
+        /**add crdt stuff*/
+        if (rdbSaveAuxFieldStrInt(rdb,"crdt-gid",crdtServer.crdt_gid)
+            == -1) return -1;
+        sds vclockSds = vectorClockToSds(crdtServer.vectorClock);
+        if (rdbSaveAuxFieldStrStr(rdb,"vclock",vclockSds)
+            == -1) return -1;
+        sdsfree(vclockSds);
+        if (rdbSaveAuxFieldStrStr(rdb,"crdt-repl-id",server.replid)
+            == -1) return -1;
+        if (rdbSaveAuxFieldStrInt(rdb,"crdt-repl-offset",server.master_repl_offset)
+            == -1) return -1;
+
+        if(rdbSaveAuxFieldCrdt(rdb) == -1) return -1;
     }
     if (rdbSaveAuxFieldStrInt(rdb,"aof-preamble",aof_preamble) == -1) return -1;
+
+
     return 1;
 }
 
@@ -894,7 +927,7 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
 
     if (server.rdb_checksum)
         rdb->update_cksum = rioGenericUpdateChecksum;
-    snprintf(magic,sizeof(magic),"REDIS%04d",RDB_VERSION);
+    snprintf(magic,sizeof(magic),"REDIS%04d", CTRIP_RDB_PREFIX + RDB_VERSION);
     if (rdbWriteRaw(rdb,magic,9) == -1) goto werr;
     if (rdbSaveInfoAuxFields(rdb,flags,rsi) == -1) goto werr;
 
@@ -1525,12 +1558,17 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
         return C_ERR;
     }
     rdbver = atoi(buf+5);
-    if (rdbver < 1 || rdbver > RDB_VERSION) {
+    if (rdbver < 1 || rdbver > RDB_VERSION + CTRIP_RDB_PREFIX) {
         serverLog(LL_WARNING,"Can't handle RDB format version %d",rdbver);
         errno = EINVAL;
         return C_ERR;
     }
 
+    CRDT_Master_Instance *currentMasterInstance = NULL;
+    if (listLength(crdtServer.crdtMasters)) {
+        listRelease(crdtServer.crdtMasters);
+        crdtServer.crdtMasters = listCreate();
+    }
     while(1) {
         robj *key, *val;
         expiretime = -1;
@@ -1615,6 +1653,28 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                         "Can't load Lua script from RDB file! "
                         "BODY: %s", auxval->ptr);
                 }
+            } else if (!strcasecmp(auxkey->ptr,"crdt-gid")) {
+                crdtServer.crdt_gid = atoi(auxval->ptr);
+            } else if (!strcasecmp(auxkey->ptr,"vclock")) {
+                if (crdtServer.vectorClock) {
+                    freeVectorClock(crdtServer.vectorClock);
+                }
+                crdtServer.vectorClock = sdsToVectorClock(auxval->ptr);
+            } else if (!strcasecmp(auxkey->ptr,"crdt-repl-id")) {
+                if (sdslen(auxval->ptr) == CONFIG_RUN_ID_SIZE) {
+                    memcpy(crdtServer.replid, auxval->ptr,CONFIG_RUN_ID_SIZE+1);
+                }
+            } else if (!strcasecmp(auxkey->ptr,"crdt-repl-offset")) {
+                crdtServer.master_repl_offset = strtoll(auxval->ptr,NULL,10);
+            } else if (!strcasecmp(auxkey->ptr,"peer-master-gid")) {
+                int gid = atoi(auxval->ptr);
+                CRDT_Master_Instance *masterInstance = createPeerMaster(NULL, gid);
+                listAddNodeTail(crdtServer.crdtMasters, masterInstance);
+                currentMasterInstance = masterInstance;
+            } else if (!strcasecmp(auxkey->ptr,"peer-master-host")) {
+                currentMasterInstance->masterhost = sdsdup(auxval->ptr);
+            } else if (!strcasecmp(auxkey->ptr,"peer-master-port")) {
+                currentMasterInstance->masterport = atoi(auxval->ptr);
             } else {
                 /* We ignore fields we don't understand, as by AUX field
                  * contract. */

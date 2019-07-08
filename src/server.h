@@ -1435,6 +1435,7 @@ int getClientTypeByName(char *name);
 char *getClientTypeName(int class);
 void flushSlavesOutputBuffers(void);
 void disconnectSlaves(void);
+void disconnectCrdtSlaves(void);
 int listenToPort(int port, int *fds, int *count);
 void pauseClients(mstime_t duration);
 int clientsArePaused(void);
@@ -1587,7 +1588,7 @@ long long getMyLogicTime();
 void crdtReplicationUnsetMaster(long long gid);
 void debugCancelCrdt(client *c);
 void crdtRoleCommand(client *c);
-
+CRDT_Master_Instance *createPeerMaster(client *c, long long gid);
 
 /* Macro to initialize an IO context. Note that the 'ver' field is populated
  * inside rdb.c according to the version of the value to load. */

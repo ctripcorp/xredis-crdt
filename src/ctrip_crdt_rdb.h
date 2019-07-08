@@ -51,9 +51,6 @@ int
 crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi);
 
 int
-crdtRdbSaveKeyValuePair(rio *rdb, robj *key, robj *val, long long expiretime);
-
-int
 rdbSaveRioWithCrdtMerge(rio *rdb, int *error, void *rsi);
 
 
