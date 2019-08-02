@@ -246,6 +246,11 @@ crdtMergeStartCommand(client *c) {
         }
         listAddNodeTail(crdtServer.crdtMasters, peerMaster);
     }
+    VectorClock *vclock = sdsToVectorClock(c->argv[2]->ptr);
+    VectorClock *curMaxVclock = crdtServer.maxVectorClock;
+    crdtServer.maxVectorClock = vectorClockMerge(crdtServer.maxVectorClock, vclock);
+    freeVectorClock(vclock);
+    freeVectorClock(curMaxVclock);
     server.dirty++;
     serverLog(LL_NOTICE, "[CRDT][crdtMergeStartCommand] master gid: %lld", sourceGid);
 }
@@ -262,7 +267,9 @@ crdtMergeEndCommand(client *c) {
     serverLog(LL_NOTICE, "[CRDT][crdtMergeEndCommand][received] master gid: %lld", sourceGid);
 
     peerMaster->vectorClock = sdsToVectorClock(c->argv[2]->ptr);
-    mergeVectorClockUnit(crdtServer.vectorClock, getVectorClockUnit(peerMaster->vectorClock, sourceGid));
+    VectorClock *curMaxVclock = crdtServer.maxVectorClock;
+    crdtServer.maxVectorClock = vectorClockMerge(crdtServer.maxVectorClock, peerMaster->vectorClock);
+    freeVectorClock(curMaxVclock);
     memcpy(peerMaster->master_replid, c->argv[3]->ptr, sizeof(peerMaster->master_replid));
     if (getLongLongFromObjectOrReply(c, c->argv[4], &offset, NULL) != C_OK) return;
     peerMaster->master_initial_offset = offset;
