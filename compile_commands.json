@@ -37,6 +37,27 @@
   "file": "lstrlib.c"
  }, 
  {
+  "directory": "/Users/zhuchen/Develop/c/redis/src", 
+  "arguments": [
+   "cc", 
+   "-std=c99", 
+   "-pedantic", 
+   "-DREDIS_STATIC=", 
+   "-Wall", 
+   "-W", 
+   "-Wno-missing-field-initializers", 
+   "-O2", 
+   "-g", 
+   "-ggdb", 
+   "-I../deps/hiredis", 
+   "-I../deps/linenoise", 
+   "-I../deps/lua/src", 
+   "-c", 
+   "setproctitle.c"
+  ], 
+  "file": "setproctitle.c"
+ }, 
+ {
   "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
   "arguments": [
    "cc", 
@@ -209,27 +230,6 @@
    "memtest.c"
   ], 
   "file": "memtest.c"
- }, 
- {
-  "directory": "/Users/zhuchen/Develop/c/redis/src", 
-  "arguments": [
-   "cc", 
-   "-std=c99", 
-   "-pedantic", 
-   "-DREDIS_STATIC=", 
-   "-Wall", 
-   "-W", 
-   "-Wno-missing-field-initializers", 
-   "-O2", 
-   "-g", 
-   "-ggdb", 
-   "-I../deps/hiredis", 
-   "-I../deps/linenoise", 
-   "-I../deps/lua/src", 
-   "-c", 
-   "multi.c"
-  ], 
-  "file": "multi.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
@@ -1034,20 +1034,25 @@
   "file": "sds.c"
  }, 
  {
-  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
+  "directory": "/Users/zhuchen/Develop/c/redis/src", 
   "arguments": [
    "cc", 
-   "-O2", 
-   "-Wall", 
-   "-DLUA_ANSI", 
-   "-DENABLE_CJSON_GLOBAL", 
+   "-std=c99", 
+   "-pedantic", 
    "-DREDIS_STATIC=", 
+   "-Wall", 
+   "-W", 
+   "-Wno-missing-field-initializers", 
+   "-O2", 
+   "-g", 
+   "-ggdb", 
+   "-I../deps/hiredis", 
+   "-I../deps/linenoise", 
+   "-I../deps/lua/src", 
    "-c", 
-   "-o", 
-   "lzio.o", 
-   "lzio.c"
+   "latency.c"
   ], 
-  "file": "lzio.c"
+  "file": "latency.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 
@@ -1670,25 +1675,20 @@
   "file": "linit.c"
  }, 
  {
-  "directory": "/Users/zhuchen/Develop/c/redis/src", 
+  "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
   "arguments": [
    "cc", 
-   "-std=c99", 
-   "-pedantic", 
-   "-DREDIS_STATIC=", 
-   "-Wall", 
-   "-W", 
-   "-Wno-missing-field-initializers", 
    "-O2", 
-   "-g", 
-   "-ggdb", 
-   "-I../deps/hiredis", 
-   "-I../deps/linenoise", 
-   "-I../deps/lua/src", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
    "-c", 
-   "latency.c"
+   "-o", 
+   "lzio.o", 
+   "lzio.c"
   ], 
-  "file": "latency.c"
+  "file": "lzio.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/redis/deps/lua/src", 
@@ -1918,9 +1918,9 @@
    "-I../deps/linenoise", 
    "-I../deps/lua/src", 
    "-c", 
-   "setproctitle.c"
+   "multi.c"
   ], 
-  "file": "setproctitle.c"
+  "file": "multi.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/redis/src", 

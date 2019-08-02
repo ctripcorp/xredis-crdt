@@ -1254,6 +1254,7 @@ struct redisServer {
     /*crdt stuff*/
     long long crdt_gid;
     VectorClock *vectorClock;
+    VectorClock *maxVectorClock;
     VectorClockUnit *localVcu;
     list *crdtMasters;
 }redisServer;
