@@ -85,6 +85,7 @@ getVectorClockUnit(VectorClock *vc, long long gid);
 
 int
 isVectorClockMonoIncr(VectorClock *current, VectorClock *future);
+
 /*
  * at a very special gid
  * ==0 if vc1 equals vc2

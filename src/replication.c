@@ -913,6 +913,10 @@ void replconfCommand(client *c) {
             c->repl_ack_time = server.unixtime;
             serverAssertWithInfo(c, NULL, sdsEncodedObject(c->argv[j+1]));
             refreshVectorClock(c, c->argv[j+1]->ptr);
+
+            VectorClock *vclock = sdsToVectorClock(c->argv[j+1]->ptr);
+            refreshMaxVectorClock(vclock);
+            freeVectorClock(vclock);
             /* If this was a diskless replication, we need to really put
              * the slave online when the first ACK is received (which
              * confirms slave is online and ready to get more data). */

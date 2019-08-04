@@ -34,6 +34,7 @@
 #include "sds.h"
 #include "util.h"
 #include "zmalloc.h"
+#include "server.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -204,7 +205,7 @@ isVectorClockMonoIncr(VectorClock *current, VectorClock *future) {
         return 0;
     }
 
-    if(current->length > future->length) {
+    if (current->length > future->length) {
         return 1;
     }
 
@@ -216,6 +217,24 @@ isVectorClockMonoIncr(VectorClock *current, VectorClock *future) {
         }
     }
     return 1;
+}
+
+
+void
+refreshMinVectorClock(VectorClock *other, int sourceGid) {
+    mergeVectorClockUnit(crdtServer.vectorClock, getVectorClockUnit(other, sourceGid));
+}
+
+void
+refreshMaxVectorClock(VectorClock *other) {
+    VectorClock *maxVectorClock = crdtServer.maxVectorClock;
+    for (int i = 0; i < maxVectorClock->length; i++) {
+        VectorClockUnit *maxVectorClockUnit = &maxVectorClock->clocks[i];
+        VectorClockUnit *otherVectorClockUnit = getVectorClockUnit(other, maxVectorClockUnit->gid);
+        if(otherVectorClockUnit != NULL) {
+            maxVectorClockUnit->logic_time = max(maxVectorClockUnit->logic_time, otherVectorClockUnit->logic_time);
+        }
+    }
 }
 
 
