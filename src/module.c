@@ -1375,7 +1375,8 @@ int RM_IsVectorClockMonoIncr (RedisModuleString *current, RedisModuleString *fut
 void RM_MergeVectorClock (long long gid, RedisModuleString *str) {
     sds vcStr = str->ptr;
     VectorClock *vc = sdsToVectorClock(vcStr);
-    mergeVectorClockUnit(crdtServer.vectorClock, getVectorClockUnit(vc, gid));
+    refreshMinVectorClock(vc, gid);
+    refreshMaxVectorClock(vc);
     freeVectorClock(vc);
 }
 

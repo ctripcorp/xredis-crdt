@@ -2125,4 +2125,10 @@ void xorDigest(unsigned char *digest, void *ptr, size_t len);
 
 #include "ctrip.h"
 
+void
+refreshMinVectorClock(VectorClock *other, int sourceGid);
+
+void
+refreshMaxVectorClock(VectorClock *other);
+
 #endif
