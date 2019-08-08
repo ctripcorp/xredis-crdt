@@ -32,9 +32,16 @@
 
 #include "ctrip_crdt_common.h"
 #include "sds.h"
+#include "server.h"
 
 #include <stdlib.h>
 
+CrdtCommon *retrieveCrdtCommon(robj *obj) {
+    moduleValue *mv = obj->ptr;
+    void *moduleDataType = mv->value;
+    CrdtCommon *common = (CrdtCommon *) moduleDataType;
+    return common;
+}
 
 #if defined(CRDT_COMMON_TEST_MAIN)
 #include <stdio.h>

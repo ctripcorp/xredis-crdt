@@ -29,6 +29,7 @@ set ::all_tests {
     ctrip/integration/master-master/full_sync-2
     ctrip/integration/master-master/partial-sync
     ctrip/integration/master-master/replication-2
+
 }
 
 set ::temp_tests {
@@ -46,6 +47,7 @@ set ::temp_tests {
     ctrip/integration/master-master/full_sync
     ctrip/integration/master-master/full_sync-2
     ctrip/integration/master-master/partial-sync
+    ctrip/integration/master-master/replication-2
 }
 
 

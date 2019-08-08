@@ -36,7 +36,6 @@ start_server {overrides {crdt-gid 1} module {crdt.so}} {
     }
 
     set cycle_start_time [clock milliseconds]
-    set bench_pid [exec src/redis-benchmark -p $R_port(0) -n 10000000 -r 1000 incr __rand_int__ > /dev/null &]
     while 1 {
         set elapsed [expr {[clock milliseconds]-$cycle_start_time}]
         if {$elapsed > $duration*1000} break
@@ -52,7 +51,6 @@ start_server {overrides {crdt-gid 1} module {crdt.so}} {
         }
         after 100
     }
-    exec kill -9 $bench_pid
 
     if {$debug_msg} {
         for {set j 0} {$j < 100} {incr j} {
