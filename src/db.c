@@ -453,9 +453,9 @@ void delGenericCommand(client *c, int lazy) {
     addReplyLongLong(c,numdel);
 }
 
-void delCommand(client *c) {
-    delGenericCommand(c,0);
-}
+//void delCommand(client *c) {
+//    delGenericCommand(c,0);
+//}
 
 void unlinkCommand(client *c) {
     delGenericCommand(c,1);

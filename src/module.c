@@ -1348,11 +1348,35 @@ int RM_CrdtReplicateAlsoNormReplicate(RedisModuleCtx *ctx, const char *cmdname, 
     return REDISMODULE_OK;
 }
 
-RedisModuleString * RM_CurrentVectorClock(RedisModuleCtx *ctx) {
-    sds vc = vectorClockToSds(crdtServer.vectorClock);
-    RedisModuleString *result = RM_CreateString(ctx, vc, sdslen(vc));
-    sdsfree(vc);
-    return result;
+int RM_CrdtMultiWrappedReplicate(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...) {
+    struct redisCommand *cmd;
+    robj **argv = NULL;
+    int argc = 0, flags = 0, j;
+    va_list ap;
+
+    cmd = lookupCommandByCString((char*)cmdname);
+    if (!cmd) return REDISMODULE_ERR;
+
+    /* Create the client and dispatch the command. */
+    va_start(ap, fmt);
+    argv = moduleCreateArgvFromUserFormat(cmdname,fmt,&argc,&flags,ap);
+    va_end(ap);
+    if (argv == NULL) return REDISMODULE_ERR;
+
+    /* Replicate! */
+    moduleReplicateMultiIfNeeded(ctx);
+    alsoPropagate(cmd,ctx->client->db->id,argv,argc,
+                  PROPAGATE_CRDT_REPL|PROPAGATE_REPL);
+
+    /* Release the argv. */
+    for (j = 0; j < argc; j++) decrRefCount(argv[j]);
+    zfree(argv);
+    server.dirty++;
+    return REDISMODULE_OK;
+}
+
+void * RM_CurrentVectorClock() {
+    return dupVectorClock(crdtServer.vectorClock);
 }
 
 long long RM_CurrentGid(void) {
@@ -1372,12 +1396,9 @@ int RM_IsVectorClockMonoIncr (RedisModuleString *current, RedisModuleString *fut
     return result;
 }
 
-void RM_MergeVectorClock (long long gid, RedisModuleString *str) {
-    sds vcStr = str->ptr;
-    VectorClock *vc = sdsToVectorClock(vcStr);
-    refreshMinVectorClock(vc, gid);
-    refreshMaxVectorClock(vc);
-    freeVectorClock(vc);
+void RM_MergeVectorClock (long long gid, VectorClock *vclock) {
+    refreshMinVectorClock(vclock, gid);
+    refreshMaxVectorClock(vclock);
 }
 
 /* --------------------------------------------------------------------------
@@ -4173,6 +4194,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(ReplicateStraightForward);
     REGISTER_API(CrdtReplicate);
     REGISTER_API(CrdtReplicateAlsoNormReplicate);
+    REGISTER_API(CrdtMultiWrappedReplicate);
     REGISTER_API(CurrentVectorClock);
     REGISTER_API(CurrentGid);
     REGISTER_API(IncrLocalVectorClock);

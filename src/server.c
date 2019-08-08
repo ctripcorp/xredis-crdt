@@ -135,8 +135,8 @@ struct redisCommand redisCommandTable[] = {
 //    {"psetex",psetexCommand,4,"wm",0,NULL,1,1,1,0,0},
 //    {"append",appendCommand,3,"wm",0,NULL,1,1,1,0,0},
 //    {"strlen",strlenCommand,2,"rF",0,NULL,1,1,1,0,0},
-    {"del",delCommand,-2,"w",0,NULL,1,-1,1,0,0},
-    {"unlink",unlinkCommand,-2,"wF",0,NULL,1,-1,1,0,0},
+//    {"del",delCommand,-2,"w",0,NULL,1,-1,1,0,0},
+//    {"unlink",unlinkCommand,-2,"wF",0,NULL,1,-1,1,0,0},
     {"exists",existsCommand,-2,"rF",0,NULL,1,-1,1,0,0},
 //    {"setbit",setbitCommand,4,"wm",0,NULL,1,1,1,0,0},
 //    {"getbit",getbitCommand,3,"rF",0,NULL,1,1,1,0,0},
@@ -1379,6 +1379,7 @@ void createSharedObjects(void) {
     shared.psubscribebulk = createStringObject("$10\r\npsubscribe\r\n",17);
     shared.punsubscribebulk = createStringObject("$12\r\npunsubscribe\r\n",19);
     shared.del = createStringObject("DEL",3);
+    shared.crdtdel = createStringObject("CRDT.DEL", 8);
     shared.unlink = createStringObject("UNLINK",6);
     shared.rpop = createStringObject("RPOP",4);
     shared.lpop = createStringObject("LPOP",4);

@@ -626,6 +626,8 @@ typedef struct redisDb {
     dict *blocking_keys;        /* Keys with clients waiting for data (BLPOP)*/
     dict *ready_keys;           /* Blocked keys that received a PUSH */
     dict *watched_keys;         /* WATCHED keys for MULTI/EXEC CAS */
+    /*crdt gc stuff*/
+    dict *deleted_keys;
     int id;                     /* Database ID */
     long long avg_ttl;          /* Average TTL, just for stats */
 } redisDb;
@@ -763,7 +765,7 @@ struct sharedObjectsStruct {
     *outofrangeerr, *noscripterr, *loadingerr, *slowscripterr, *bgsaveerr,
     *masterdownerr, *roslaveerr, *execaborterr, *noautherr, *noreplicaserr,
     *busykeyerr, *oomerr, *plus, *messagebulk, *pmessagebulk, *subscribebulk,
-    *unsubscribebulk, *psubscribebulk, *punsubscribebulk, *del, *unlink,
+    *unsubscribebulk, *psubscribebulk, *punsubscribebulk, *del, *unlink, *crdtdel,
     *rpop, *lpop, *lpush, *emptyscan,
     *crdtmergeerr,
     *select[PROTO_SHARED_SELECT_CMDS],
@@ -1590,6 +1592,11 @@ void crdtReplicationUnsetMaster(long long gid);
 void debugCancelCrdt(client *c);
 void crdtRoleCommand(client *c);
 CRDT_Master_Instance *createPeerMaster(client *c, long long gid);
+
+
+/* CRDT Command */
+void crdtDelCommand(client *c);
+CrdtCommon *retrieveCrdtCommon(robj *obj);
 
 /* Macro to initialize an IO context. Note that the 'ver' field is populated
  * inside rdb.c according to the version of the value to load. */

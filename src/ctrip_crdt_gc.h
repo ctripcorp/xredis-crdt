@@ -27,31 +27,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 //
-// Created by zhuchen on 2019-06-07.
+// Created by zhuchen on 2019-08-05.
 //
 
-#ifndef REDIS_CTRIP_CRDT_COMMON_H
-#define REDIS_CTRIP_CRDT_COMMON_H
+#ifndef REDIS_CTRIP_CRDT_GC_H
+#define REDIS_CTRIP_CRDT_GC_H
 
-#define CRDT_MODULE_OBJECT_PREFIX "crdt"
-
-#include "sds.h"
-#include "ctrip_vector_clock.h"
-
-typedef void *(*crdtMergeFunc)(void *curVal, void *value);
-// RM_CrdtMultiWrappedReplicate should be called during this
-typedef int (*crdtDelFunc)(void *ctx, void *key, void *crdtObj);
-//typedef void (*crdtGcFunc)(void *crdtObj);
-typedef struct CrdtCommon {
-    unsigned char deleted;
-    int gid;
-    VectorClock *vectorClock;
-    long long timestamp;
-
-    //CRDT Merge Function
-    crdtMergeFunc merge;
-    crdtDelFunc delFunc;
-//    crdtGcFunc  gcFunc;
-} __attribute__((packed, aligned(4))) CrdtCommon;
-
-#endif //REDIS_CTRIP_CRDT_COMMON_H
+#endif //REDIS_CTRIP_CRDT_GC_H
