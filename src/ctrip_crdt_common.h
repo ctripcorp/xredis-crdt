@@ -40,10 +40,9 @@
 
 typedef void *(*crdtMergeFunc)(void *curVal, void *value);
 // RM_CrdtMultiWrappedReplicate should be called during this
-typedef int (*crdtDelFunc)(void *ctx, void *key, void *crdtObj);
+typedef int (*crdtDelFunc)(void *ctx, void *keyRobj, void *key, void *crdtObj);
 //typedef void (*crdtGcFunc)(void *crdtObj);
 typedef struct CrdtCommon {
-    unsigned char deleted;
     int gid;
     VectorClock *vectorClock;
     long long timestamp;

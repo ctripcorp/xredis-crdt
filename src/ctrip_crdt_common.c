@@ -37,6 +37,7 @@
 #include <stdlib.h>
 
 CrdtCommon *retrieveCrdtCommon(robj *obj) {
+    if (obj == NULL) return NULL;
     moduleValue *mv = obj->ptr;
     void *moduleDataType = mv->value;
     CrdtCommon *common = (CrdtCommon *) moduleDataType;

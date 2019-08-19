@@ -127,6 +127,7 @@ typedef struct RedisModuleCtx RedisModuleCtx;
 #define REDISMODULE_CTX_BLOCKED_REPLY (1<<3)
 #define REDISMODULE_CTX_BLOCKED_TIMEOUT (1<<4)
 #define REDISMODULE_CTX_THREAD_SAFE (1<<5)
+#define REDISMODULE_CTX_CRDT_MULTI_EMITTED (1<<6)
 
 /* This represents a Redis key opened with RM_OpenKey(). */
 struct RedisModuleKey {
@@ -134,6 +135,7 @@ struct RedisModuleKey {
     redisDb *db;
     robj *key;      /* Key name object. */
     robj *value;    /* Value object, or NULL if the key was not found. */
+    robj *tombstone; /* Tombstone value object, or NULL if the key was not found. */
     void *iter;     /* Iterator. */
     int mode;       /* Opening mode. */
 
@@ -447,10 +449,17 @@ void moduleHandlePropagationAfterCommandCallback(RedisModuleCtx *ctx) {
     /* Handle the replication of the final EXEC, since whatever a command
      * emits is always wrappered around MULTI/EXEC. */
     if (ctx->flags & REDISMODULE_CTX_MULTI_EMITTED) {
+        int flags = PROPAGATE_AOF|PROPAGATE_REPL;
         robj *propargv[1];
         propargv[0] = createStringObject("EXEC",4);
-        alsoPropagate(server.execCommand,c->db->id,propargv,1,
-            PROPAGATE_AOF|PROPAGATE_REPL);
+        alsoPropagate(server.execCommand,c->db->id,propargv,1, flags);
+        decrRefCount(propargv[0]);
+    }
+    else if (ctx->flags & REDISMODULE_CTX_CRDT_MULTI_EMITTED) {
+        int flags = PROPAGATE_CRDT_REPL | PROPAGATE_REPL;
+        robj *propargv[1];
+        propargv[0] = createStringObject("EXEC",4);
+        alsoPropagate(server.execCommand,c->db->id,propargv,1, flags);
         decrRefCount(propargv[0]);
     }
 }
@@ -1348,6 +1357,33 @@ int RM_CrdtReplicateAlsoNormReplicate(RedisModuleCtx *ctx, const char *cmdname, 
     return REDISMODULE_OK;
 }
 
+/* Send a MULTI command to all the slaves and AOF file. Check the execCommand
+ * implementation for more information. */
+void crdtCommandPropagateMulti(client *c) {
+    robj *multistring = createStringObject("MULTI",5);
+
+    propagate(server.multiCommand,c->db->id,&multistring,1,
+              PROPAGATE_CRDT_REPL|PROPAGATE_REPL);
+    decrRefCount(multistring);
+}
+
+/* Helper function to replicate MULTI the first time we replicate something
+ * in the context of a command execution. EXEC will be handled by the
+ * RedisModuleCommandDispatcher() function. */
+void crdtReplicateMultiIfNeeded(RedisModuleCtx *ctx) {
+    /* Skip this if client explicitly wrap the command with MULTI, or if
+     * the module command was called by a script. */
+    if (ctx->client->flags & (CLIENT_MULTI|CLIENT_LUA)) return;
+    /* If we already emitted MULTI return ASAP. */
+    if (ctx->flags & REDISMODULE_CTX_CRDT_MULTI_EMITTED) return;
+    /* If this is a thread safe context, we do not want to wrap commands
+     * executed into MUTLI/EXEC, they are executed as single commands
+     * from an external client in essence. */
+    if (ctx->flags & REDISMODULE_CTX_THREAD_SAFE) return;
+    crdtCommandPropagateMulti(ctx->client);
+    ctx->flags |= REDISMODULE_CTX_CRDT_MULTI_EMITTED;
+}
+
 int RM_CrdtMultiWrappedReplicate(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...) {
     struct redisCommand *cmd;
     robj **argv = NULL;
@@ -1364,7 +1400,7 @@ int RM_CrdtMultiWrappedReplicate(RedisModuleCtx *ctx, const char *cmdname, const
     if (argv == NULL) return REDISMODULE_ERR;
 
     /* Replicate! */
-    moduleReplicateMultiIfNeeded(ctx);
+    crdtReplicateMultiIfNeeded(ctx);
     alsoPropagate(cmd,ctx->client->db->id,argv,argc,
                   PROPAGATE_CRDT_REPL|PROPAGATE_REPL);
 
@@ -1387,18 +1423,9 @@ void RM_IncrLocalVectorClock (long long delta) {
     incrLocalVcUnit(delta);
 }
 
-int RM_IsVectorClockMonoIncr (RedisModuleString *current, RedisModuleString *future) {
-    VectorClock *vc1 = sdsToVectorClock(current->ptr);
-    VectorClock *vc2 = sdsToVectorClock(future->ptr);
-    int result = isVectorClockMonoIncr(vc1, vc2);
-    freeVectorClock(vc1);
-    freeVectorClock(vc2);
-    return result;
-}
-
 void RM_MergeVectorClock (long long gid, VectorClock *vclock) {
     refreshMinVectorClock(vclock, gid);
-    refreshMaxVectorClock(vclock);
+    refreshGcVectorClock(vclock);
 }
 
 /* --------------------------------------------------------------------------
@@ -1525,7 +1552,7 @@ int RM_SelectDb(RedisModuleCtx *ctx, int newid) {
  * value. */
 void *RM_OpenKey(RedisModuleCtx *ctx, robj *keyname, int mode) {
     RedisModuleKey *kp;
-    robj *value;
+    robj *value, *tombstone = NULL;
 
     if (mode & REDISMODULE_WRITE) {
         value = lookupKeyWrite(ctx->client->db,keyname);
@@ -1535,6 +1562,9 @@ void *RM_OpenKey(RedisModuleCtx *ctx, robj *keyname, int mode) {
             return NULL;
         }
     }
+    if (mode & REDISMODULE_TOMBSTONE) {
+        tombstone = lookupTombstoneKey(ctx->client->db,keyname);
+    }
 
     /* Setup the key handle. */
     kp = zmalloc(sizeof(*kp));
@@ -1543,6 +1573,7 @@ void *RM_OpenKey(RedisModuleCtx *ctx, robj *keyname, int mode) {
     kp->key = keyname;
     incrRefCount(keyname);
     kp->value = value;
+    kp->tombstone = tombstone;
     kp->iter = NULL;
     kp->mode = mode;
     zsetKeyReset(kp);
@@ -3086,6 +3117,15 @@ int RM_ModuleTypeSetValue(RedisModuleKey *key, moduleType *mt, void *value) {
     return REDISMODULE_OK;
 }
 
+int RM_ModuleTombstoneSetValue(RedisModuleKey *key, moduleType *mt, void *value) {
+    if (!(key->mode & REDISMODULE_WRITE) || key->iter) return REDISMODULE_ERR;
+    robj *o = createModuleObject(mt,value);
+    setKeyToTombstone(key->db,key->key,o);
+    decrRefCount(o);
+    key->tombstone = o;
+    return REDISMODULE_OK;
+}
+
 /* Assuming RedisModule_KeyType() returned REDISMODULE_KEYTYPE_MODULE on
  * the key, returns the moduel type pointer of the value stored at key.
  *
@@ -3110,6 +3150,19 @@ void *RM_ModuleTypeGetValue(RedisModuleKey *key) {
         key->value == NULL ||
         RM_KeyType(key) != REDISMODULE_KEYTYPE_MODULE) return NULL;
     moduleValue *mv = key->value->ptr;
+    return mv->value;
+}
+
+/* Assuming RedisModule_KeyType() returned REDISMODULE_KEYTYPE_MODULE on
+ * the key, returns the module type low-level value stored at key, as
+ * it was set by the user via RedisModule_ModuleTypeSet().
+ *
+ * If the key is NULL, is not associated with a module type, or is empty,
+ * then NULL is returned instead. */
+void *RM_ModuleTypeGetTombstone(RedisModuleKey *key) {
+    if (key == NULL ||
+        key->tombstone == NULL) return NULL;
+    moduleValue *mv = key->tombstone->ptr;
     return mv->value;
 }
 
@@ -4199,5 +4252,6 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(CurrentGid);
     REGISTER_API(IncrLocalVectorClock);
     REGISTER_API(MergeVectorClock);
-    REGISTER_API(IsVectorClockMonoIncr);
+    REGISTER_API(ModuleTombstoneSetValue);
+    REGISTER_API(ModuleTypeGetTombstone);
 }

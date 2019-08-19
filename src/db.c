@@ -333,6 +333,7 @@ long long emptyDb(int dbnum, int flags, void(callback)(void*)) {
         } else {
             dictEmpty(server.db[j].dict,callback);
             dictEmpty(server.db[j].expires,callback);
+            dictEmpty(server.db[j].deleted_keys,callback);
         }
     }
     if (server.cluster_enabled) {
@@ -977,10 +978,12 @@ int dbSwapDatabases(int id1, int id2) {
      * remain in the same DB they were. */
     db1->dict = db2->dict;
     db1->expires = db2->expires;
+    db1->deleted_keys = db2->deleted_keys;
     db1->avg_ttl = db2->avg_ttl;
 
     db2->dict = aux.dict;
     db2->expires = aux.expires;
+    db2->deleted_keys = aux.deleted_keys;
     db2->avg_ttl = aux.avg_ttl;
 
     /* Now we need to handle clients blocked on lists: as an effect

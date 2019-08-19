@@ -14,7 +14,9 @@ source tests/support/util.tcl
 
 
 set ::all_tests {
-    ctrip/unit/crdt_register
+    ctrip/unit/crdt_del
+    ctrip/unit/gc
+
     ctrip/integration/master-slave/replication
     ctrip/integration/master-slave/replication-1
     ctrip/integration/master-slave/replication-2
@@ -29,11 +31,13 @@ set ::all_tests {
     ctrip/integration/master-master/full_sync-2
     ctrip/integration/master-master/partial-sync
     ctrip/integration/master-master/replication-2
-
 }
 
 set ::temp_tests {
     ctrip/unit/crdt_register
+    ctrip/unit/crdt_del
+    ctrip/unit/gc
+
     ctrip/integration/master-slave/replication
     ctrip/integration/master-slave/replication-1
     ctrip/integration/master-slave/replication-2

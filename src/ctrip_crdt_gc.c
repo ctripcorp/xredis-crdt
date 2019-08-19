@@ -38,179 +38,321 @@
  * Database API
  *----------------------------------------------------------------------------*/
 
-// 1 for deleted, 0 for not deleted
-void markDeleted(dictEntry *de, long long gid, long long timestamp, VectorClock *vclock) {
-    CrdtCommon *crdtCommon = retrieveCrdtCommon(de->v.val);
-    crdtCommon->deleted = 1;
-    crdtCommon->gid = gid;
-    crdtCommon->timestamp = timestamp;
-    VectorClock *prevVectorClock = crdtCommon->vectorClock;
-    crdtCommon->vectorClock = dupVectorClock(vclock);
-    freeVectorClock(prevVectorClock);
+/* Add the key to the DB tombstone. It's up to the caller to increment the reference
+* counter of the value if needed.
+*
+* The program is aborted if the key already exists. */
+void tombstoneAdd(redisDb *db, robj *key, robj *val) {
+    sds copy = sdsdup(key->ptr);
+    int retval = dictAdd(db->deleted_keys, copy, val);
+
+    serverAssertWithInfo(NULL,key,retval == DICT_OK);
 }
 
-/* Set an del to the specified key. */
-int setDel(redisDb *db, robj *key, long long gid, long long timestamp, VectorClock *vclock) {
-    dictEntry *kde, *de, *objde;
+/* Overwrite an existing key with a new value in tombstone. Incrementing the reference
+ * count of the new value is up to the caller.
+ * This function does not modify the delete time of the existing key.
+ *
+ * The program is aborted if the key was not already present. */
+void tombstoneOverwrite(redisDb *db, robj *key, robj *val) {
+    dictEntry *de = dictFind(db->deleted_keys,key->ptr);
 
-    /* Reuse the sds from the main dict in the expire dict */
-    kde = dictFind(db->dict,key->ptr);
-    // CRDT Logic: you can never delete an object, that is never exists
-    if (kde != NULL) {
+    serverAssertWithInfo(NULL,key,de != NULL);
+    dictReplace(db->deleted_keys, key->ptr, val);
+}
+
+robj *lookupTombstone(redisDb *db, robj *key) {
+    dictEntry *de;
+
+    /* No deleted? return ASAP */
+    if (dictSize(db->deleted_keys) == 0 ||
+        (de = dictFind(db->deleted_keys,key->ptr)) == NULL) return NULL;
+
+    return dictGetVal(de);
+}
+/* High level Set operation. This function can be used in order to set
+ * a key to tombstone, whatever it was existing or not, to a new object.
+ *
+ * 1) The ref count of the value object is incremented.
+ * 2) clients WATCHing for the destination key notified.
+ * 3) The delete time of the key is reset (the key is made persistent).
+ *
+ * All the new keys in the database should be created via this interface. */
+void setKeyToTombstone(redisDb *db, robj *key, robj *val) {
+    robj *existing;
+    if ((existing = lookupTombstone(db,key)) == NULL) {
+        tombstoneAdd(db,key,val);
+    } else {
+        CrdtCommon *existingCrdtCommon = retrieveCrdtCommon(existing);
+        CrdtCommon *incomeCrdtCommon = retrieveCrdtCommon(val);
+        if (isVectorClockMonoIncr(existingCrdtCommon->vectorClock, incomeCrdtCommon->vectorClock)) {
+            tombstoneOverwrite(db, key, val);
+        }
+    }
+    incrRefCount(val);
+    signalModifiedKey(db,key);
+}
+
+/* Lookup a key for write operations
+ *
+ * Returns the linked value object if the key exists or NULL if the key
+ * does not exist in the specified DB. */
+robj *lookupTombstoneKey(redisDb *db, robj *key) {
+    gcIfNeeded(db,key);
+    return lookupTombstone(db,key);
+}
+
+
+
+int gcIfNeeded(redisDb *db, robj *key) {
+    robj *val = lookupTombstone(db,key);
+    if(val == NULL) {
         return 0;
     }
-    // You can never delete a key, that is never exist
-    objde = dictFind(db->dict, key);
-    if (objde == NULL) {
+    CrdtCommon *crdtCommon = retrieveCrdtCommon(val);
+
+    /* Don't del anything while loading. It will be done later. */
+    if (server.loading) return 0;
+
+    /* It's ready to be deleted, when and only when other peers already know what happend.
+     * 1. Gc Vector Clock is collected from each peer's vector clock, and do a minimium of them
+     * 2. if the vector clock of gcVectorClock is mono-increase, comparing to the deleted keys, the delete event will be triggered
+     * */
+    //todo: update gc vector clock, each time when set operation
+    //updateGcVectorClock();
+    if (!isVectorClockMonoIncr(crdtCommon->vectorClock, crdtServer.gcVectorClock)) {
         return 0;
     }
-    de = dictAddOrFind(db->deleted_keys,dictGetKey(kde));
-    dictSetVal(db->deleted_keys, de, dictGetVal(objde));
-    incrRefCount(objde->v.val);
-//    markDeleted(objde, 1, gid, timestamp, vclock);
-    return 1;
+
+    if (dictDelete(db->deleted_keys,key->ptr) == DICT_OK) {
+        return 1;
+    } else {
+        return 0;
+    }
+
 }
-
-/* Delete a key, value, and associated expiration entry if any, from the DB */
-int crdtSyncDelete(redisDb *db, robj *key, long long gid, long long timestamp, VectorClock *vclock) {
-    /* Deleting an entry from the expires dict will not free the sds of
-     * the key, because it is shared with the main dictionary. */
-    if (dictSize(db->expires) > 0) dictDelete(db->expires, key->ptr);
-    return setDel(db, key, gid, timestamp, vclock);
-}
-
-
-
 /*-----------------------------------------------------------------------------
  * Del API
  *----------------------------------------------------------------------------*/
 
-int removeDel(redisDb *db, robj *key, int gid, long long timestamp, VectorClock *vclock) {
+int removeDel(redisDb *db, robj *key) {
     /* An expire may only be removed if there is a corresponding entry in the
      * main dict. Otherwise, the key will never be freed. */
     dictEntry *de;
-    serverAssertWithInfo(NULL,key, (de = dictFind(db->dict,key->ptr)) != NULL);
-    CrdtCommon *crdtCommon = retrieveCrdtCommon(de->v.val);
-    crdtCommon->deleted = 0;
-    return dictDelete(db->deleted_keys,key->ptr) == DICT_OK;
-}
-
-void replaceDelCommandForReplication(client *c, long long gid, long long timestamp, VectorClock *vclock) {
-    sds vcStr = vectorClockToSds(vclock);
-    robj **argv = zmalloc(sizeof(robj*) * (c->argc+3));
-    memcpy(argv, &c->argv[4], (c->argc-1)* sizeof(robj*));
-    argv[0] = shared.crdtdel;
-    argv[1] = createStringObjectFromLongLong(gid);
-    argv[2] = createStringObjectFromLongLong(timestamp);
-    argv[3] = createEmbeddedStringObject(vcStr, sdslen(vcStr));
-    replaceClientCommandVector(c, c->argc + 3, argv);
-    sdsfree(vcStr);
-}
-
-/* This command implements DEL and crdt. */
-// crdt.del <gid> <timestamp> <vc> key1 key2 key3 ....
-//   0         1      2        3     4
-void crdtDelGenericCommand(client *c, int isCrdt) {
-    int numdel = 0, j;
-    long long gid, timestamp;
-    VectorClock *vclock;
-    if (isCrdt == 1) {
-        serverAssertWithInfo(c, NULL, getLongLongFromObject(c->argv[1], &gid) == C_OK);
-        serverAssertWithInfo(c, NULL, getLongLongFromObject(c->argv[2], &timestamp) == C_OK);
-        serverAssertWithInfo(c, NULL, (vclock = sdsToVectorClock(c->argv[3]->ptr)) != NULL);
-    }  else {
-        gid = crdtServer.crdt_gid;
-        timestamp = mstime();
-        incrLocalVcUnit(1);
-        vclock = dupVectorClock(crdtServer.vectorClock);
-        replaceDelCommandForReplication(c, gid, timestamp, vclock);
+    if ((de = dictFind(db->deleted_keys,key->ptr)) == NULL) {
+        return 1;
     }
-    for (j = 4; j < c->argc; j++) {
-        int deleted = crdtSyncDelete(c->db, c->argv[j], gid, timestamp, vclock);
-        if (deleted) {
-            signalModifiedKey(c->db,c->argv[j]);
-            notifyKeyspaceEvent(NOTIFY_GENERIC,
-                                "del",c->argv[j],c->db->id);
-            server.dirty++;
-            numdel++;
-        }
+    if (dictDelete(db->deleted_keys,key->ptr) == DICT_OK) {
+        return 1;
+    } else {
+        return 0;
     }
-    freeVectorClock(vclock);
-    addReplyLongLong(c,numdel);
 }
 
-///* Propagate expires into slaves and the AOF file.
-// * When a key expires in the master, a DEL operation for this key is sent
-// * to all the slaves and the AOF file if enabled.
-// *
-// * This way the key expiry is centralized in one place, and since both
-// * AOF and the master->slave link guarantee operation ordering, everything
-// * will be consistent even if we allow write operations against expiring
-// * keys. */
-//void propagateExpire(redisDb *db, robj *key, int lazy) {
-//    robj *argv[2];
-//
-//    argv[0] = lazy ? shared.unlink : shared.del;
-//    argv[1] = key;
-//    incrRefCount(argv[0]);
-//    incrRefCount(argv[1]);
-//
-//    if (server.aof_state != AOF_OFF)
-//        feedAppendOnlyFile(server.delCommand,db->id,argv,2);
-//    replicationFeedSlaves(&server, server.slaves,db->id,argv,2);
-//
-//    decrRefCount(argv[0]);
-//    decrRefCount(argv[1]);
-//}
-//
-//int expireIfNeeded(redisDb *db, robj *key) {
-//    mstime_t when = getExpire(db,key);
-//    mstime_t now;
-//
-//    if (when < 0) return 0; /* No expire for this key */
-//
-//    /* Don't expire anything while loading. It will be done later. */
-//    if (server.loading) return 0;
-//
-//    /* If we are in the context of a Lua script, we claim that time is
-//     * blocked to when the Lua script started. This way a key can expire
-//     * only the first time it is accessed and not in the middle of the
-//     * script execution, making propagation to slaves / AOF consistent.
-//     * See issue #1525 on Github for more information. */
-//    now = server.lua_caller ? server.lua_time_start : mstime();
-//
-//    /* If we are running in the context of a slave, return ASAP:
-//     * the slave key expiration is controlled by the master that will
-//     * send us synthesized DEL operations for expired keys.
-//     *
-//     * Still we try to return the right information to the caller,
-//     * that is, 0 if we think the key should be still valid, 1 if
-//     * we think the key is expired at this time. */
-//    if (server.masterhost != NULL) return now > when;
-//
-//    /* Return when this key has not expired */
-//    if (now <= when) return 0;
-//
-//    /* Delete the key */
-//    server.stat_expiredkeys++;
-//    propagateExpire(db,key,server.lazyfree_lazy_expire);
-//    notifyKeyspaceEvent(NOTIFY_EXPIRED,
-//                        "expired",key,db->id);
-//    return server.lazyfree_lazy_expire ? dbAsyncDelete(db,key) :
-//           dbSyncDelete(db,key);
-//}
+void tombstoneSizeCommand(client *c) {
+    addReplyLongLong(c,dictSize(c->db->deleted_keys));
+}
 
 
 /*-----------------------------------------------------------------------------
- * Generic Del API Command
+ * Incremental collection of deleted keys.
+ *
+ * When keys are accessed they are deleted on-access. However we need a
+ * mechanism in order to ensure keys are eventually removed when deleted even
+ * if no access is performed on them.
  *----------------------------------------------------------------------------*/
 
-void crdtDelCommand(client *c) {
-    crdtDelGenericCommand(c, 1);
+void updateGcVectorClock() {
+    listIter li;
+    listNode *ln;
+
+    if (crdtServer.gcVectorClock) {
+        freeVectorClock(crdtServer.gcVectorClock);
+    }
+    crdtServer.gcVectorClock = dupVectorClock(crdtServer.vectorClock);
+    if (crdtServer.crdtMasters == NULL || listLength(crdtServer.crdtMasters) == 0) {
+        return;
+    }
+
+
+    VectorClock *gcVectorClock = crdtServer.gcVectorClock;
+    listRewind(crdtServer.crdtMasters, &li);
+    while ((ln = listNext(&li)) != NULL) {
+        CRDT_Master_Instance *crdtMaster = ln->value;
+        if (crdtMaster == NULL || crdtMaster->vectorClock == NULL) {
+            continue;
+        }
+        VectorClock *other = crdtMaster->vectorClock;
+        for (int i = 0; i < gcVectorClock->length; i++) {
+            VectorClockUnit *gcVectorClockUnit = &(gcVectorClock->clocks[i]);
+            VectorClockUnit *otherVectorClockUnit = getVectorClockUnit(other, gcVectorClock->clocks[i].gid);
+            if(otherVectorClockUnit != NULL) {
+                gcVectorClockUnit->logic_time = min(gcVectorClockUnit->logic_time, otherVectorClockUnit->logic_time);
+            } else {
+                gcVectorClockUnit->logic_time = 0;
+            }
+        }
+    }
 }
 
-// crdt.del <gid> <timestamp> <vc> key1 key2 key3 ....
-//   0         1      2        3     4
-void delCommand(client *c) {
-    crdtDelGenericCommand(c, 0);
+/* Helper function for the activeExpireCycle() function.
+ * This function will try to expire the key that is stored in the hash table
+ * entry 'de' of the 'expires' hash table of a Redis database.
+ *
+ * If the key is found to be expired, it is removed from the database and
+ * 1 is returned. Otherwise no operation is performed and 0 is returned.
+ *
+ * When a key is expired, server.stat_expiredkeys is incremented.
+ *
+ * The parameter 'now' is the current time in milliseconds as is passed
+ * to the function to avoid too many gettimeofday() syscalls. */
+int activeGcCycleTryGc(redisDb *db, dictEntry *de) {
+    robj *val = dictGetVal(de);
+    CrdtCommon *crdtCommon = retrieveCrdtCommon(val);
+
+    /* It's ready to be deleted, when and only when other peers already know what happend.
+     * 1. Gc Vector Clock is collected from each peer's vector clock, and do a minimium of them
+     * 2. if the vector clock of gcVectorClock is mono-increase, comparing to the deleted keys, the delete event will be triggered
+     * */
+    if (!isVectorClockMonoIncr(crdtCommon->vectorClock, crdtServer.gcVectorClock)) {
+        return 0;
+    }
+    sds key = dictGetKey(de);
+    if (dictDelete(db->deleted_keys,key) == DICT_OK) {
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+/* Try to expire a few timed out keys. The algorithm used is adaptive and
+ * will use few CPU cycles if there are few expiring keys, otherwise
+ * it will get more aggressive to avoid that too much memory is used by
+ * keys that can be removed from the keyspace.
+ *
+ * No more than CRON_DBS_PER_CALL databases are tested at every
+ * iteration.
+ *
+ * This kind of call is used when Redis detects that timelimit_exit is
+ * true, so there is more work to do, and we do it more incrementally from
+ * the beforeSleep() function of the event loop.
+ *
+ * Expire cycle type:
+ *
+ * If type is ACTIVE_EXPIRE_CYCLE_FAST the function will try to run a
+ * "fast" expire cycle that takes no longer than EXPIRE_FAST_CYCLE_DURATION
+ * microseconds, and is not repeated again before the same amount of time.
+ *
+ * If type is ACTIVE_EXPIRE_CYCLE_SLOW, that normal expire cycle is
+ * executed, where the time limit is a percentage of the REDIS_HZ period
+ * as specified by the ACTIVE_EXPIRE_CYCLE_SLOW_TIME_PERC define. */
+
+void activeGcCycle(int type) {
+    /* This function has some global state in order to continue the work
+     * incrementally across calls. */
+    static unsigned int current_db = 0; /* Last DB tested. */
+    static int timelimit_exit = 0;      /* Time limit hit in previous call? */
+    static long long last_fast_cycle = 0; /* When last fast cycle ran. */
+
+    int j, iteration = 0;
+    int dbs_per_call = CRON_DBS_PER_CALL;
+    long long start = ustime(), timelimit, elapsed;
+
+    /* When clients are paused the dataset should be static not just from the
+     * POV of clients not being able to write, but also from the POV of
+     * expires and evictions of keys not being performed. */
+    if (clientsArePaused()) return;
+
+    updateGcVectorClock();
+
+    if (type == ACTIVE_GC_CYCLE_FAST) {
+        /* Don't start a fast cycle if the previous cycle did not exited
+         * for time limt. Also don't repeat a fast cycle for the same period
+         * as the fast cycle total duration itself. */
+        if (!timelimit_exit) return;
+        if (start < last_fast_cycle + ACTIVE_EXPIRE_CYCLE_FAST_DURATION*2) return;
+        last_fast_cycle = start;
+    }
+
+    /* We usually should test CRON_DBS_PER_CALL per iteration, with
+     * two exceptions:
+     *
+     * 1) Don't test more DBs than we have.
+     * 2) If last time we hit the time limit, we want to scan all DBs
+     * in this iteration, as there is work to do in some DB and we don't want
+     * expired keys to use memory for too much time. */
+    if (dbs_per_call > server.dbnum || timelimit_exit)
+        dbs_per_call = server.dbnum;
+
+    /* We can use at max ACTIVE_EXPIRE_CYCLE_SLOW_TIME_PERC percentage of CPU time
+     * per iteration. Since this function gets called with a frequency of
+     * server.hz times per second, the following is the max amount of
+     * microseconds we can spend in this function. */
+    timelimit = 1000000*ACTIVE_EXPIRE_CYCLE_SLOW_TIME_PERC/server.hz/100;
+    timelimit_exit = 0;
+    if (timelimit <= 0) timelimit = 1;
+
+    if (type == ACTIVE_GC_CYCLE_FAST)
+        timelimit = ACTIVE_EXPIRE_CYCLE_FAST_DURATION; /* in microseconds. */
+
+    for (j = 0; j < dbs_per_call && timelimit_exit == 0; j++) {
+        int deleted;
+        redisDb *db = server.db+(current_db % server.dbnum);
+
+        /* Increment the DB now so we are sure if we run out of time
+         * in the current DB we'll restart from the next. This allows to
+         * distribute the time evenly across DBs. */
+        current_db++;
+
+        /* Continue to delete if at the end of the cycle more than 25%
+         * of the keys were deleted. */
+        do {
+            unsigned long num, slots;
+            iteration++;
+
+            /* If there is nothing to delete try next DB ASAP. */
+            if ((num = dictSize(db->deleted_keys)) == 0) {
+                break;
+            }
+            slots = dictSlots(db->deleted_keys);
+
+            /* When there are less than 1% filled slots getting random
+             * keys is expensive, so stop here waiting for better times...
+             * The dictionary will be resized asap. */
+            if (num && slots > DICT_HT_INITIAL_SIZE &&
+                (num*100/slots < 1)) break;
+
+            /* The main collection cycle. Sample random keys among keys
+             * with an delete set, checking for deleted ones. */
+            deleted = 0;
+
+            if (num > ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP)
+                num = ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP;
+
+            while (num--) {
+                dictEntry *de;
+
+                if ((de = dictGetRandomKey(db->deleted_keys)) == NULL) break;
+
+                if (activeGcCycleTryGc(db,de)) deleted++;
+
+            }
+
+            /* We can't block forever here even if there are many keys to
+             * delete. So after a given amount of milliseconds return to the
+             * caller waiting for the other active delete cycle. */
+            if ((iteration & 0xf) == 0) { /* check once every 16 iterations. */
+                elapsed = ustime()-start;
+                if (elapsed > timelimit) {
+                    timelimit_exit = 1;
+                    break;
+                }
+            }
+            /* We don't repeat the cycle if there are less than 25% of keys
+             * found deleted in the current DB. */
+        } while (deleted > ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP/4);
+    }
+
+    elapsed = ustime()-start;
+    latencyAddSampleIfNeeded("gc-cycle",elapsed/1000);
 }
