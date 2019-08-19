@@ -1459,7 +1459,6 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
         c->read_reploff += nread;
     } else if (c->flags & CLIENT_CRDT_MASTER) {
         if (getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED)  {
-            serverLog(LL_NOTICE, "[CRDT] slave receive master commands");
             c->read_reploff += nread;
         }
     }

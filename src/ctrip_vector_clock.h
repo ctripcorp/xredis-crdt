@@ -80,20 +80,14 @@ sortVectorClock(VectorClock *vc);
 VectorClock*
 vectorClockMerge(VectorClock *vc1, VectorClock *vc2);
 
+VectorClock*
+vectorClockMergeMin(VectorClock *vc1, VectorClock *vc2);
+
 VectorClockUnit*
 getVectorClockUnit(VectorClock *vc, long long gid);
 
 int
 isVectorClockMonoIncr(VectorClock *current, VectorClock *future);
-
-/*
- * at a very special gid
- * ==0 if vc1 equals vc2
- * < 0 if vc1 < vc2
- * > 1 if vc1 > vc1
- * */
-size_t
-vectorClockCmp(VectorClock *vc1, VectorClock *vc2, long long gid);
 
 void
 mergeVectorClockUnit(VectorClock *vc, VectorClockUnit *vcu);

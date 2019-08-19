@@ -171,6 +171,8 @@ typedef long long mstime_t; /* millisecond time type. */
 #define ACTIVE_EXPIRE_CYCLE_SLOW_TIME_PERC 25 /* CPU max % for keys collection */
 #define ACTIVE_EXPIRE_CYCLE_SLOW 0
 #define ACTIVE_EXPIRE_CYCLE_FAST 1
+#define ACTIVE_GC_CYCLE_SLOW 0
+#define ACTIVE_GC_CYCLE_FAST 1
 
 /* Instantaneous metrics tracking. */
 #define STATS_METRIC_SAMPLES 16     /* Number of samples per metric. */
@@ -1256,7 +1258,7 @@ struct redisServer {
     /*crdt stuff*/
     long long crdt_gid;
     VectorClock *vectorClock;
-    VectorClock *maxVectorClock;
+    VectorClock *gcVectorClock;
     VectorClockUnit *localVcu;
     list *crdtMasters;
 }redisServer;
@@ -1573,7 +1575,6 @@ void putSlaveOnline(client *slave);
 void createReplicationBacklog(struct redisServer *srv);
 
 /* CRDT Replications */
-int listMatchCrdtMaster(void *a, void *b);
 void crdtReplicationCron(void);
 void crdtMergeCommand(client *c);
 void crdtMergeStartCommand(client *c);
@@ -1592,7 +1593,7 @@ void crdtReplicationUnsetMaster(long long gid);
 void debugCancelCrdt(client *c);
 void crdtRoleCommand(client *c);
 CRDT_Master_Instance *createPeerMaster(client *c, long long gid);
-
+void crdtOvcCommand(client *c);
 
 /* CRDT Command */
 void crdtDelCommand(client *c);
@@ -1830,6 +1831,16 @@ robj *dbRandomKey(redisDb *db);
 int dbSyncDelete(redisDb *db, robj *key);
 int dbDelete(redisDb *db, robj *key);
 robj *dbUnshareStringValue(redisDb *db, robj *key, robj *o);
+
+//CRDT GC
+void tombstoneAdd(redisDb *db, robj *key, robj *val);
+void tombstoneOverwrite(redisDb *db, robj *key, robj *val);
+void setKeyToTombstone(redisDb *db, robj *key, robj *val);
+robj *lookupTombstoneKey(redisDb *db, robj *key);
+int gcIfNeeded(redisDb *db, robj *key);
+void updateGcVectorClock();
+void tombstoneSizeCommand(client *c);
+void activeGcCycle(int type);
 
 #define EMPTYDB_NO_FLAGS 0      /* No flags. */
 #define EMPTYDB_ASYNC (1<<0)    /* Reclaim memory in another thread. */
@@ -2136,6 +2147,6 @@ void
 refreshMinVectorClock(VectorClock *other, int sourceGid);
 
 void
-refreshMaxVectorClock(VectorClock *other);
+refreshGcVectorClock(VectorClock *other);
 
 #endif

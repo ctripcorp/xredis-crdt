@@ -915,7 +915,7 @@ void replconfCommand(client *c) {
             refreshVectorClock(c, c->argv[j+1]->ptr);
 
             VectorClock *vclock = sdsToVectorClock(c->argv[j+1]->ptr);
-            refreshMaxVectorClock(vclock);
+            refreshGcVectorClock(vclock);
             freeVectorClock(vclock);
             /* If this was a diskless replication, we need to really put
              * the slave online when the first ACK is received (which

@@ -317,7 +317,9 @@ struct redisCommand redisCommandTable[] = {
     {"crdt.role",crdtRoleCommand,3,"lst",0,NULL,0,0,0,0,0},
     {"crdt.info",crdtinfoCommand,-1,"lt",0,NULL,0,0,0,0,0},
     {"peerof",peerofCommand,4,"ast",0,NULL,0,0,0,0,0},
-    {"debugCancelCrdt",debugCancelCrdt,3,"ast",0,NULL,0,0,0,0,0}
+    {"debugCancelCrdt",debugCancelCrdt,3,"ast",0,NULL,0,0,0,0,0},
+    {"tombstoneSize",tombstoneSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
+    {"crdt.ovc",crdtOvcCommand,3,"rF",0,NULL,0,0,0,0,0},
 };
 
 /*============================ CRDT functions ============================ */
@@ -727,6 +729,8 @@ void tryResizeHashTables(int dbid) {
         dictResize(server.db[dbid].dict);
     if (htNeedsResize(server.db[dbid].expires))
         dictResize(server.db[dbid].expires);
+    if (htNeedsResize(server.db[dbid].deleted_keys))
+        dictResize(server.db[dbid].deleted_keys);
 }
 
 /* Our hash table implementation performs rehashing incrementally while
@@ -745,6 +749,11 @@ int incrementallyRehash(int dbid) {
     /* Expires */
     if (dictIsRehashing(server.db[dbid].expires)) {
         dictRehashMilliseconds(server.db[dbid].expires,1);
+        return 1; /* already used our millisecond for this loop... */
+    }
+    /* Tombstones */
+    if (dictIsRehashing(server.db[dbid].deleted_keys)) {
+        dictRehashMilliseconds(server.db[dbid].deleted_keys,1);
         return 1; /* already used our millisecond for this loop... */
     }
     return 0;
@@ -900,6 +909,8 @@ void databasesCron(void) {
     } else if (server.masterhost != NULL) {
         expireSlaveKeys();
     }
+
+    activeGcCycle(ACTIVE_GC_CYCLE_SLOW);
 
     /* Defrag keys gradually. */
     if (server.active_defrag_enabled)
@@ -1257,6 +1268,8 @@ void beforeSleep(struct aeEventLoop *eventLoop) {
      * ASAP if a fast cycle is not needed). */
     if (server.active_expire_enabled && server.masterhost == NULL)
         activeExpireCycle(ACTIVE_EXPIRE_CYCLE_FAST);
+
+    activeGcCycle(ACTIVE_GC_CYCLE_FAST);
 
     /* Send all the slaves an ACK request if at least one client blocked
      * during the previous event loop iteration. */
@@ -1951,6 +1964,7 @@ void initServer(struct redisServer *srv) {
         for (j = 0; j < srv->dbnum; j++) {
             srv->db[j].dict = dictCreate(&dbDictType, NULL);
             srv->db[j].expires = dictCreate(&keyptrDictType, NULL);
+            srv->db[j].deleted_keys = dictCreate(&dbDictType, NULL);
             srv->db[j].blocking_keys = dictCreate(&keylistDictType, NULL);
             srv->db[j].ready_keys = dictCreate(&objectKeyPointerValueDictType, NULL);
             srv->db[j].watched_keys = dictCreate(&keylistDictType, NULL);
@@ -2068,10 +2082,10 @@ void initServer(struct redisServer *srv) {
     vc->clocks[0].logic_time = 0;
     srv->vectorClock = vc;
 
-    VectorClock *maxVclock = newVectorClock(1);
+    VectorClock *gcVclock = newVectorClock(1);
     vc->clocks[0].gid = crdtServer.crdt_gid;
     vc->clocks[0].logic_time = 0;
-    srv->maxVectorClock = maxVclock;
+    srv->gcVectorClock = gcVclock;
 }
 
 /* Populates the Redis Command Table starting from the hard coded list
@@ -3562,14 +3576,15 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
         if (sections++) info = sdscat(info,"\r\n");
         info = sdscatprintf(info, "# Keyspace\r\n");
         for (j = 0; j < server.dbnum; j++) {
-            long long keys, vkeys;
+            long long keys, vkeys, tombstoneKeys;
 
             keys = dictSize(server.db[j].dict);
             vkeys = dictSize(server.db[j].expires);
+            tombstoneKeys = dictSize(server.db[j].deleted_keys);
             if (keys || vkeys) {
                 info = sdscatprintf(info,
-                    "db%d:keys=%lld,expires=%lld,avg_ttl=%lld\r\n",
-                    j, keys, vkeys, server.db[j].avg_ttl);
+                    "db%d:keys=%lld,expires=%lld,tombstones=%lld,avg_ttl=%lld\r\n",
+                    j, keys, vkeys, tombstoneKeys, server.db[j].avg_ttl);
             }
         }
     }

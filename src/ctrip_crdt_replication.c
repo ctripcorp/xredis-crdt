@@ -59,6 +59,8 @@ CRDT_Master_Instance *createPeerMaster(client *c, long long gid) {
     masterInstance->masterhost = NULL;
     masterInstance->masterport = -1;
     masterInstance->masterauth = NULL;
+    masterInstance->vectorClock = NULL;
+    masterInstance->repl_transfer_lastio = mstime();
     return masterInstance;
 }
 
@@ -224,11 +226,6 @@ void crdtReplicationUnsetMaster(long long gid) {
 
 /**---------------------------CRDT RDB Start/End Mark--------------------------------*/
 
-int listMatchCrdtMaster(void *a, void *b) {
-    CRDT_Master_Instance *ma = a, *mb = b;
-    return ma->gid == mb->gid;
-}
-
 
 //CRDT.START_MERGE <gid> <vector-clock> <repl_id>
 void
@@ -247,10 +244,10 @@ crdtMergeStartCommand(client *c) {
         listAddNodeTail(crdtServer.crdtMasters, peerMaster);
     }
     VectorClock *vclock = sdsToVectorClock(c->argv[2]->ptr);
-    VectorClock *curMaxVclock = crdtServer.maxVectorClock;
-    crdtServer.maxVectorClock = vectorClockMerge(crdtServer.maxVectorClock, vclock);
+    VectorClock *curGcVclock = crdtServer.gcVectorClock;
+    crdtServer.gcVectorClock = vectorClockMerge(crdtServer.gcVectorClock, vclock);
     freeVectorClock(vclock);
-    freeVectorClock(curMaxVclock);
+    freeVectorClock(curGcVclock);
     server.dirty++;
     serverLog(LL_NOTICE, "[CRDT][crdtMergeStartCommand] master gid: %lld", sourceGid);
 }
@@ -267,12 +264,14 @@ crdtMergeEndCommand(client *c) {
     serverLog(LL_NOTICE, "[CRDT][crdtMergeEndCommand][received] master gid: %lld", sourceGid);
 
     peerMaster->vectorClock = sdsToVectorClock(c->argv[2]->ptr);
-    refreshMaxVectorClock(peerMaster->vectorClock);
+    refreshGcVectorClock(peerMaster->vectorClock);
     memcpy(peerMaster->master_replid, c->argv[3]->ptr, sizeof(peerMaster->master_replid));
     if (getLongLongFromObjectOrReply(c, c->argv[4], &offset, NULL) != C_OK) return;
     peerMaster->master_initial_offset = offset;
-
-    peerMaster->repl_state = REPL_STATE_CONNECTED;
+    if (server.master == NULL) {
+        peerMaster->repl_state = REPL_STATE_CONNECTED;
+    }
+    server.dirty++;
     if(!crdtServer.repl_backlog) createReplicationBacklog(&crdtServer);
     crdtReplicationSendAck(getPeerMaster(c->gid));
     return;
@@ -1095,6 +1094,54 @@ void crdtReplicationHandleMasterDisconnection(client *c) {
      * the slaves only if we'll have to do a full resync with our master. */
 }
 
+// CRDT.OVC <gid> <vclock>
+void sendObservedVectorClock() {
+    robj *crdt_ovc_argv[3];
+    crdt_ovc_argv[0] = createStringObject("CRDT.OVC",8);
+    crdt_ovc_argv[1] = createStringObjectFromLongLong(crdtServer.crdt_gid);
+    sds vclockStr = vectorClockToSds(crdtServer.vectorClock);
+    crdt_ovc_argv[2] = createStringObject(vclockStr, sdslen(vclockStr));
+
+    replicationFeedSlaves(&crdtServer, crdtServer.slaves, crdtServer.slaveseldb,
+                          crdt_ovc_argv, 3);
+
+    sdsfree(vclockStr);
+    decrRefCount(crdt_ovc_argv[0]);
+    decrRefCount(crdt_ovc_argv[1]);
+    decrRefCount(crdt_ovc_argv[2]);
+}
+
+void crdtOvcCommand(client *c) {
+    if (c->argc != 3) {
+        addReply(c, shared.syntaxerr);
+        return;
+    }
+    long long gid;
+    if (getLongLongFromObject(c->argv[1], &gid) != C_OK) {
+        addReply(c, shared.syntaxerr);
+    }
+
+    sds vclockStr = (sds) c->argv[2]->ptr;
+    VectorClock *vclock = sdsToVectorClock(vclockStr);
+
+    CRDT_Master_Instance *peerMaster = getPeerMaster(gid);
+    if (peerMaster == NULL) {
+        serverLog(LL_WARNING, "[CRDT] CRDT.OVC client is not peer master: given gid %lld",
+                  gid);
+        freeClient(c);
+        return;
+    }
+
+    server.dirty++;
+    VectorClock *newVectorClock = vectorClockMerge(peerMaster->vectorClock, vclock);
+    if (peerMaster->vectorClock != NULL) {
+        freeVectorClock(peerMaster->vectorClock);
+    }
+    freeVectorClock(vclock);
+    peerMaster->vectorClock = newVectorClock;
+    addReply(c, shared.ok);
+}
+
 /* Replication cron function, called 1 time per second. */
 void crdtReplicationCron(void) {
     static long long replication_cron_loops = 0;
@@ -1128,7 +1175,7 @@ void crdtReplicationCron(void) {
             /* Timed out master when we are an already connected slave? */
             if (crdtMaster->masterhost && crdtMaster->repl_state == REPL_STATE_CONNECTED &&
                 (time(NULL) - crdtMaster->master->lastinteraction) > crdtServer.repl_timeout) {
-                serverLog(LL_NOTICE, "[CRDT]MASTER timeout: no data nor PING received...");
+                serverLog(LL_NOTICE, "[CRDT]MASTER timeout: no data nor PING received in %d second...", crdtServer.repl_timeout);
                 freeClient(crdtMaster->master);
             }
 
@@ -1164,6 +1211,8 @@ void crdtReplicationCron(void) {
         replicationFeedSlaves(&crdtServer, crdtServer.slaves, crdtServer.slaveseldb,
                               ping_argv, 1);
         decrRefCount(ping_argv[0]);
+
+        sendObservedVectorClock();
     }
 
     /* Second, send a newline to all the slaves in pre-synchronization
