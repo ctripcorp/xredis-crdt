@@ -312,6 +312,7 @@ struct redisCommand redisCommandTable[] = {
     {"crdt.psync",crdtPsyncCommand,3,"ars",0,NULL,0,0,0,0,0},
     {"crdt.merge_start", crdtMergeStartCommand,-1,"ars",0,NULL,0,0,0,0,0},
     {"crdt.merge",crdtMergeCommand,-1,"ars",0,NULL,0,0,0,0,0},
+    {"crdt.merge_del",crdtMergeDelCommand,-1,"ars",0,NULL,0,0,0,0,0},
     {"crdt.merge_end",crdtMergeEndCommand,-1,"ars",0,NULL,0,0,0,0,0},
     {"crdt.replconf",replconfCommand,-1,"aslt",0,NULL,0,0,0,0,0},
     {"crdt.role",crdtRoleCommand,3,"lst",0,NULL,0,0,0,0,0},

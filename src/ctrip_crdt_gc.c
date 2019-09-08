@@ -209,7 +209,9 @@ void updateGcVectorClock() {
 int activeGcCycleTryGc(redisDb *db, dictEntry *de) {
     robj *val = dictGetVal(de);
     CrdtCommon *crdtCommon = retrieveCrdtCommon(val);
-
+    if (crdtCommon == NULL) {
+        return 0;
+    }
     /* It's ready to be deleted, when and only when other peers already know what happend.
      * 1. Gc Vector Clock is collected from each peer's vector clock, and do a minimium of them
      * 2. if the vector clock of gcVectorClock is mono-increase, comparing to the deleted keys, the delete event will be triggered

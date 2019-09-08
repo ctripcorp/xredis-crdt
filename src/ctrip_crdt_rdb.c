@@ -87,21 +87,137 @@ werr: /* Write error. */
     return C_ERR;
 }
 
+int crdtSendMergeRequest(rio *rdb, int *error, crdtRdbSaveInfo *rsi, dictIterator *di, redisDb *db) {
+    dictEntry *de;
+    long long now = mstime();
+    rio payload;
+
+    /* Iterate this DB writing every entry */
+    while((de = dictNext(di)) != NULL) {
+        sds keystr = dictGetKey(de);
+        robj key, *o = dictGetVal(de);
+        long long expire;
+        if(o->type != OBJ_MODULE || isModuleCrdt(o) != C_OK) {
+            serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveRio] NOT CRDT MODULE, SKIP");
+            continue;
+        }
+
+        /* Check if the crdt module's vector clock on local gid is avaiable for crdt merge */
+        moduleValue *mv = o->ptr;
+        void *moduleValue = mv->value;
+        CrdtCommon *common = (CrdtCommon *) moduleValue;
+        if (common->gid != crdtServer.crdt_gid) {
+            continue;
+        }
+        VectorClock *vc = common->vectorClock;
+        long long result = getMyGidLogicTime(vc) - rsi->logic_time;
+
+        if (result <= 0) {
+            continue;
+        }
+
+        //CRDT.Merge <src-gid> <key> <vc> <timestamp/-1> <ttl> <value>
+        initStaticStringObject(key,keystr);
+        expire = getExpire(db,&key);
+        // not send if expired already
+        if (expire != -1 && expire < now) {
+            continue;
+        }
+
+        long long ttl = 0;
+        if (expire != -1) {
+            ttl = expire-mstime();
+            if (ttl < 1) ttl = 1;
+        }
+        serverAssertWithInfo(NULL, &key, sdsEncodedObject((&key)));
+        serverAssertWithInfo(NULL, &key, rioWriteBulkCount(rdb, '*', 7));
+
+        serverAssertWithInfo(NULL, &key, rioWriteBulkString(rdb,"CRDT.Merge",10));
+        serverAssertWithInfo(NULL, &key, rioWriteBulkLongLong(rdb, crdtServer.crdt_gid));
+        serverAssertWithInfo(NULL, &key, rioWriteBulkString(rdb, (&key)->ptr,sdslen((&key)->ptr)));
+        sds vclockStr = vectorClockToSds(common->vectorClock);
+        serverAssertWithInfo(NULL, &key, rioWriteBulkString(rdb, vclockStr, sdslen(vclockStr)));
+        sdsfree(vclockStr);
+        serverAssertWithInfo(NULL, &key, rioWriteBulkLongLong(rdb, common->timestamp));
+        serverAssertWithInfo(NULL, &key, rioWriteBulkLongLong(rdb, ttl));
+
+        /* Emit the payload argument, that is the serialized object using
+         * * the DUMP format. */
+        createDumpPayload(&payload, o);
+        serverAssertWithInfo(NULL, &key,
+                             rioWriteBulkString(rdb, payload.io.buffer.ptr,
+                                                sdslen(payload.io.buffer.ptr)));
+        sdsfree(payload.io.buffer.ptr);
+
+    }
+    return C_OK;
+}
+
+// CRDT.Merge_Del <gid> <key> <vc> <timestamp/-1> <val>
+int crdtSendMergeDelRequest(rio *rdb, int *error, crdtRdbSaveInfo *rsi, dictIterator *di) {
+    dictEntry *de;
+    rio payload;
+
+    /* Iterate this DB tombstone writing every entry that is locally changed, but not gc'ed*/
+    while((de = dictNext(di)) != NULL) {
+        sds keystr = dictGetKey(de);
+        robj key, *o = dictGetVal(de);
+        if(o->type != OBJ_MODULE || isModuleCrdt(o) != C_OK) {
+            serverLog(LL_NOTICE, "[CRDT] [crdtSendMergeDelRequest] NOT CRDT MODULE, SKIP");
+            continue;
+        }
+
+        /* Check if the crdt module's vector clock on local gid is avaiable for crdt merge */
+        moduleValue *mv = o->ptr;
+        void *moduleValue = mv->value;
+        CrdtCommon *common = (CrdtCommon *) moduleValue;
+        if (common->gid != crdtServer.crdt_gid) {
+            continue;
+        }
+        VectorClock *vc = common->vectorClock;
+        long long result = getMyGidLogicTime(vc) - rsi->logic_time;
+
+        if (result <= 0) {
+            continue;
+        }
+
+        //CRDT.Merge_Del <gid> <key> <vc> <timestamp/-1> <val>
+        initStaticStringObject(key,keystr);
+
+        serverAssertWithInfo(NULL, &key, sdsEncodedObject((&key)));
+        serverAssertWithInfo(NULL, &key, rioWriteBulkCount(rdb, '*', 6));
+
+        serverAssertWithInfo(NULL, &key, rioWriteBulkString(rdb,"CRDT.Merge_Del",14));
+        serverAssertWithInfo(NULL, &key, rioWriteBulkLongLong(rdb, crdtServer.crdt_gid));
+        serverAssertWithInfo(NULL, &key, rioWriteBulkString(rdb, (&key)->ptr,sdslen((&key)->ptr)));
+        sds vclockStr = vectorClockToSds(common->vectorClock);
+        serverAssertWithInfo(NULL, &key, rioWriteBulkString(rdb, vclockStr, sdslen(vclockStr)));
+        sdsfree(vclockStr);
+        serverAssertWithInfo(NULL, &key, rioWriteBulkLongLong(rdb, common->timestamp));
+
+        /* Emit the payload argument, that is the serialized object using
+         * * the DUMP format. */
+        createDumpPayload(&payload, o);
+        serverAssertWithInfo(NULL, &key,
+                             rioWriteBulkString(rdb, payload.io.buffer.ptr,
+                                                sdslen(payload.io.buffer.ptr)));
+        sdsfree(payload.io.buffer.ptr);
+    }
+    return C_OK;
+}
+
 //CRDT.Merge <src-gid> <key> <vc> <timestamp/-1> <ttl> <value>
 int
 crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
     dictIterator *di = NULL;
-    dictEntry *de;
     char llstr[LONG_STR_SIZE];
     int j;
-    long long now = mstime();
-    rio payload;
 
     serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveRio] start");
     for (j = 0; j < server.dbnum; j++) {
         redisDb *db = server.db+j;
         dict *d = db->dict;
-        if (dictSize(d) == 0) continue;
+        if (dictSize(d) == 0 && dictSize(db->deleted_keys) == 0) continue;
         di = dictGetSafeIterator(d);
         if (!di) return C_ERR;
 
@@ -122,64 +238,16 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
         }
         if(rioWriteBulkObject(rdb, selectcmd) == 0) goto werr;
 
+        if (dictSize(d) != 0 && crdtSendMergeRequest(rdb, error, rsi, di, db) == C_ERR) {
+            goto werr;
+        }
+        dictReleaseIterator(di);
 
-        /* Iterate this DB writing every entry */
-        while((de = dictNext(di)) != NULL) {
-            sds keystr = dictGetKey(de);
-            robj key, *o = dictGetVal(de);
-            long long expire;
-            if(o->type != OBJ_MODULE || isModuleCrdt(o) != C_OK) {
-                serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveRio] NOT CRDT MODULE, SKIP");
-                continue;
-            }
-
-            /* Check if the crdt module's vector clock on local gid is avaiable for crdt merge */
-            moduleValue *mv = o->ptr;
-            void *moduleValue = mv->value;
-            CrdtCommon *common = (CrdtCommon *) moduleValue;
-            if (common->gid != crdtServer.crdt_gid) {
-                continue;
-            }
-            VectorClock *vc = common->vectorClock;
-            int result = getMyGidLogicTime(vc) - rsi->logic_time;
-
-            if (result <= 0) {
-                continue;
-            }
-
-            //CRDT.Merge <src-gid> <key> <vc> <timestamp/-1> <ttl> <value>
-            initStaticStringObject(key,keystr);
-            expire = getExpire(db,&key);
-            // not send if expired already
-            if (expire != -1 && expire < now) {
-                continue;
-            }
-
-            long long ttl = 0;
-            if (expire != -1) {
-                ttl = expire-mstime();
-                if (ttl < 1) ttl = 1;
-            }
-            serverAssertWithInfo(NULL, &key, sdsEncodedObject((&key)));
-            serverAssertWithInfo(NULL, &key, rioWriteBulkCount(rdb, '*', 7));
-
-            serverAssertWithInfo(NULL, &key, rioWriteBulkString(rdb,"CRDT.Merge",10));
-            serverAssertWithInfo(NULL, &key, rioWriteBulkLongLong(rdb, crdtServer.crdt_gid));
-            serverAssertWithInfo(NULL, &key, rioWriteBulkString(rdb, (&key)->ptr,sdslen((&key)->ptr)));
-            sds vclockStr = vectorClockToSds(common->vectorClock);
-            serverAssertWithInfo(NULL, &key, rioWriteBulkString(rdb, vclockStr, sdslen(vclockStr)));
-            sdsfree(vclockStr);
-            serverAssertWithInfo(NULL, &key, rioWriteBulkLongLong(rdb, common->timestamp));
-            serverAssertWithInfo(NULL, &key, rioWriteBulkLongLong(rdb, ttl));
-
-            /* Emit the payload argument, that is the serialized object using
-             * * the DUMP format. */
-            createDumpPayload(&payload, o);
-            serverAssertWithInfo(NULL, &key,
-                                 rioWriteBulkString(rdb, payload.io.buffer.ptr,
-                                                    sdslen(payload.io.buffer.ptr)));
-            sdsfree(payload.io.buffer.ptr);
-
+        d = db->deleted_keys;
+        di = dictGetSafeIterator(d);
+        if (!di) return C_ERR;
+        if (dictSize(d) != 0 && crdtSendMergeDelRequest(rdb, error, rsi, di) == C_ERR) {
+            goto werr;
         }
         dictReleaseIterator(di);
     }
@@ -193,6 +261,54 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
 }
 
 /**---------------------------CRDT Merge Command--------------------------------*/
+//CRDT.Merge_Del <gid> <key> <vc> <timestamp/-1>  <val>
+//   0             1     2     3    4               5
+void
+crdtMergeDelCommand(client *c) {
+    rio payload;
+    robj *obj;
+    int type;
+    long long sourceGid, timestamp;
+    if (getLongLongFromObjectOrReply(c, c->argv[1], &sourceGid, NULL) != C_OK) goto error;
+
+    robj *key = c->argv[2];
+
+    if (getLongLongFromObjectOrReply(c, c->argv[4], &timestamp, NULL) != C_OK) goto error;
+
+    if (verifyDumpPayload(c->argv[5]->ptr,sdslen(c->argv[5]->ptr)) == C_ERR) {
+        goto error;
+    }
+
+    rioInitWithBuffer(&payload,c->argv[5]->ptr);
+    if (((type = rdbLoadObjectType(&payload)) == -1) ||
+        ((obj = rdbLoadObject(type,&payload)) == NULL))
+    {
+        goto error;
+    }
+
+    /* Merge the new object in the hash table */
+
+    robj *currentVal = lookupKeyRead(c->db, key);
+    if (currentVal) {
+        CrdtCommon *currentCrdtCommon = retrieveCrdtCommon(currentVal);
+        CrdtCommon *tombstoneCrdtCommon = retrieveCrdtCommon(obj);
+        if (currentCrdtCommon && tombstoneCrdtCommon  &&
+                isVectorClockMonoIncr(currentCrdtCommon->vectorClock, tombstoneCrdtCommon->vectorClock)) {
+            dbDelete(c->db, key);
+        }
+    }
+    sds copy = sdsdup(key->ptr);
+    dictAdd(c->db->deleted_keys, copy, obj);
+
+    server.dirty++;
+    return;
+
+    error:
+    crdtCancelReplicationHandshake(sourceGid);
+    return;
+
+}
+
 //CRDT.Merge <gid> <key> <vc> <timestamp/-1> <expire> <value>
 // 0           1    2     3      4             5        6
 void
@@ -223,6 +339,17 @@ crdtMergeCommand(client *c) {
     moduleType *mt = mv->type;
     void *moduleDataType = mv->value;
     CrdtCommon *common = (CrdtCommon *) moduleDataType;
+
+    // check tombstone first, do not insert the key if tombstone is partially ordered after the insert
+    dictEntry *de = dictFind(c->db->deleted_keys,key->ptr);
+    if (de) {
+        robj *tombstone = dictGetVal(de);
+        CrdtCommon *tombstoneCrdtCommon = retrieveCrdtCommon(tombstone);
+        if (isVectorClockMonoIncr(common->vectorClock, tombstoneCrdtCommon->vectorClock)) {
+            decrRefCount(obj);
+            return;
+        }
+    }
 
     robj *currentVal = lookupKeyRead(c->db, key);
     void *mergedVal;
