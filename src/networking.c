@@ -1480,7 +1480,12 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
      * was actually applied to the master state: this quantity, and its
      * corresponding part of the replication stream, will be propagated to
      * the sub-slaves and to the replication backlog. */
-    if (!(c->flags & CLIENT_MASTER)) {
+
+    /* Sep/07/2019 marked by nick, we should also propagate the stream if client is
+     * a crdt(peer) master, as we wish our slaves to keeper align with peer master's
+     * repl offset, so that, when a failover happend locally, the globally repl_offset
+     * will not be any different*/
+    if (!(c->flags & CLIENT_MASTER) && !(c->flags & CLIENT_CRDT_MASTER)) {
         processInputBuffer(c);
     } else {
         size_t prev_offset = c->reploff;

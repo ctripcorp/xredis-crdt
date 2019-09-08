@@ -140,12 +140,6 @@ void peerofCommand(client *c) {
         addReplyError(c,"PEEROF not allowed in cluster mode.");
         return;
     }
-    if (server.masterhost || server.cached_master || server.master) {
-        if(!(c->flags & CLIENT_MASTER)) {
-            addReplyError(c, "PEEROF not allowed on redis slave");
-            return;
-        }
-    }
 
     long port;
     long long gid;
@@ -1132,7 +1126,6 @@ void crdtOvcCommand(client *c) {
         return;
     }
 
-    server.dirty++;
     VectorClock *newVectorClock = vectorClockMerge(peerMaster->vectorClock, vclock);
     if (peerMaster->vectorClock != NULL) {
         freeVectorClock(peerMaster->vectorClock);
@@ -1184,7 +1177,8 @@ void crdtReplicationCron(void) {
                 serverLog(LL_NOTICE, "[CRDT] Connecting to MASTER %s:%d",
                           crdtMaster->masterhost, crdtMaster->masterport);
                 if (crdtConnectWithMaster(crdtMaster) == C_OK) {
-                    serverLog(LL_NOTICE, "[CRDT]MASTER <-> SLAVE sync started");
+                    serverLog(LL_NOTICE, "[CRDT]MASTER <-> SLAVE sync started, master(%s:%d)",
+                              crdtMaster->masterhost, crdtMaster->masterport);
                 }
             }
 
