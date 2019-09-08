@@ -1,7 +1,6 @@
 
 start_server {tags {"crdt-register"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
 
-
     test {"[crdt_register.tcl]SET and GET"} {
         r set x foobar
         r get x

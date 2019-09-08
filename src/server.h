@@ -891,17 +891,11 @@ typedef struct CRDT_Master_Instance {
     int repl_state;          /* Replication status if the instance is acting as a slave */
     int repl_transfer_s;     /* Slave -> Master SYNC socket */
     time_t repl_transfer_lastio; /* Unix time of the latest read, for timeout */
-    int repl_serve_stale_data; /* Serve stale data when link is down? */
+
     int repl_slave_ro;          /* Slave is read only? */
-    int repl_slave_repl_all;          /* Slave is replicate all commands to its slave? */
     time_t repl_down_since; /* Unix time at which link with master went down */
-    int repl_disable_tcp_nodelay;   /* Disable TCP_NODELAY after SYNC? */
-    /* The following two fields is where we store crdt peer(as a master) CRDT.PSYNC replid/offset
-     * while the PSYNC is in progress. At the end we'll copy the fields into
-     * the master client structure. */
     char master_replid[CONFIG_RUN_ID_SIZE+1];  /* Master PSYNC repl_id. */
     long long master_initial_offset;           /* Master PSYNC offset. used for the full sync*/
-    int repl_slave_lazy_flush;          /* Lazy FLUSHALL before loading DB? */
 
     VectorClock *vectorClock;
 
@@ -1259,7 +1253,6 @@ struct redisServer {
     long long crdt_gid;
     VectorClock *vectorClock;
     VectorClock *gcVectorClock;
-    VectorClockUnit *localVcu;
     list *crdtMasters;
 }redisServer;
 
@@ -1577,6 +1570,7 @@ void createReplicationBacklog(struct redisServer *srv);
 /* CRDT Replications */
 void crdtReplicationCron(void);
 void crdtMergeCommand(client *c);
+void crdtMergeDelCommand(client *c);
 void crdtMergeStartCommand(client *c);
 void crdtMergeEndCommand(client *c);
 void peerofCommand(client *c);
@@ -1601,7 +1595,7 @@ CrdtCommon *retrieveCrdtCommon(robj *obj);
 
 /* Macro to initialize an IO context. Note that the 'ver' field is populated
  * inside rdb.c according to the version of the value to load. */
-inline size_t isModuleCrdt(robj *obj) {
+inline int isModuleCrdt(robj *obj) {
     if(obj->type != OBJ_MODULE) {
         return C_ERR;
     }
