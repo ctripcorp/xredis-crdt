@@ -71,7 +71,7 @@ start_server {tags {"gc"} config {crdt.conf} overrides {crdt-gid 1} module {crdt
         } {}
 
         test {also del in A} {
-            wait_for_condition 1000 100 {
+            wait_for_condition 100 50 {
                 [$A get key] eq {}
             } else {
                 fail "Can't propagate the del to A"
@@ -88,9 +88,8 @@ start_server {tags {"gc"} config {crdt.conf} overrides {crdt-gid 1} module {crdt
             }
         }
 
-        after 500
         test {also gc in A} {
-            wait_for_condition 1000 100 {
+            wait_for_condition 100 50 {
                 [$A tombstonesize] eq 0
             } else {
                 fail "other(A) not gc the tombstone"
@@ -210,7 +209,15 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
             test "GC in all redis" {
                 [lindex $peers 0] set key-peer-1 val-1
                 [lindex $peers 1] set key-peer-2 val-2
+                wait_for_condition 500 100 {
+                    [[lindex $peers 2] get key-peer-1] eq {val-1} &&
+                    [[lindex $peers 2] get key-peer-2] eq {val-2}
+                } else {
+                    fail "Gc not happend in all redis"
+                }
+
                 [lindex $peers 2] del key-peer-1 key-peer-2
+
                 # make sure all deleted keys went into tombstone
                 wait_for_condition 500 100 {
                     [[lindex $peers 0] tombstonesize] == 2 ||
@@ -221,7 +228,10 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                 }
 
                 # update the vector clock
-                [lindex $peers 2] set hello world
+                [lindex $peers 2] set hello world1
+                [lindex $peers 0] set hello world2
+                [lindex $peers 1] set hello world3
+
                 wait_for_condition 500 100 {
                     [[lindex $peers 0] tombstonesize] == 0 &&
                     [[lindex $peers 1] tombstonesize] == 0 &&

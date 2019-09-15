@@ -1493,9 +1493,13 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
         size_t applied = c->reploff - prev_offset;
         if (applied) {
         	if(!server.repl_slave_repl_all){
-        		replicationFeedSlavesFromMasterStream(server.slaves,
+        		replicationFeedSlavesFromMasterStream(&server, server.slaves,
                     c->pending_querybuf, applied);
         	}
+        	// If the stream comes from master, feed the crdt replication buffer and potential crdt slaves
+        	if (c->flags & CLIENT_MASTER) {
+                replicationFeedSlavesFromMasterStream(&crdtServer, crdtServer.slaves, c->pending_querybuf, applied);
+            }
             sdsrange(c->pending_querybuf,applied,-1);
         }
     }

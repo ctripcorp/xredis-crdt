@@ -6,6 +6,8 @@ proc gen_write_load {host port seconds} {
     $r select 9
     while 1 {
         $r set [expr rand()] [expr rand()]
+        $r hset [expr rand()] [expr rand()] [expr rand()]
+        $r hmset [expr rand()] [expr rand()] [expr rand()] [expr rand()] [expr rand()] [expr rand()] [expr rand()]
         if {[clock seconds]-$start_time > $seconds} {
             exit 0
         }

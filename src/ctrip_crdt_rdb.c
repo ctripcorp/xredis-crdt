@@ -287,16 +287,16 @@ crdtMergeDelCommand(client *c) {
     }
 
     /* Merge the new object in the hash table */
-
+    CrdtCommon *tombstoneCrdtCommon = retrieveCrdtCommon(obj);
     robj *currentVal = lookupKeyRead(c->db, key);
     if (currentVal) {
         CrdtCommon *currentCrdtCommon = retrieveCrdtCommon(currentVal);
-        CrdtCommon *tombstoneCrdtCommon = retrieveCrdtCommon(obj);
         if (currentCrdtCommon && tombstoneCrdtCommon  &&
                 isVectorClockMonoIncr(currentCrdtCommon->vectorClock, tombstoneCrdtCommon->vectorClock)) {
             dbDelete(c->db, key);
         }
     }
+    mergeVectorClockUnit(crdtServer.vectorClock, getVectorClockUnit(tombstoneCrdtCommon->vectorClock, tombstoneCrdtCommon->gid));
     sds copy = sdsdup(key->ptr);
     dictAdd(c->db->deleted_keys, copy, obj);
 
@@ -340,6 +340,7 @@ crdtMergeCommand(client *c) {
     void *moduleDataType = mv->value;
     CrdtCommon *common = (CrdtCommon *) moduleDataType;
 
+    mergeVectorClockUnit(crdtServer.vectorClock, getVectorClockUnit(common->vectorClock, common->gid));
     // check tombstone first, do not insert the key if tombstone is partially ordered after the insert
     dictEntry *de = dictFind(c->db->deleted_keys,key->ptr);
     if (de) {
@@ -362,7 +363,6 @@ crdtMergeCommand(client *c) {
     } else {
         mergedVal = common->merge(NULL, mv->value);
     }
-    mergeVectorClockUnit(crdtServer.vectorClock, getVectorClockUnit(common->vectorClock, common->gid));
     decrRefCount(obj);
     /* Create the key and set the TTL if any */
     dbAdd(c->db, key, createModuleObject(mt, mergedVal));
