@@ -278,7 +278,7 @@ void replicationFeedSlaves(struct redisServer *srv, list *slaves, int dictid, ro
 /* This function is used in order to proxy what we receive from our master
  * to our sub-slaves. */
 #include <ctype.h>
-void replicationFeedSlavesFromMasterStream(list *slaves, char *buf, size_t buflen) {
+void replicationFeedSlavesFromMasterStream(struct redisServer *srv, list *slaves, char *buf, size_t buflen) {
     listNode *ln;
     listIter li;
 
@@ -292,7 +292,7 @@ void replicationFeedSlavesFromMasterStream(list *slaves, char *buf, size_t bufle
         printf("\n");
     }
 
-    if (server.repl_backlog) feedReplicationBacklog(&server, buf,buflen);
+    if (srv->repl_backlog) feedReplicationBacklog(srv, buf,buflen);
     listRewind(slaves,&li);
     while((ln = listNext(&li))) {
         client *slave = ln->value;

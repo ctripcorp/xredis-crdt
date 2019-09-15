@@ -3577,15 +3577,14 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
         if (sections++) info = sdscat(info,"\r\n");
         info = sdscatprintf(info, "# Keyspace\r\n");
         for (j = 0; j < server.dbnum; j++) {
-            long long keys, vkeys, tombstoneKeys;
+            long long keys, vkeys;
 
             keys = dictSize(server.db[j].dict);
             vkeys = dictSize(server.db[j].expires);
-            tombstoneKeys = dictSize(server.db[j].deleted_keys);
             if (keys || vkeys) {
                 info = sdscatprintf(info,
-                    "db%d:keys=%lld,expires=%lld,tombstones=%lld,avg_ttl=%lld\r\n",
-                    j, keys, vkeys, tombstoneKeys, server.db[j].avg_ttl);
+                    "db%d:keys=%lld,expires=%lld,avg_ttl=%lld\r\n",
+                    j, keys, vkeys, server.db[j].avg_ttl);
             }
         }
     }
