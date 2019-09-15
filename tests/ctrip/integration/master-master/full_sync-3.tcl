@@ -35,7 +35,6 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
     lappend peer_ports [srv 0 port]
     lappend peer_gids  1
 
-    # increase database size
     write_batch_data [srv 0 host] [srv 0 port]
 
     start_server {config {crdt.conf} overrides {crdt-gid 2} module {crdt.so}} {
@@ -44,7 +43,6 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
         lappend peer_ports [srv 0 port]
         lappend peer_gids  2
 
-        # increase database size
         write_batch_data [srv 0 host] [srv 0 port]
 
 
@@ -53,6 +51,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
             lappend peer_hosts [srv 0 host]
             lappend peer_ports [srv 0 port]
             lappend peer_gids  3
+
 
             [lindex $peers 0] config crdt.set repl-diskless-sync-delay 1
             [lindex $peers 1] config crdt.set repl-diskless-sync-delay 1
@@ -132,6 +131,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
             puts [format "A: %s%lld" {db size: } [[lindex $peers 0] dbsize]]
             puts [format "B: %s%lld" {db size: } [[lindex $peers 1] dbsize]]
             puts [format "C: %s%lld" {db size: } [[lindex $peers 2] dbsize]]
+
         }
     }
 }
