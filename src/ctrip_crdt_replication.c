@@ -65,6 +65,9 @@ CRDT_Master_Instance *createPeerMaster(client *c, long long gid) {
 }
 
 void freePeerMaster(CRDT_Master_Instance *masterInstance) {
+    if (!masterInstance) {
+        return;
+    }
     list *l = crdtServer.crdtMasters;
     listNode *ln = listSearchKey(l, masterInstance);
     serverAssert(ln != NULL);
@@ -177,7 +180,7 @@ void peerofCommand(client *c) {
 
     /* There was no previous master or the user specified a different one,
      * we can continue. */
-    crdtReplicationSetMaster(gid, c->argv[2]->ptr, port);
+    crdtReplicationSetMaster(gid, c->argv[2]->ptr, (int)port);
     peerMaster = getPeerMaster(gid);
     if (!server.masterhost) {
         sds client = catClientInfoString(sdsempty(), c);
@@ -224,7 +227,7 @@ void crdtReplicationUnsetMaster(long long gid) {
 //CRDT.START_MERGE <gid> <vector-clock> <repl_id>
 void
 crdtMergeStartCommand(client *c) {
-    serverLog(LL_NOTICE, "[CRDT][crdtMergeStartCommand]");
+    serverLog(LL_NOTICE, "[CRDT][crdtMergeStartCommand][begin]");
     long long sourceGid;
     if (getLongLongFromObjectOrReply(c, c->argv[1], &sourceGid, NULL) != C_OK) return;
 
@@ -242,8 +245,8 @@ crdtMergeStartCommand(client *c) {
     crdtServer.gcVectorClock = vectorClockMerge(crdtServer.gcVectorClock, vclock);
     freeVectorClock(vclock);
     freeVectorClock(curGcVclock);
-    server.dirty++;
-    serverLog(LL_NOTICE, "[CRDT][crdtMergeStartCommand] master gid: %lld", sourceGid);
+    server.dirty ++;
+    serverLog(LL_NOTICE, "[CRDT][crdtMergeStartCommand][end] master gid: %lld", sourceGid);
 }
 
 //CRDT.END_MERGE <gid> <vector-clock> <repl_id> <offset>
@@ -255,7 +258,7 @@ crdtMergeEndCommand(client *c) {
 
     CRDT_Master_Instance *peerMaster = getPeerMaster(sourceGid);
     if (!peerMaster) goto err;
-    serverLog(LL_NOTICE, "[CRDT][crdtMergeEndCommand][received] master gid: %lld", sourceGid);
+    serverLog(LL_NOTICE, "[CRDT][crdtMergeEndCommand][begin] master gid: %lld", sourceGid);
 
     peerMaster->vectorClock = sdsToVectorClock(c->argv[2]->ptr);
     refreshGcVectorClock(peerMaster->vectorClock);
@@ -265,14 +268,19 @@ crdtMergeEndCommand(client *c) {
     if (server.master == NULL) {
         peerMaster->repl_state = REPL_STATE_CONNECTED;
     }
-    server.dirty++;
     if(!crdtServer.repl_backlog) createReplicationBacklog(&crdtServer);
-    crdtReplicationSendAck(getPeerMaster(c->gid));
+    if (!server.masterhost) {
+        crdtReplicationSendAck(getPeerMaster(c->gid));
+    }
+    server.dirty ++;
+    serverLog(LL_NOTICE, "[CRDT][crdtMergeEndCommand][end] master gid: %lld", sourceGid);
     return;
 
 err:
     serverLog(LL_NOTICE, "[CRDT][crdtMergeEndCommand][crdtCancelReplicationHandshake] master gid: %lld", sourceGid);
-    crdtCancelReplicationHandshake(sourceGid);
+    if (!server.masterhost) {
+        crdtCancelReplicationHandshake(sourceGid);
+    }
     return;
 }
 
@@ -1049,9 +1057,11 @@ void crdtReplicationCacheMaster(client *c) {
      * we want to discard te non processed query buffers and non processed
      * offsets, including pending transactions, already populated arguments,
      * pending outputs to the master. */
-    sdsclear(crdtMaster->master->querybuf);
-    sdsclear(crdtMaster->master->pending_querybuf);
-    crdtMaster->master->read_reploff = crdtMaster->master->reploff;
+    if (crdtMaster->master) {
+        sdsclear(crdtMaster->master->querybuf);
+        sdsclear(crdtMaster->master->pending_querybuf);
+        crdtMaster->master->read_reploff = crdtMaster->master->reploff;
+    }
     if (c->flags & CLIENT_MULTI) discardTransaction(c);
     listEmpty(c->reply);
     c->bufpos = 0;
@@ -1133,6 +1143,7 @@ void crdtOvcCommand(client *c) {
     freeVectorClock(vclock);
     peerMaster->vectorClock = newVectorClock;
     addReply(c, shared.ok);
+    server.dirty ++;
 }
 
 /* Replication cron function, called 1 time per second. */
@@ -1195,17 +1206,11 @@ void crdtReplicationCron(void) {
      * So slaves can implement an explicit timeout to masters, and will
      * be able to detect a link disconnection even if the TCP connection
      * will not actually go down. */
-    robj *ping_argv[1];
 
     /* First, send PING according to ping_slave_period. */
     if ((replication_cron_loops % crdtServer.repl_ping_slave_period) == 0 &&
         listLength(crdtServer.slaves))
     {
-        ping_argv[0] = createStringObject("PING",4);
-        replicationFeedSlaves(&crdtServer, crdtServer.slaves, crdtServer.slaveseldb,
-                              ping_argv, 1);
-        decrRefCount(ping_argv[0]);
-
         sendObservedVectorClock();
     }
 

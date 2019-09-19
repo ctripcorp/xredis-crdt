@@ -802,7 +802,7 @@ void freeClient(client *c) {
         }
     }
 
-    if (c->flags & CLIENT_CRDT_MASTER) {
+    if (!server.master && c->flags & CLIENT_CRDT_MASTER) {
         serverLog(LL_WARNING,"Connection with Crdt master lost.");
         if (!(c->flags & (CLIENT_CLOSE_AFTER_REPLY|
                           CLIENT_CLOSE_ASAP|
@@ -900,7 +900,7 @@ void freeClient(client *c) {
     /* Release other dynamically allocated client structure fields,
      * and finally release the client structure itself. */
     if (c->name) decrRefCount(c->name);
-    if(c->vectorClock) {
+    if (c->vectorClock) {
         freeVectorClock(c->vectorClock);
         c->vectorClock = NULL;
     }
@@ -1485,7 +1485,7 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
      * a crdt(peer) master, as we wish our slaves to keeper align with peer master's
      * repl offset, so that, when a failover happend locally, the globally repl_offset
      * will not be any different*/
-    if (!(c->flags & CLIENT_MASTER) && !(c->flags & CLIENT_CRDT_MASTER)) {
+    if (!(c->flags & CLIENT_MASTER)) {
         processInputBuffer(c);
     } else {
         size_t prev_offset = c->reploff;
@@ -1496,10 +1496,6 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
         		replicationFeedSlavesFromMasterStream(&server, server.slaves,
                     c->pending_querybuf, applied);
         	}
-        	// If the stream comes from master, feed the crdt replication buffer and potential crdt slaves
-        	if (c->flags & CLIENT_MASTER) {
-                replicationFeedSlavesFromMasterStream(&crdtServer, crdtServer.slaves, c->pending_querybuf, applied);
-            }
             sdsrange(c->pending_querybuf,applied,-1);
         }
     }

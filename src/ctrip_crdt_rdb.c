@@ -358,7 +358,7 @@ crdtMergeCommand(client *c) {
         moduleValue *cmv = currentVal->ptr;
         // call merge function, and store the merged val
         mergedVal = common->merge(cmv->value, mv->value);
-        decrRefCount(currentVal);
+//        decrRefCount(currentVal);
         dbDelete(c->db, key);
     } else {
         mergedVal = common->merge(NULL, mv->value);

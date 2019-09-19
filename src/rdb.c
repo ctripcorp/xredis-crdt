@@ -1949,8 +1949,6 @@ int rdbSaveToSlavesSockets(void *rsi, struct redisServer *svr) {
     openChildInfoPipe(svr);
     start = ustime();
     if ((childpid = fork()) == 0) {
-        serverLog(LL_NOTICE,
-                  "[CRDT]CRDT Merge Backgroup started");
         /* Child */
         int retval = 0;
         rio slave_sockets;
