@@ -223,6 +223,7 @@ struct redisCommand redisCommandTable[] = {
 //    {"msetnx",msetnxCommand,-3,"wm",0,NULL,1,-1,2,0,0},
 //    {"randomkey",randomkeyCommand,1,"rR",0,NULL,0,0,0,0,0},
     {"select",selectCommand,2,"lF",0,NULL,0,0,0,0,0},
+    {"crdt.select",crdtSelectCommand,3,"lF",0,NULL,0,0,0,0,0},
 //    {"swapdb",swapdbCommand,3,"wF",0,NULL,0,0,0,0,0},
 //    {"move",moveCommand,3,"wF",0,NULL,1,1,1,0,0},
     {"rename",renameCommand,3,"w",0,NULL,1,2,1,0,0},
@@ -1280,7 +1281,7 @@ void beforeSleep(struct aeEventLoop *eventLoop) {
         argv[0] = createStringObject("REPLCONF",8);
         argv[1] = createStringObject("GETACK",6);
         argv[2] = createStringObject("*",1); /* Not used argument. */
-        replicationFeedSlaves(&server, server.slaves, server.slaveseldb, argv, 3);
+        replicationFeedSlaves(server.slaves, server.slaveseldb, argv, 3);
         decrRefCount(argv[0]);
         decrRefCount(argv[1]);
         decrRefCount(argv[2]);
@@ -1445,6 +1446,7 @@ void initServerConfig(struct redisServer *srv) {
     srv->maxidletime = CONFIG_DEFAULT_CLIENT_TIMEOUT;
     srv->tcpkeepalive = CONFIG_DEFAULT_TCP_KEEPALIVE;
     srv->active_expire_enabled = 1;
+    srv->active_crdt_ovc = 1;
     srv->active_defrag_enabled = CONFIG_DEFAULT_ACTIVE_DEFRAG;
     srv->active_defrag_ignore_bytes = CONFIG_DEFAULT_DEFRAG_IGNORE_BYTES;
     srv->active_defrag_threshold_lower = CONFIG_DEFAULT_DEFRAG_THRESHOLD_LOWER;
@@ -2225,10 +2227,13 @@ void propagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
 {
     if (server.aof_state != AOF_OFF && flags & PROPAGATE_AOF)
         feedAppendOnlyFile(cmd,dbid,argv,argc);
-    if (flags & PROPAGATE_REPL)
-        replicationFeedSlaves(&server, server.slaves,dbid,argv,argc);
-    if (flags & PROPAGATE_CRDT_REPL)
-        replicationFeedSlaves(&crdtServer, crdtServer.slaves, dbid, argv, argc);
+    if (flags & PROPAGATE_CRDT_REPL) {
+        replicationFeedAllSlaves(dbid, argv, argc);
+        return;
+    }
+    if (flags & PROPAGATE_REPL) {
+        replicationFeedSlaves(server.slaves, dbid, argv, argc);
+    }
 }
 
 /* Used inside commands to schedule the propagation of additional commands
@@ -2265,6 +2270,7 @@ void alsoPropagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
 void forceCommandPropagation(client *c, int flags) {
     if (flags & PROPAGATE_REPL) c->flags |= CLIENT_FORCE_REPL;
     if (flags & PROPAGATE_AOF) c->flags |= CLIENT_FORCE_AOF;
+    if (flags & PROPAGATE_CRDT_REPL) c->flags |= CLIENT_FORCE_REPL_CRDT;
 }
 
 /* Avoid that the executed command is propagated at all. This way we
@@ -2336,7 +2342,7 @@ void call(client *c, int flags) {
 
     /* Initialization: clear the flags that must be set by the command on
      * demand, and initialize the array for additional commands propagation. */
-    c->flags &= ~(CLIENT_FORCE_AOF|CLIENT_FORCE_REPL|CLIENT_PREVENT_PROP);
+    c->flags &= ~(CLIENT_FORCE_AOF|CLIENT_FORCE_REPL|CLIENT_PREVENT_PROP|CLIENT_FORCE_REPL_CRDT);
     redisOpArray prev_also_propagate = server.also_propagate;
     redisOpArrayInit(&server.also_propagate);
 
@@ -2390,6 +2396,9 @@ void call(client *c, int flags) {
          * the flags regardless of the command effects on the data set. */
         if (c->flags & CLIENT_FORCE_REPL) propagate_flags |= PROPAGATE_REPL;
         if (c->flags & CLIENT_FORCE_AOF) propagate_flags |= PROPAGATE_AOF;
+        if (c->flags & CLIENT_FORCE_REPL_CRDT) {
+            propagate_flags |= PROPAGATE_CRDT_REPL;
+        }
 
         /* However prevent AOF / replication propagation if the command
          * implementatino called preventCommandPropagation() or similar,
@@ -2410,9 +2419,9 @@ void call(client *c, int flags) {
 
     /* Restore the old replication flags, since call() can be executed
      * recursively. */
-    c->flags &= ~(CLIENT_FORCE_AOF|CLIENT_FORCE_REPL|CLIENT_PREVENT_PROP);
+    c->flags &= ~(CLIENT_FORCE_AOF|CLIENT_FORCE_REPL|CLIENT_PREVENT_PROP|CLIENT_FORCE_REPL_CRDT);
     c->flags |= client_old_flags &
-        (CLIENT_FORCE_AOF|CLIENT_FORCE_REPL|CLIENT_PREVENT_PROP);
+        (CLIENT_FORCE_AOF|CLIENT_FORCE_REPL|CLIENT_PREVENT_PROP|CLIENT_FORCE_REPL_CRDT);
 
     /* Handle the alsoPropagate() API to handle commands that want to propagate
      * multiple separated commands. Note that alsoPropagate() is not affected

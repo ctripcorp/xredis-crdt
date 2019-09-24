@@ -467,3 +467,12 @@ proc start_crdt_hash_load {host port seconds} {
 proc stop_crdt_hash_load {handle} {
     catch {exec /bin/kill -9 $handle}
 }
+
+proc gen_key_set {length} {
+    set key_set {}
+    while {$length > 0} {
+        incr length -1
+        lappend key_set [randstring 10 256 alpha]
+    }
+    return $key_set
+}

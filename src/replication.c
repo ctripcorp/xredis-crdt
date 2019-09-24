@@ -172,7 +172,7 @@ void feedReplicationBacklogWithObject(struct redisServer *srv, robj *o) {
  * the commands received by our clients in order to create the replication
  * stream. Instead if the instance is a slave and has sub-slaves attached,
  * we use replicationFeedSlavesFromMaster() */
-void replicationFeedSlaves(struct redisServer *srv, list *slaves, int dictid, robj **argv, int argc) {
+void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
     listNode *ln;
     listIter li;
     int j, len;
@@ -185,16 +185,15 @@ void replicationFeedSlaves(struct redisServer *srv, list *slaves, int dictid, ro
      * master replication history and has the same backlog and offsets). */
     if (server.masterhost != NULL && !server.repl_slave_repl_all) return;
 
-
     /* If there aren't slaves, and there is no backlog buffer to populate,
      * we can return ASAP. */
-    if (srv->repl_backlog == NULL && listLength(slaves) == 0) return;
+    if (server.repl_backlog == NULL && listLength(slaves) == 0) return;
 
     /* We can't have slaves attached and no backlog. */
-    serverAssert(!(listLength(slaves) != 0 && srv->repl_backlog == NULL));
+    serverAssert(!(listLength(slaves) != 0 && server.repl_backlog == NULL));
 
     /* Send SELECT command to every slave if needed. */
-    if (srv->slaveseldb != dictid) {
+    if (server.slaveseldb != dictid) {
         robj *selectcmd;
 
         /* For a few DBs we have pre-computed SELECT command. */
@@ -211,7 +210,7 @@ void replicationFeedSlaves(struct redisServer *srv, list *slaves, int dictid, ro
         }
 
         /* Add the SELECT command into the backlog. */
-        if (srv->repl_backlog) feedReplicationBacklogWithObject(srv, selectcmd);
+        if (server.repl_backlog) feedReplicationBacklogWithObject(&server, selectcmd);
 
         /* Send it to slaves. */
         listRewind(slaves,&li);
@@ -224,10 +223,10 @@ void replicationFeedSlaves(struct redisServer *srv, list *slaves, int dictid, ro
         if (dictid < 0 || dictid >= PROTO_SHARED_SELECT_CMDS)
             decrRefCount(selectcmd);
     }
-    srv->slaveseldb = dictid;
+    server.slaveseldb = dictid;
 
     /* Write the command to the replication backlog if any. */
-    if (srv->repl_backlog) {
+    if (server.repl_backlog) {
         char aux[LONG_STR_SIZE+3];
 
         /* Add the multi bulk reply length. */
@@ -235,7 +234,7 @@ void replicationFeedSlaves(struct redisServer *srv, list *slaves, int dictid, ro
         len = ll2string(aux+1,sizeof(aux)-1,argc);
         aux[len+1] = '\r';
         aux[len+2] = '\n';
-        feedReplicationBacklog(srv, aux,len+3);
+        feedReplicationBacklog(&server, aux,len+3);
 
         for (j = 0; j < argc; j++) {
             long objlen = stringObjectLen(argv[j]);
@@ -247,9 +246,9 @@ void replicationFeedSlaves(struct redisServer *srv, list *slaves, int dictid, ro
             len = ll2string(aux+1,sizeof(aux)-1,objlen);
             aux[len+1] = '\r';
             aux[len+2] = '\n';
-            feedReplicationBacklog(srv, aux,len+3);
-            feedReplicationBacklogWithObject(srv, argv[j]);
-            feedReplicationBacklog(srv, aux+len+1,2);
+            feedReplicationBacklog(&server, aux,len+3);
+            feedReplicationBacklogWithObject(&server, argv[j]);
+            feedReplicationBacklog(&server, aux+len+1,2);
         }
     }
 
@@ -278,7 +277,7 @@ void replicationFeedSlaves(struct redisServer *srv, list *slaves, int dictid, ro
 /* This function is used in order to proxy what we receive from our master
  * to our sub-slaves. */
 #include <ctype.h>
-void replicationFeedSlavesFromMasterStream(struct redisServer *srv, list *slaves, char *buf, size_t buflen) {
+void replicationFeedSlavesFromMasterStream(list *slaves, char *buf, size_t buflen) {
     listNode *ln;
     listIter li;
 
@@ -292,7 +291,7 @@ void replicationFeedSlavesFromMasterStream(struct redisServer *srv, list *slaves
         printf("\n");
     }
 
-    if (srv->repl_backlog) feedReplicationBacklog(srv, buf,buflen);
+    if (server.repl_backlog) feedReplicationBacklog(&server,buf,buflen);
     listRewind(slaves,&li);
     while((ln = listNext(&li))) {
         client *slave = ln->value;
@@ -350,18 +349,8 @@ long long addReplyReplicationBacklog(struct redisServer *srv, client *c, long lo
     serverLog(LL_DEBUG, "[PSYNC] Slave request offset: %lld", offset);
 
     if (srv->repl_backlog_histlen == 0) {
-        serverLog(LL_DEBUG, "[PSYNC] Backlog history len is zero");
         return 0;
     }
-
-    serverLog(LL_DEBUG, "[PSYNC] Backlog size: %lld",
-              srv->repl_backlog_size);
-    serverLog(LL_DEBUG, "[PSYNC] First byte: %lld",
-              srv->repl_backlog_off);
-    serverLog(LL_DEBUG, "[PSYNC] History len: %lld",
-              srv->repl_backlog_histlen);
-    serverLog(LL_DEBUG, "[PSYNC] Current index: %lld",
-              srv->repl_backlog_idx);
 
     /* Compute the amount of bytes we need to discard. */
     skip = offset - srv->repl_backlog_off;
@@ -372,7 +361,6 @@ long long addReplyReplicationBacklog(struct redisServer *srv, client *c, long lo
     j = (srv->repl_backlog_idx +
         (srv->repl_backlog_size-srv->repl_backlog_histlen)) %
         srv->repl_backlog_size;
-    serverLog(LL_DEBUG, "[PSYNC] Index of first byte: %lld", j);
 
     /* Discard the amount of data to seek to the specified 'offset'. */
     j = (j + skip) % srv->repl_backlog_size;
@@ -380,13 +368,11 @@ long long addReplyReplicationBacklog(struct redisServer *srv, client *c, long lo
     /* Feed slave with data. Since it is a circular buffer we have to
      * split the reply in two parts if we are cross-boundary. */
     len = srv->repl_backlog_histlen - skip;
-    serverLog(LL_DEBUG, "[PSYNC] Reply total length: %lld", len);
     while(len) {
         long long thislen =
             ((srv->repl_backlog_size - j) < len) ?
             (srv->repl_backlog_size - j) : len;
 
-        serverLog(LL_DEBUG, "[PSYNC] addReply() length: %lld", thislen);
         addReplySds(c,sdsnewlen(srv->repl_backlog + j, thislen));
         len -= thislen;
         j = 0;
@@ -484,12 +470,10 @@ int masterTryPartialResynchronization(struct redisServer *srv, client *c) {
                     "up to %lld", psync_offset, srv->second_replid_offset);
             }
         } else {
-            serverLog(LL_NOTICE,"Partial resynchronization not accepted: "
-                                "Replication ID mismatch (Slave asked for '%s', my "
+            serverLog(LL_NOTICE,"[Paritial Failed] Replication ID mismatch (Slave asked for '%s', my "
                                 "replication IDs are '%s' and '%s')",
                       master_replid, srv->replid, srv->replid2);
-            serverLog(LL_NOTICE,"Partial resynchronization not accepted: "
-                                "Requested offset for second ID was %lld, but I can reply "
+            serverLog(LL_NOTICE,"[Paritial Failed]Partial Requested offset for second ID was %lld, but I can reply "
                                 "up to %lld", psync_offset, srv->second_replid_offset);
             serverLog(LL_NOTICE,"Full resync requested by slave %s",
                 replicationGetSlaveName(c));
@@ -956,7 +940,8 @@ void replconfCommand(client *c) {
  *    command disables it, so that we can accumulate output buffer without
  *    sending it to the slave.
  * 3) Update the count of good slaves. */
-void putSlaveOnline(client *slave) {
+void
+putSlaveOnline(client *slave) {
     slave->replstate = SLAVE_STATE_ONLINE;
     slave->repl_put_online_on_ack = 0;
     slave->repl_ack_time = server.unixtime; /* Prevent false timeout. */
@@ -1131,8 +1116,8 @@ void clearReplicationId2(struct redisServer *srv) {
  * This should be used when an instance is switched from slave to master
  * so that it can serve PSYNC requests performed using the master
  * replication ID. */
-void shiftReplicationId(void) {
-    memcpy(server.replid2,server.replid,sizeof(server.replid));
+void shiftReplicationId(struct redisServer *srv) {
+    memcpy(srv->replid2,srv->replid,sizeof(srv->replid));
     /* We set the second replid offset to the master offset + 1, since
      * the slave will ask for the first byte it has not yet received, so
      * we need to add one to the offset: for example if, as a slave, we are
@@ -1140,9 +1125,9 @@ void shiftReplicationId(void) {
      * are turned into a master, we can accept a PSYNC request with offset
      * 51, since the slave asking has the same history up to the 50th
      * byte, and is asking for the new bytes starting at offset 51. */
-    server.second_replid_offset = server.master_repl_offset+1;
-    changeReplicationId(&server);
-    serverLog(LL_WARNING,"Setting secondary replication ID to %s, valid up to offset: %lld. New replication ID is %s", server.replid2, server.second_replid_offset, server.replid);
+    srv->second_replid_offset = srv->master_repl_offset+1;
+    changeReplicationId(srv);
+    serverLog(LL_WARNING,"Setting secondary replication ID to %s, valid up to offset: %lld. New replication ID is %s", srv->replid2, srv->second_replid_offset, srv->replid);
 }
 
 /* ----------------------------------- SLAVE -------------------------------- */
@@ -2069,8 +2054,12 @@ void replicationUnsetMaster(void) {
      * (that was inherited from the master at synchronization time) is
      * used as secondary ID up to the current offset, and a new replication
      * ID is created to continue with a new replication history. */
-    shiftReplicationId();
-    if (server.master) freeClient(server.master);
+    shiftReplicationId(&server);
+    shiftReplicationId(&crdtServer);
+    if (server.master) {
+        freeClient(server.master);
+        server.master = NULL;
+    }
     replicationDiscardCachedMaster();
     cancelReplicationHandshake();
     /* Disconnecting all the slaves is required: we need to inform slaves
@@ -2669,7 +2658,7 @@ void replicationCron(void) {
         listLength(server.slaves))
     {
         ping_argv[0] = createStringObject("PING",4);
-        replicationFeedSlaves(&server, server.slaves, server.slaveseldb,
+        replicationFeedSlaves(server.slaves, server.slaveseldb,
             ping_argv, 1);
         decrRefCount(ping_argv[0]);
     }

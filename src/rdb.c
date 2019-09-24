@@ -895,9 +895,9 @@ int rdbSaveInfoAuxFields(rio *rdb, int flags, rdbSaveInfo *rsi) {
         if (rdbSaveAuxFieldStrStr(rdb,"vclock",vclockSds)
             == -1) return -1;
         sdsfree(vclockSds);
-        if (rdbSaveAuxFieldStrStr(rdb,"crdt-repl-id",server.replid)
+        if (rdbSaveAuxFieldStrStr(rdb,"crdt-repl-id",crdtServer.replid)
             == -1) return -1;
-        if (rdbSaveAuxFieldStrInt(rdb,"crdt-repl-offset",server.master_repl_offset)
+        if (rdbSaveAuxFieldStrInt(rdb,"crdt-repl-offset",crdtServer.master_repl_offset)
             == -1) return -1;
 
         if(rdbSaveAuxFieldCrdt(rdb) == -1) return -1;
@@ -1974,7 +1974,7 @@ int rdbSaveToSlavesSockets(void *rsi, struct redisServer *svr) {
 
         if (retval == C_OK && rioFlush(&slave_sockets) == 0) {
             serverLog(LL_NOTICE,
-                      "[CRDT][ERROR] rioFlush fails");
+                      "[ERROR] rioFlush fails");
             retval = C_ERR;
         }
 
