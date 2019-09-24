@@ -14,9 +14,7 @@ source tests/support/util.tcl
 
 
 set ::all_tests {
-    ctrip/unit/crdt_register
-    ctrip/unit/crdt_del
-    ctrip/unit/gc
+
     ctrip/unit/crdt_hash
 
     ctrip/integration/master-slave/replication
@@ -34,6 +32,9 @@ set ::all_tests {
     ctrip/integration/master-master/partial-sync
     ctrip/integration/master-master/replication-2
     ctrip/integration/master-master/full_sync-3
+
+    ctrip/integration/composite/full-sync
+    ctrip/integration/composite/concurrent-conflict-full
 }
 
 set ::temp_tests {
@@ -57,6 +58,11 @@ set ::temp_tests {
     ctrip/integration/master-master/partial-sync
     ctrip/integration/master-master/replication-2
     ctrip/integration/master-master/full_sync-3
+
+    ctrip/integration/composite/full_sync
+    ctrip/integration/composite/full-sync
+    ctrip/integration/composite/concurrent-conflict-full
+    # ctrip/integration/composite/master-slave-failover
 }
 
 
@@ -67,7 +73,7 @@ set ::host 127.0.0.1
 set ::port 21111
 set ::traceleaks 0
 set ::valgrind 0
-set ::stack_logging 0
+set ::stack_logging 1
 set ::verbose 0
 set ::quiet 0
 set ::denytags {}

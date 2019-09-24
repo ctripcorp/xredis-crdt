@@ -260,6 +260,9 @@ crdtMergeEndCommand(client *c) {
     if (!peerMaster) goto err;
     serverLog(LL_NOTICE, "[CRDT][crdtMergeEndCommand][begin] master gid: %lld", sourceGid);
 
+    if (peerMaster->vectorClock != NULL) {
+        freeVectorClock(peerMaster->vectorClock);
+    }
     peerMaster->vectorClock = sdsToVectorClock(c->argv[2]->ptr);
     refreshGcVectorClock(peerMaster->vectorClock);
     memcpy(peerMaster->master_replid, c->argv[3]->ptr, sizeof(peerMaster->master_replid));
@@ -1106,8 +1109,7 @@ void sendObservedVectorClock() {
     sds vclockStr = vectorClockToSds(crdtServer.vectorClock);
     crdt_ovc_argv[2] = createStringObject(vclockStr, sdslen(vclockStr));
 
-    replicationFeedSlaves(&crdtServer, crdtServer.slaves, crdtServer.slaveseldb,
-                          crdt_ovc_argv, 3);
+    replicationFeedAllSlaves(server.slaveseldb, crdt_ovc_argv, 3);
 
     sdsfree(vclockStr);
     decrRefCount(crdt_ovc_argv[0]);
@@ -1124,26 +1126,211 @@ void crdtOvcCommand(client *c) {
     if (getLongLongFromObject(c->argv[1], &gid) != C_OK) {
         addReply(c, shared.syntaxerr);
     }
+    int flags = PROPAGATE_REPL;
+    if (gid != crdtServer.crdt_gid) {
 
-    sds vclockStr = (sds) c->argv[2]->ptr;
-    VectorClock *vclock = sdsToVectorClock(vclockStr);
+        sds vclockStr = (sds) c->argv[2]->ptr;
+        VectorClock *vclock = sdsToVectorClock(vclockStr);
 
-    CRDT_Master_Instance *peerMaster = getPeerMaster(gid);
-    if (peerMaster == NULL) {
-        serverLog(LL_WARNING, "[CRDT] CRDT.OVC client is not peer master: given gid %lld",
-                  gid);
-        freeClient(c);
-        return;
+        CRDT_Master_Instance *peerMaster = getPeerMaster(gid);
+        if (peerMaster == NULL) {
+            if (server.master) {
+                peerMaster = createPeerMaster(NULL, gid);
+            } else {
+                serverLog(LL_WARNING, "[CRDT] CRDT.OVC client is not peer master: given gid %lld",
+                          gid);
+                freeClient(c);
+                return;
+            }
+        }
+
+        VectorClock *newVectorClock = vectorClockMerge(peerMaster->vectorClock, vclock);
+        if (peerMaster->vectorClock != NULL) {
+            freeVectorClock(peerMaster->vectorClock);
+        }
+        freeVectorClock(vclock);
+        peerMaster->vectorClock = newVectorClock;
+    } else {
+        feedCrdtBacklog(c->argv, c->argc);
     }
-
-    VectorClock *newVectorClock = vectorClockMerge(peerMaster->vectorClock, vclock);
-    if (peerMaster->vectorClock != NULL) {
-        freeVectorClock(peerMaster->vectorClock);
-    }
-    freeVectorClock(vclock);
-    peerMaster->vectorClock = newVectorClock;
     addReply(c, shared.ok);
-    server.dirty ++;
+    forceCommandPropagation(c, flags);
+}
+
+void feedCrdtBacklog(robj **argv, int argc) {
+    int j, len;
+
+    /* Write the command to the replication backlog if any. */
+    if (!crdtServer.repl_backlog) {
+        createReplicationBacklog(&crdtServer);
+    }
+    char aux[LONG_STR_SIZE+3];
+
+    /* Add the multi bulk reply length. */
+    aux[0] = '*';
+    len = ll2string(aux+1,sizeof(aux)-1,argc);
+    aux[len+1] = '\r';
+    aux[len+2] = '\n';
+    feedReplicationBacklog(&crdtServer, aux,len+3);
+
+    for (j = 0; j < argc; j++) {
+        long objlen = stringObjectLen(argv[j]);
+
+        /* We need to feed the buffer with the object as a bulk reply
+         * not just as a plain string, so create the $..CRLF payload len
+         * and add the final CRLF */
+        aux[0] = '$';
+        len = ll2string(aux+1,sizeof(aux)-1,objlen);
+        aux[len+1] = '\r';
+        aux[len+2] = '\n';
+        feedReplicationBacklog(&crdtServer, aux,len+3);
+        feedReplicationBacklogWithObject(&crdtServer, argv[j]);
+        feedReplicationBacklog(&crdtServer, aux+len+1,2);
+    }
+
+}
+
+/* Propagate write commands to slaves, and populate the replication backlog
+ * as well. This function is used if the instance is a master: we use
+ * the commands received by our clients in order to create the replication
+ * stream. Instead if the instance is a slave and has sub-slaves attached,
+ * we use replicationFeedSlavesFromMaster() && feedCrdtBacklog*/
+void replicationFeedAllSlaves(int dictid, robj **argv, int argc) {
+    listNode *ln;
+    listIter li;
+    int j, len;
+    char llstr[LONG_STR_SIZE];
+    char gidstr[LONG_STR_SIZE];
+
+    /* If the instance is not a top level master, return ASAP: we'll just proxy
+     * the stream of data we receive from our master instead, in order to
+     * propagate *identical* replication stream. In this way this slave can
+     * advertise the same replication ID as the master (since it shares the
+     * master replication history and has the same backlog and offsets). */
+    if (server.masterhost != NULL && !server.repl_slave_repl_all) return;
+
+    /* If there aren't slaves, and there is no backlog buffer to populate,
+     * we can return ASAP. */
+    if (server.repl_backlog == NULL) return;
+
+    /* We can't have slaves attached and no backlog. */
+    serverAssert(server.repl_backlog != NULL);
+
+    /* Send SELECT command to every slave if needed. */
+    if (server.slaveseldb != dictid || crdtServer.slaveseldb != dictid) {
+        robj *selectcmd;
+
+        int dictid_len, gid_len;
+
+        dictid_len = ll2string(llstr,sizeof(llstr),dictid);
+        gid_len = ll2string(gidstr,sizeof(gidstr),crdtServer.crdt_gid);
+
+        selectcmd = createObject(OBJ_STRING,
+                                 sdscatprintf(sdsempty(),
+                                              "*3\r\n$11\r\nCRDT.SELECT\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n",
+                                              gid_len, gidstr, dictid_len, llstr));
+
+
+        /* Add the SELECT command into the both backlogs. */
+        if (server.repl_backlog && crdtServer.repl_backlog) {
+            feedReplicationBacklogWithObject(&server, selectcmd);
+            feedReplicationBacklogWithObject(&crdtServer, selectcmd);
+        }
+
+        /* Send it to slaves. */
+        listRewind(server.slaves,&li);
+        while((ln = listNext(&li))) {
+            client *slave = ln->value;
+            if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) continue;
+            addReply(slave,selectcmd);
+        }
+
+        /* Send it to crdt slaves. */
+        listRewind(crdtServer.slaves,&li);
+        while((ln = listNext(&li))) {
+            client *slave = ln->value;
+            if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) continue;
+            addReply(slave,selectcmd);
+        }
+
+        decrRefCount(selectcmd);
+    }
+    server.slaveseldb = dictid;
+    crdtServer.slaveseldb = dictid;
+
+    /* Write the command to the replication backlog if any. */
+    if (server.repl_backlog && crdtServer.repl_backlog) {
+        char aux[LONG_STR_SIZE+3];
+
+        /* Add the multi bulk reply length. */
+        aux[0] = '*';
+        len = ll2string(aux+1,sizeof(aux)-1,argc);
+        aux[len+1] = '\r';
+        aux[len+2] = '\n';
+        feedReplicationBacklog(&server, aux,len+3);
+        feedReplicationBacklog(&crdtServer, aux,len+3);
+
+        for (j = 0; j < argc; j++) {
+            long objlen = stringObjectLen(argv[j]);
+
+            /* We need to feed the buffer with the object as a bulk reply
+             * not just as a plain string, so create the $..CRLF payload len
+             * and add the final CRLF */
+            aux[0] = '$';
+            len = ll2string(aux+1,sizeof(aux)-1,objlen);
+            aux[len+1] = '\r';
+            aux[len+2] = '\n';
+            feedReplicationBacklog(&server, aux,len+3);
+            feedReplicationBacklogWithObject(&server, argv[j]);
+            feedReplicationBacklog(&server, aux+len+1,2);
+
+            feedReplicationBacklog(&crdtServer, aux,len+3);
+            feedReplicationBacklogWithObject(&crdtServer, argv[j]);
+            feedReplicationBacklog(&crdtServer, aux+len+1,2);
+        }
+    }
+
+    /* Write the command to every slave. */
+    listRewind(server.slaves,&li);
+    while((ln = listNext(&li))) {
+        client *slave = ln->value;
+
+        /* Don't feed slaves that are still waiting for BGSAVE to start */
+        if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) continue;
+
+        /* Feed slaves that are waiting for the initial SYNC (so these commands
+         * are queued in the output buffer until the initial SYNC completes),
+         * or are already in sync with the master. */
+
+        /* Add the multi bulk length. */
+        addReplyMultiBulkLen(slave,argc);
+
+        /* Finally any additional argument that was not stored inside the
+         * static buffer if any (from j to argc). */
+        for (j = 0; j < argc; j++)
+            addReplyBulk(slave,argv[j]);
+    }
+
+    /* Write the command to every slave. */
+    listRewind(crdtServer.slaves,&li);
+    while((ln = listNext(&li))) {
+        client *slave = ln->value;
+
+        /* Don't feed slaves that are still waiting for BGSAVE to start */
+        if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) continue;
+
+        /* Feed slaves that are waiting for the initial SYNC (so these commands
+         * are queued in the output buffer until the initial SYNC completes),
+         * or are already in sync with the master. */
+
+        /* Add the multi bulk length. */
+        addReplyMultiBulkLen(slave,argc);
+
+        /* Finally any additional argument that was not stored inside the
+         * static buffer if any (from j to argc). */
+        for (j = 0; j < argc; j++)
+            addReplyBulk(slave,argv[j]);
+    }
 }
 
 /* Replication cron function, called 1 time per second. */
@@ -1209,9 +1396,18 @@ void crdtReplicationCron(void) {
 
     /* First, send PING according to ping_slave_period. */
     if ((replication_cron_loops % crdtServer.repl_ping_slave_period) == 0 &&
-        listLength(crdtServer.slaves))
+        listLength(crdtServer.slaves) && crdtServer.active_crdt_ovc)
     {
-        sendObservedVectorClock();
+        int num = 0;
+        listRewind(crdtServer.slaves, &li);
+        while ((ln = listNext(&li)) != NULL) {
+            client *slave = ln->value;
+            if (slave->replstate != SLAVE_STATE_WAIT_BGSAVE_START)
+                num ++;
+        }
+        if (num) {
+            sendObservedVectorClock();
+        }
     }
 
     /* Second, send a newline to all the slaves in pre-synchronization

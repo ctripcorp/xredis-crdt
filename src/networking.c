@@ -733,7 +733,7 @@ void disconnectSlaves(void) {
 
 void disconnectCrdtSlaves(void) {
     while (listLength(crdtServer.slaves)) {
-        listNode *ln = listFirst(server.slaves);
+        listNode *ln = listFirst(crdtServer.slaves);
         freeClient((client*)ln->value);
     }
 }
@@ -820,10 +820,17 @@ void freeClient(client *c) {
             replicationGetSlaveName(c));
     }
 
+    /* Log link disconnection with slave */
+    if ((c->flags & CLIENT_SLAVE) && !(c->flags & CLIENT_MONITOR)) {
+        serverLog(LL_WARNING,"[CRDT]Connection with slave %s lost.",
+                  replicationGetSlaveName(c));
+    }
+
     /* Free the query buffer */
     sdsfree(c->querybuf);
     sdsfree(c->pending_querybuf);
     c->querybuf = NULL;
+    c->pending_querybuf = NULL;
 
     /* Deallocate structures used to block on blocking ops. */
     if (c->flags & CLIENT_BLOCKED) unblockClient(c);
@@ -1493,7 +1500,7 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
         size_t applied = c->reploff - prev_offset;
         if (applied) {
         	if(!server.repl_slave_repl_all){
-        		replicationFeedSlavesFromMasterStream(&server, server.slaves,
+        		replicationFeedSlavesFromMasterStream(server.slaves,
                     c->pending_querybuf, applied);
         	}
             sdsrange(c->pending_querybuf,applied,-1);

@@ -128,7 +128,7 @@ typedef long long mstime_t; /* millisecond time type. */
 #define CONFIG_DEFAULT_RDB_COMPRESSION 1
 #define CONFIG_DEFAULT_RDB_CHECKSUM 1
 #define CONFIG_DEFAULT_RDB_FILENAME "dump.rdb"
-#define CONFIG_DEFAULT_REPL_DISKLESS_SYNC 0
+#define CONFIG_DEFAULT_REPL_DISKLESS_SYNC 1
 #define CONFIG_DEFAULT_REPL_DISKLESS_SYNC_DELAY 5
 #define CONFIG_DEFAULT_SLAVE_SERVE_STALE_DATA 1
 #define CONFIG_DEFAULT_SLAVE_READ_ONLY 1
@@ -257,6 +257,7 @@ typedef long long mstime_t; /* millisecond time type. */
 #define CLIENT_MODULE (1<<27) /* Non connected client used by some module. */
 #define CLIENT_CRDT_SLAVE (1<<28) /*Client is acting as a CRDT Slave to sync data from me*/
 #define CLIENT_CRDT_MASTER (1<<29) /*Client is acting as a CRDT Master that I receive data from it*/
+#define CLIENT_FORCE_REPL_CRDT (1<<30)  /* Force replication of current cmd. */
 
 /* Client block type (btype field in client structure)
  * if CLIENT_BLOCKED flag is set. */
@@ -1254,6 +1255,7 @@ struct redisServer {
     VectorClock *vectorClock;
     VectorClock *gcVectorClock;
     list *crdtMasters;
+    int active_crdt_ovc;      /* Can be disabled for testing purposes. */
 }redisServer;
 
 typedef struct pubsubPattern {
@@ -1534,8 +1536,8 @@ ssize_t syncRead(int fd, char *ptr, ssize_t size, long long timeout);
 ssize_t syncReadLine(int fd, char *ptr, ssize_t size, long long timeout);
 
 /* Replication */
-void replicationFeedSlaves(struct redisServer *srv, list *slaves, int dictid, robj **argv, int argc);
-void replicationFeedSlavesFromMasterStream(struct redisServer *srv, list *slaves, char *buf, size_t buflen);
+void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc);
+void replicationFeedSlavesFromMasterStream(list *slaves, char *buf, size_t buflen);
 void replicationFeedMonitors(client *c, list *monitors, int dictid, robj **argv, int argc);
 void updateSlavesWaitingBgsave(struct redisServer *srv, int bgsaveerr, int type);
 void replicationCron(void);
@@ -1566,6 +1568,7 @@ void feedReplicationBacklog(struct redisServer *srv, void *ptr, size_t len);
 int masterTryPartialResynchronization(struct redisServer *srv, client *c);
 void putSlaveOnline(client *slave);
 void createReplicationBacklog(struct redisServer *srv);
+void feedReplicationBacklogWithObject(struct redisServer *srv, robj *o);
 
 /* CRDT Replications */
 void crdtReplicationCron(void);
@@ -1588,6 +1591,8 @@ void debugCancelCrdt(client *c);
 void crdtRoleCommand(client *c);
 CRDT_Master_Instance *createPeerMaster(client *c, long long gid);
 void crdtOvcCommand(client *c);
+void feedCrdtBacklog(robj **argv, int argc);
+void replicationFeedAllSlaves(int dictid, robj **argv, int argc);
 
 /* CRDT Command */
 void crdtDelCommand(client *c);
@@ -1952,6 +1957,7 @@ void incrbyCommand(client *c);
 void decrbyCommand(client *c);
 void incrbyfloatCommand(client *c);
 void selectCommand(client *c);
+void crdtSelectCommand(client *c);
 void swapdbCommand(client *c);
 void randomkeyCommand(client *c);
 void keysCommand(client *c);
