@@ -456,7 +456,7 @@ void moduleHandlePropagationAfterCommandCallback(RedisModuleCtx *ctx) {
         decrRefCount(propargv[0]);
     }
     else if (ctx->flags & REDISMODULE_CTX_CRDT_MULTI_EMITTED) {
-        int flags = PROPAGATE_CRDT_REPL | PROPAGATE_REPL;
+        int flags = PROPAGATE_CRDT_REPL;
         robj *propargv[1];
         propargv[0] = createStringObject("EXEC",4);
         alsoPropagate(server.execCommand,c->db->id,propargv,1, flags);
@@ -1348,7 +1348,7 @@ int RM_CrdtReplicateAlsoNormReplicate(RedisModuleCtx *ctx, const char *cmdname, 
     if (argv == NULL) return REDISMODULE_ERR;
 
     /* Replicate! */
-    alsoPropagate(cmd,ctx->client->db->id,argv,argc,PROPAGATE_REPL|PROPAGATE_CRDT_REPL);
+    alsoPropagate(cmd,ctx->client->db->id,argv,argc,PROPAGATE_CRDT_REPL);
 
     /* Release the argv. */
     for (j = 0; j < argc; j++) decrRefCount(argv[j]);
@@ -1363,7 +1363,7 @@ void crdtCommandPropagateMulti(client *c) {
     robj *multistring = createStringObject("MULTI",5);
 
     propagate(server.multiCommand,c->db->id,&multistring,1,
-              PROPAGATE_CRDT_REPL|PROPAGATE_REPL);
+              PROPAGATE_CRDT_REPL);
     decrRefCount(multistring);
 }
 

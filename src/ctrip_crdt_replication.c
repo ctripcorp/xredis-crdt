@@ -536,6 +536,8 @@ int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, i
             memcpy(new,start,CONFIG_RUN_ID_SIZE);
             new[CONFIG_RUN_ID_SIZE] = '\0';
 
+            serverLog(LL_WARNING,"Master replication ID changed to %s",new);
+
             memcpy(masterInstance->master_replid, new, CONFIG_RUN_ID_SIZE);
             masterInstance->master_replid[CONFIG_RUN_ID_SIZE] = '\0';
         }
@@ -1165,7 +1167,6 @@ void feedCrdtBacklog(robj **argv, int argc) {
         createReplicationBacklog(&crdtServer);
     }
     char aux[LONG_STR_SIZE+3];
-
     /* Add the multi bulk reply length. */
     aux[0] = '*';
     len = ll2string(aux+1,sizeof(aux)-1,argc);
@@ -1187,6 +1188,7 @@ void feedCrdtBacklog(robj **argv, int argc) {
         feedReplicationBacklogWithObject(&crdtServer, argv[j]);
         feedReplicationBacklog(&crdtServer, aux+len+1,2);
     }
+
 
 }
 
@@ -1211,12 +1213,12 @@ void replicationFeedAllSlaves(int dictid, robj **argv, int argc) {
 
     /* If there aren't slaves, and there is no backlog buffer to populate,
      * we can return ASAP. */
-    if (server.repl_backlog == NULL) return;
+//    if (server.repl_backlog == NULL && listLength(server.slaves) == 0
+//        && crdtServer.repl_backlog == NULL && listLength(crdtServer.slaves) == 0)
+//        return;
 
-    /* We can't have slaves attached and no backlog. */
-    serverAssert(server.repl_backlog != NULL);
 
-    /* Send SELECT command to every slave if needed. */
+        /* Send SELECT command to every slave if needed. */
     if (server.slaveseldb != dictid || crdtServer.slaveseldb != dictid) {
         robj *selectcmd;
 
@@ -1232,8 +1234,11 @@ void replicationFeedAllSlaves(int dictid, robj **argv, int argc) {
 
 
         /* Add the SELECT command into the both backlogs. */
-        if (server.repl_backlog && crdtServer.repl_backlog) {
+        if (server.repl_backlog) {
             feedReplicationBacklogWithObject(&server, selectcmd);
+        }
+
+        if (crdtServer.repl_backlog) {
             feedReplicationBacklogWithObject(&crdtServer, selectcmd);
         }
 
@@ -1259,7 +1264,7 @@ void replicationFeedAllSlaves(int dictid, robj **argv, int argc) {
     crdtServer.slaveseldb = dictid;
 
     /* Write the command to the replication backlog if any. */
-    if (server.repl_backlog && crdtServer.repl_backlog) {
+    if (server.repl_backlog || crdtServer.repl_backlog) {
         char aux[LONG_STR_SIZE+3];
 
         /* Add the multi bulk reply length. */
@@ -1267,8 +1272,14 @@ void replicationFeedAllSlaves(int dictid, robj **argv, int argc) {
         len = ll2string(aux+1,sizeof(aux)-1,argc);
         aux[len+1] = '\r';
         aux[len+2] = '\n';
-        feedReplicationBacklog(&server, aux,len+3);
-        feedReplicationBacklog(&crdtServer, aux,len+3);
+
+        if (server.repl_backlog) {
+            feedReplicationBacklog(&server, aux,len+3);
+        }
+
+        if (crdtServer.repl_backlog) {
+            feedReplicationBacklog(&crdtServer, aux,len+3);
+        }
 
         for (j = 0; j < argc; j++) {
             long objlen = stringObjectLen(argv[j]);
@@ -1280,13 +1291,17 @@ void replicationFeedAllSlaves(int dictid, robj **argv, int argc) {
             len = ll2string(aux+1,sizeof(aux)-1,objlen);
             aux[len+1] = '\r';
             aux[len+2] = '\n';
-            feedReplicationBacklog(&server, aux,len+3);
-            feedReplicationBacklogWithObject(&server, argv[j]);
-            feedReplicationBacklog(&server, aux+len+1,2);
 
-            feedReplicationBacklog(&crdtServer, aux,len+3);
-            feedReplicationBacklogWithObject(&crdtServer, argv[j]);
-            feedReplicationBacklog(&crdtServer, aux+len+1,2);
+            if (server.repl_backlog) {
+                feedReplicationBacklog(&server, aux, len + 3);
+                feedReplicationBacklogWithObject(&server, argv[j]);
+                feedReplicationBacklog(&server, aux + len + 1, 2);
+            }
+            if (crdtServer.repl_backlog) {
+                feedReplicationBacklog(&crdtServer, aux, len + 3);
+                feedReplicationBacklogWithObject(&crdtServer, argv[j]);
+                feedReplicationBacklog(&crdtServer, aux + len + 1, 2);
+            }
         }
     }
 
@@ -1333,6 +1348,18 @@ void replicationFeedAllSlaves(int dictid, robj **argv, int argc) {
     }
 }
 
+void crdtReplicationUnsetAllMasters() {
+    serverLog(LL_NOTICE, "[CRDT][begin]disconnect all crdt masters: %d", listLength(crdtServer.crdtMasters));
+    listIter li;
+    listNode *ln;
+    listRewind(crdtServer.crdtMasters, &li);
+    while ((ln = listNext(&li)) != NULL) {
+        CRDT_Master_Instance *crdtMaster = ln->value;
+        crdtUndoConnectWithMaster(crdtMaster);
+    }
+    serverLog(LL_NOTICE, "[CRDT][end]disconnect all crdt masters");
+}
+
 /* Replication cron function, called 1 time per second. */
 void crdtReplicationCron(void) {
     static long long replication_cron_loops = 0;
@@ -1342,7 +1369,7 @@ void crdtReplicationCron(void) {
     /**!!!!Important!!!!!
      * Connect crdt master if and only if I'm NOT a SLAVE here
      * SLAVE SHOULD RECEIVE DATA from their masters*/
-    if (!(server.masterhost) && !(server.master)) {
+    if (!server.master) {
         listRewind(crdtServer.crdtMasters, &li);
         while ((ln = listNext(&li)) != NULL) {
             CRDT_Master_Instance *crdtMaster = ln->value;
@@ -1378,6 +1405,13 @@ void crdtReplicationCron(void) {
                     serverLog(LL_NOTICE, "[CRDT]MASTER <-> SLAVE sync started, master(%s:%d)",
                               crdtMaster->masterhost, crdtMaster->masterport);
                 }
+            }
+
+            /* Check if we should connect to a MASTER */
+            if (crdtMaster->repl_state == REPL_STATE_NONE) {
+                serverLog(LL_NOTICE, "[CRDT] Prepare CONNECT to MASTER [gid %lld] %s:%d", crdtMaster->gid,
+                          crdtMaster->masterhost, crdtMaster->masterport);
+                crdtMaster->repl_state = REPL_STATE_CONNECT;
             }
 
             /* Send ACK to master from time to time.

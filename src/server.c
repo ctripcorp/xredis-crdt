@@ -2228,8 +2228,11 @@ void propagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
     if (server.aof_state != AOF_OFF && flags & PROPAGATE_AOF)
         feedAppendOnlyFile(cmd,dbid,argv,argc);
     if (flags & PROPAGATE_CRDT_REPL) {
-        replicationFeedAllSlaves(dbid, argv, argc);
-        return;
+        if (server.master) {
+            feedCrdtBacklog(argv, argc);
+        } else {
+            replicationFeedAllSlaves(dbid, argv, argc);
+        }
     }
     if (flags & PROPAGATE_REPL) {
         replicationFeedSlaves(server.slaves, dbid, argv, argc);

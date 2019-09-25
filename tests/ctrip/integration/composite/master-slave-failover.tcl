@@ -6,6 +6,12 @@ proc log_file_matches {log pattern} {
     string match $pattern $content
 }
 
+proc log_content {log} {
+    set fp [open $log r]
+    set content [read $fp]
+    close $fp
+    return $content
+}
 
 set dl yes
 start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {crdt.so}} {
@@ -23,6 +29,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
     lappend peer_hosts [srv 0 host]
     lappend peer_ports [srv 0 port]
     lappend peer_gids 1
+    set peer0_log [srv 0 stdout]
 
     [lindex $peers 0] config crdt.set repl-diskless-sync-delay 1
     [lindex $peers 0] config set repl-diskless-sync-delay 1
@@ -39,6 +46,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
         lappend slaves [srv 0 client]
         lappend slave_hosts [srv 0 host]
         lappend slave_ports [srv 0 port]
+        set slave0_log [srv 0 stdout]
 
         [lindex $slaves 0] slaveof [lindex $peer_hosts 0] [lindex $peer_ports 0]
 
@@ -50,15 +58,13 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
         stop_write_load $load_handle3
         stop_write_load $load_handle4
 
-        after 1000
-        puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
-        puts [format "%s: %d" {slave1 key numberss} [[lindex $slaves 0] dbsize]]
-
+        after 500
         start_server {config {crdt.conf} overrides {crdt-gid 2} module {crdt.so}} {
             lappend peers [srv 0 client]
             lappend peer_hosts [srv 0 host]
             lappend peer_ports [srv 0 port]
             lappend peer_gids 2
+            set peer1_log [srv 0 stdout]
 
             [lindex $peers 1] config crdt.set repl-diskless-sync-delay 1
             [lindex $peers 1] config set repl-diskless-sync-delay 1
@@ -79,15 +85,13 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
 
                 [lindex $slaves 1] slaveof [lindex $peer_hosts 1] [lindex $peer_ports 1]
 
-                after 500
+                after 1000
                 # Stop the write load
                 stop_write_load $load_handle5
                 stop_write_load $load_handle6
                 stop_write_load $load_handle7
                 stop_write_load $load_handle8
                 stop_write_load $load_handle9
-
-                after 1000
 
                 test "TEST Master-Master + Master-Slave works together" {
                     # Send PEEROF commands to peers
@@ -130,9 +134,6 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                         fail "Peers still not connected after some time"
                     }
 
-
-                    puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
-                    puts [format "%s: %d" {slave2 key numbers} [[lindex $slaves 1] dbsize]]
                     # Make sure that slaves and master have same
                     # number of keys
                     wait_for_condition 500 100 {
@@ -145,34 +146,64 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                     }
 
                 }
-                puts [format "peer 0 pid: %s" [status [lindex $peers 0] process_id]]
-                puts [format "slave 0 pid: %s" [status [lindex $slaves 0] process_id]]
-                puts [format "peer 1 pid: %s" [status [lindex $peers 1] process_id]]
-                puts [format "slave 1 pid: %s" [status [lindex $slaves 1] process_id]]
 
-                # Start to write random val(set k v and hmset and hset). for 5 sec
-                set load_handle5 [start_write_load [lindex $peer_hosts 1] [lindex $peer_ports 1] 3]
-                set load_handle6 [start_write_load [lindex $peer_hosts 1] [lindex $peer_ports 1] 5]
-                set load_handle7 [start_write_load [lindex $peer_hosts 1] [lindex $peer_ports 1] 20]
-                set load_handle8 [start_write_load [lindex $peer_hosts 1] [lindex $peer_ports 1] 8]
-                set load_handle9 [start_write_load [lindex $peer_hosts 1] [lindex $peer_ports 1] 4]
+                # Make sure that slaves and master have same
+                # number of keys
+                wait_for_condition 500 100 {
+                    [[lindex $peers 0] dbsize] == [[lindex $slaves 0] dbsize]
+                } else {
+                    fail "Different number of keys between masted and slave after too long time."
+                }
+
+                test "test offset aligned" {
+                    [lindex $peers 0] debug set-crdt-ovc 0
+                    [lindex $peers 1] debug set-crdt-ovc 0
+                    [lindex $slaves 0] debug set-crdt-ovc 0
+                    [lindex $peers 0] config crdt.set repl-timeout 600
+                    [lindex $peers 1] config crdt.set repl-timeout 600
+
+                    wait_for_condition 500 100 {
+                        [crdt_status [lindex $peers 0] master_repl_offset] == [crdt_status [lindex $peers 1] peer0_repl_offset] &&
+                        [crdt_status [lindex $peers 0] master_repl_offset] == [crdt_status [lindex $slaves 0] master_repl_offset]
+                    } else {
+                        puts [format "peer0 offset: %d" [crdt_status [lindex $peers 0] master_repl_offset]]
+                        puts [format "slave0 offset: %d" [crdt_status [lindex $slaves 0] master_repl_offset]]
+                        puts [format "peer1 offset: %d" [crdt_status [lindex $peers 1] peer0_repl_offset]]
+                        fail "crdt repl offset not aligned."
+                    }
+
+                }
 
                 test "test master-slave failover" {
-                    [lindex $slaves 0] slaveof no one
-                    [lindex $peers 0] slaveof [lindex $slave_hosts 0] [lindex $slave_ports 0]
-
-                    [lindex $slaves 0] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
+                    assert { [[lindex $slaves 0] slaveof no one] eq "OK"}
+                    assert { [[lindex $peers 0] slaveof [lindex $slave_hosts 0] [lindex $slave_ports 0]] eq "OK"}
                     [lindex $peers 1] peerof [lindex $peer_gids 0] [lindex $slave_hosts 0] [lindex $slave_ports 0]
+                    [lindex $slaves 0] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
 
 
-
-                     after 500
-                    # Stop the write load
-                    stop_write_load $load_handle5
-                    stop_write_load $load_handle6
-                    stop_write_load $load_handle7
-                    stop_write_load $load_handle8
-                    stop_write_load $load_handle9
+                    set retry 500
+                    while {$retry} {
+                        set info [[lindex $slaves 0] crdt.info replication]
+                        if {[string match {*slave0:*state=online*} $info]} {
+                            break
+                        } else {
+                            incr retry -1
+                            after 100
+                        }
+                    }
+                    set retry 500
+                    while {$retry} {
+                        set info [[lindex $peers 1] crdt.info replication]
+                        if {[string match {*slave0:*state=online*} $info]} {
+                            break
+                        } else {
+                            incr retry -1
+                            after 100
+                        }
+                    }
+                    if {$retry == 0} {
+                        error "assertion:Peers not correctly synchronized"
+                    }
                 }
 
                 test "after failover, all paritially stream arrives" {
@@ -202,8 +233,13 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                     assert {$psync_count >= 1}
                 }
 
-                puts [format "crdt.info stats: %s" [[lindex $slaves 0] crdt.info stats]]
-                puts [format "crdt.info stats: %s" [[lindex $peers 0] crdt.info stats]]
+                test "after failover, crdt master should partially sync" {
+                    set psync_count [crdt_stats [lindex $slaves 0] sync_partial_ok]
+                    set sync_count [crdt_stats [lindex $peers 1] sync_full]
+                    assert { $psync_count >= 1}
+                    assert { $sync_count == 2}
+                }
+
             }
         }
     }

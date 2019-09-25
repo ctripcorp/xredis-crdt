@@ -520,7 +520,7 @@ int masterTryPartialResynchronization(struct redisServer *srv, client *c) {
         freeClientAsync(c);
         return C_OK;
     }
-    psync_len = addReplyReplicationBacklog(&server, c, psync_offset);
+    psync_len = addReplyReplicationBacklog(srv, c, psync_offset);
     serverLog(LL_NOTICE,
         "Partial resynchronization request from %s accepted. Sending %lld bytes of backlog starting from offset %lld.",
             replicationGetSlaveName(c),
@@ -647,9 +647,10 @@ void refullSyncWithSlaves(struct redisServer *srv, client *c) {
         /* When we create the backlog from scratch, we always use a new
          * replication ID and clear the ID2, since there is no valid
          * past history. */
-
-        changeReplicationId(srv);
-        clearReplicationId2(srv);
+        if (srv == &server) {
+            changeReplicationId(srv);
+            clearReplicationId2(srv);
+        }
         createReplicationBacklog(srv);
     }
 
@@ -792,8 +793,6 @@ void crdtPsyncCommand(client *c) {
 
     serverLog(LL_NOTICE,"Crdt Slave %s asks for synchronization",
               replicationGetSlaveName(c));
-
-    serverAssert(&crdtServer != &server);
 
     if (masterTryPartialResynchronization(&crdtServer, c) == C_OK) {
         crdtServer.stat_sync_partial_ok++;
@@ -2130,6 +2129,7 @@ void slaveofCommand(client *c) {
         /* There was no previous master or the user specified a different one,
          * we can continue. */
         replicationSetMaster(c->argv[1]->ptr, port);
+        crdtReplicationUnsetAllMasters();
         sds client = catClientInfoString(sdsempty(),c);
         serverLog(LL_NOTICE,"SLAVE OF %s:%d enabled (user request from '%s')",
             server.masterhost, server.masterport, client);
