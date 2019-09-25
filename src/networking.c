@@ -803,7 +803,7 @@ void freeClient(client *c) {
     }
 
     if (!server.master && c->flags & CLIENT_CRDT_MASTER) {
-        serverLog(LL_WARNING,"Connection with Crdt master lost.");
+        serverLog(LL_WARNING,"[CRDT]Connection with CRDT master lost.");
         if (!(c->flags & (CLIENT_CLOSE_AFTER_REPLY|
                           CLIENT_CLOSE_ASAP|
                           CLIENT_BLOCKED|

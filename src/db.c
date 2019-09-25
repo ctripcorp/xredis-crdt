@@ -480,7 +480,7 @@ void crdtSelectCommand(client *c) {
     long id;
     long long gid;
 
-    if (getLongFromObjectOrReply(c, c->argv[1], &gid,
+    if (getLongLongFromObjectOrReply(c, c->argv[1], &gid,
                                  "invalid gid") != C_OK)
         return;
 

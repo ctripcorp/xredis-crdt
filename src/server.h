@@ -128,7 +128,7 @@ typedef long long mstime_t; /* millisecond time type. */
 #define CONFIG_DEFAULT_RDB_COMPRESSION 1
 #define CONFIG_DEFAULT_RDB_CHECKSUM 1
 #define CONFIG_DEFAULT_RDB_FILENAME "dump.rdb"
-#define CONFIG_DEFAULT_REPL_DISKLESS_SYNC 1
+#define CONFIG_DEFAULT_REPL_DISKLESS_SYNC 0
 #define CONFIG_DEFAULT_REPL_DISKLESS_SYNC_DELAY 5
 #define CONFIG_DEFAULT_SLAVE_SERVE_STALE_DATA 1
 #define CONFIG_DEFAULT_SLAVE_READ_ONLY 1
@@ -1587,6 +1587,7 @@ void refreshVectorClock(client *c, sds vcStr);
 long long getMyGidLogicTime(VectorClock *vc);
 long long getMyLogicTime();
 void crdtReplicationUnsetMaster(long long gid);
+void crdtReplicationUnsetAllMasters();
 void debugCancelCrdt(client *c);
 void crdtRoleCommand(client *c);
 CRDT_Master_Instance *createPeerMaster(client *c, long long gid);

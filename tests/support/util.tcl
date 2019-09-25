@@ -59,6 +59,12 @@ proc crdt_status {r property} {
     }
 }
 
+proc crdt_stats {r property} {
+    if {[regexp "\r\n$property:(.*?)\r\n" [{*}$r crdt.info stats] _ value]} {
+        set _ $value
+    }
+}
+
 proc waitForBgsave r {
     while 1 {
         if {[status r rdb_bgsave_in_progress] eq 1} {

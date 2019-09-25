@@ -132,7 +132,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                 }
             }
 
-            test "Empty DB Now" {
+            test "db is empty when init" {
                 [lindex $peers 0] dbsize
             } {0}
 
@@ -147,11 +147,11 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                     [[lindex $peers 0] dbsize] == [[lindex $peers 2] dbsize] &&
                     [[lindex $peers 1] dbsize] == [[lindex $peers 2] dbsize]
                 } else {
+                    puts [format "psync data streaming ok, peer 0: %d" [[lindex $peers 0] dbsize]]
+                    puts [format "psync data streaming ok, peer 1: %d" [[lindex $peers 1] dbsize]]
+                    puts [format "psync data streaming ok, peer 2: %d" [[lindex $peers 2] dbsize]]
                     fail "Different number of keys between masted and slave after too long time."
                 }
-                puts [[lindex $peers 0] dbsize]
-                puts [[lindex $peers 1] dbsize]
-                puts [[lindex $peers 2] dbsize]
             }
 
         }

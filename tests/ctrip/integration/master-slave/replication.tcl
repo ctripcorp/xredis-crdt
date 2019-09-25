@@ -136,11 +136,6 @@ foreach dl {no yes} {
         set master_host [srv 0 host]
         set master_port [srv 0 port]
         set slaves {}
-        set load_handle0 [start_write_load $master_host $master_port 3]
-        set load_handle1 [start_write_load $master_host $master_port 5]
-        set load_handle2 [start_write_load $master_host $master_port 20]
-        set load_handle3 [start_write_load $master_host $master_port 8]
-        set load_handle4 [start_write_load $master_host $master_port 4]
         start_server {overrides {crdt-gid 1} module {crdt.so}} {
             lappend slaves [srv 0 client]
             start_server {overrides {crdt-gid 1} module {crdt.so}} {
@@ -179,7 +174,13 @@ foreach dl {no yes} {
                         } else {
                             fail "Slaves still not connected after some time"
                         }
+                        set load_handle0 [start_write_load $master_host $master_port 3]
+                        set load_handle1 [start_write_load $master_host $master_port 5]
+                        set load_handle2 [start_write_load $master_host $master_port 20]
+                        set load_handle3 [start_write_load $master_host $master_port 8]
+                        set load_handle4 [start_write_load $master_host $master_port 4]
 
+                        after 200
                         # Stop the write load
                         stop_write_load $load_handle0
                         stop_write_load $load_handle1
