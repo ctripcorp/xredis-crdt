@@ -1256,6 +1256,7 @@ struct redisServer {
     VectorClock *gcVectorClock;
     list *crdtMasters;
     int active_crdt_ovc;      /* Can be disabled for testing purposes. */
+    long long crdt_conflict;
 }redisServer;
 
 typedef struct pubsubPattern {

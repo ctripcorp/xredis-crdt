@@ -1357,6 +1357,11 @@ int RM_CrdtReplicateAlsoNormReplicate(RedisModuleCtx *ctx, const char *cmdname, 
     return REDISMODULE_OK;
 }
 
+int RM_IncrCrdtConflict() {
+    crdtServer.crdt_conflict++;
+    return REDISMODULE_OK;
+}
+
 /* Send a MULTI command to all the slaves and AOF file. Check the execCommand
  * implementation for more information. */
 void crdtCommandPropagateMulti(client *c) {
@@ -4247,6 +4252,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(ReplicateStraightForward);
     REGISTER_API(CrdtReplicate);
     REGISTER_API(CrdtReplicateAlsoNormReplicate);
+    REGISTER_API(IncrCrdtConflict);
     REGISTER_API(CrdtMultiWrappedReplicate);
     REGISTER_API(CurrentVectorClock);
     REGISTER_API(CurrentGid);
