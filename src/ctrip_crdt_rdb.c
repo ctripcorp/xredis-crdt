@@ -355,6 +355,12 @@ crdtMergeCommand(client *c) {
     robj *currentVal = lookupKeyRead(c->db, key);
     void *mergedVal;
     if (currentVal) {
+        CrdtCommon *ccm = retrieveCrdtCommon(currentVal);
+        if (ccm->type != common->type) {
+            serverLog(LL_WARNING, "[INCONSIS][MERGE] key: %s, local type: %d, merge type %d",
+                    key->ptr, ccm->type, common->type);
+            return;
+        }
         moduleValue *cmv = currentVal->ptr;
         // call merge function, and store the merged val
         mergedVal = common->merge(cmv->value, mv->value);
