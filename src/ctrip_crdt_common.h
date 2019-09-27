@@ -44,13 +44,13 @@ typedef int (*crdtDelFunc)(void *ctx, void *keyRobj, void *key, void *crdtObj);
 //typedef void (*crdtGcFunc)(void *crdtObj);
 typedef struct CrdtCommon {
     int gid;
+    int type;
     VectorClock *vectorClock;
     long long timestamp;
 
     //CRDT Merge Function
     crdtMergeFunc merge;
     crdtDelFunc delFunc;
-//    crdtGcFunc  gcFunc;
 } __attribute__((packed, aligned(4))) CrdtCommon;
 
 #endif //REDIS_CTRIP_CRDT_COMMON_H
