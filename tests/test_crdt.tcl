@@ -15,11 +15,12 @@ source tests/support/util.tcl
 
 set ::all_tests {
     ctrip/unit/crdt_register
-   ctrip/unit/crdt_del
-   ctrip/unit/gc
-   ctrip/unit/crdt_hash
-   ctrip/unit/crdt_conflict
+    ctrip/unit/crdt_del
+    ctrip/unit/gc
+    ctrip/unit/crdt_hash
+    ctrip/unit/crdt_conflict
 
+    ctrip/integration/composite/master-slave-failover
 }
 
 set ::temp_tests {
@@ -28,6 +29,7 @@ set ::temp_tests {
    ctrip/unit/gc
    ctrip/unit/crdt_hash
    ctrip/unit/crdt_conflict
+   ctrip/unit/crdt_del_conflict
 
    ctrip/integration/master-slave/replication
    ctrip/integration/master-slave/replication-1
