@@ -1612,7 +1612,7 @@ void initServerConfig(struct redisServer *srv) {
     srv->watchdog_period = 0;
 
     //TODO: Specialize Crdt Server Configs
-    srv->crdt_gid = random();
+    srv->crdt_gid = CONFIG_DEFAULT_GID;
     if (srv == &crdtServer) {
         srv->repl_syncio_timeout = CONFIG_REPL_SYNCIO_TIMEOUT;
         srv->repl_timeout = CONFIG_DEFAULT_REPL_TIMEOUT;
@@ -4134,6 +4134,11 @@ int main(int argc, char **argv) {
     initServer(&server);
     //init crdt server also
     initServer(&crdtServer);
+
+    if (crdtServer.crdt_gid < 0) {
+        serverPanic("crdt-gid must be set in config file");
+        exit(1);
+    }
 
     if (background || server.pidfile) createPidFile();
     redisSetProcTitle(argv[0]);

@@ -1107,8 +1107,6 @@ void configSetCommand(client *c, struct redisServer *srv) {
     } config_set_numerical_field(
       "repl-backlog-ttl",srv->repl_backlog_time_limit,0,LLONG_MAX) {
     } config_set_numerical_field(
-      "crdt-gid",srv->crdt_gid,0,LLONG_MAX) {
-    }config_set_numerical_field(
       "repl-diskless-sync-delay",srv->repl_diskless_sync_delay,0,LLONG_MAX) {
     } config_set_numerical_field(
       "slave-priority",srv->slave_priority,0,LLONG_MAX) {
@@ -2072,7 +2070,7 @@ int rewriteConfig(char *path) {
     rewriteConfigYesNoOption(state,"lazyfree-lazy-server-del",server.lazyfree_lazy_server_del,CONFIG_DEFAULT_LAZYFREE_LAZY_SERVER_DEL);
     rewriteConfigYesNoOption(state,"slave-lazy-flush",server.repl_slave_lazy_flush,CONFIG_DEFAULT_SLAVE_LAZY_FLUSH);
 
-    rewriteConfigNumericalOption(state,"crdt-gid", server.crdt_gid, 0);
+    rewriteConfigNumericalOption(state,"crdt-gid", crdtServer.crdt_gid, CONFIG_DEFAULT_GID);
 
     /* Rewrite Sentinel config if in Sentinel mode. */
     if (server.sentinel_mode) rewriteConfigSentinelOption(state);
