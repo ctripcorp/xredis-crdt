@@ -910,14 +910,6 @@ void replconfCommand(client *c) {
             /* Note: this command does not reply anything! */
             return;
         }
-        else if (!strcasecmp(c->argv[j]->ptr,"gid")) {
-            if (!(c->flags & CLIENT_MASTER)) return;
-            long long gid;
-            if ((getLongLongFromObject(c->argv[j+1], &gid) != C_OK))
-                return;
-            crdtServer.crdt_gid = gid;
-            server.crdt_gid = gid;
-        }
         else {
             addReplyErrorFormat(c,"Unrecognized REPLCONF option: %s",
                 (char*)c->argv[j]->ptr);

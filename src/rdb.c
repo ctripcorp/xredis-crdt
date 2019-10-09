@@ -1655,6 +1655,8 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                 }
             } else if (!strcasecmp(auxkey->ptr,"crdt-gid")) {
                 crdtServer.crdt_gid = atoi(auxval->ptr);
+                // update config file, to persist crdt-gid
+                rewriteConfig(server.configfile);
             } else if (!strcasecmp(auxkey->ptr,"vclock")) {
                 if (crdtServer.vectorClock) {
                     freeVectorClock(crdtServer.vectorClock);
