@@ -80,9 +80,6 @@ sortVectorClock(VectorClock *vc);
 VectorClock*
 vectorClockMerge(VectorClock *vc1, VectorClock *vc2);
 
-VectorClock*
-vectorClockMergeMin(VectorClock *vc1, VectorClock *vc2);
-
 VectorClockUnit*
 getVectorClockUnit(VectorClock *vc, long long gid);
 
