@@ -203,30 +203,6 @@ vectorClockMerge(VectorClock *vc1, VectorClock *vc2) {
     return result;
 }
 
-VectorClock*
-vectorClockMergeMin(VectorClock *vc1, VectorClock *vc2) {
-    if (vc1 == NULL && vc2 == NULL) {
-        return NULL;
-    }
-    if (vc1 == NULL) {
-        return dupVectorClock(vc2);
-    }
-    if (vc2 == NULL) {
-        return dupVectorClock(vc1);
-    }
-
-    VectorClock *result = dupVectorClock(vc1);
-    for(int i = 0; i < vc2->length; i++) {
-        VectorClockUnit *target;
-//        if(!(target = getVectorClockUnit(result, vc2->clocks[i].gid))) {
-//            addVectorClockUnit(result, vc2->clocks[i].gid, 0);
-//        } else {
-//            target->logic_time = min(vc2->clocks[i].logic_time, target->logic_time);
-//        }
-    }
-    return result;
-}
-
 void mergeVectorClockUnit(VectorClock *vc, VectorClockUnit *vcu) {
     VectorClockUnit *original = getVectorClockUnit(vc, vcu->gid);
     if (original == NULL) {
