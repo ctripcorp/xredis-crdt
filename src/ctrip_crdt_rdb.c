@@ -77,6 +77,7 @@ rdbSaveRioWithCrdtMerge(rio *rdb, int *error, void *rsi) {
     serverLog(LL_NOTICE, "[CRDT] [rdbSaveRioWithCrdtMerge] CRDT.MERGE_END %lld %s %s %lld", crdtServer.crdt_gid,
             sdsVectorClock, info->repl_id, info->repl_offset);
 
+    sdsfree(sdsVectorClock);
     serverLog(LL_NOTICE, "[CRDT] [rdbSaveRioWithCrdtMerge] C_OK");
     return C_OK;
 
@@ -223,6 +224,7 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
 
         /*Send select command first before we send merge command*/
         robj *selectcmd;
+        int needDelete = C_ERR;
         int dictid = j;
         /* Write the SELECT DB opcode */
         if (dictid >= 0 && dictid < PROTO_SHARED_SELECT_CMDS) {
@@ -235,8 +237,12 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
                                      sdscatprintf(sdsempty(),
                                                   "*2\r\n$6\r\nSELECT\r\n$%d\r\n%s\r\n",
                                                   dictid_len, llstr));
+            needDelete = C_OK;
         }
         if(rioWriteBulkObject(rdb, selectcmd) == 0) goto werr;
+        if (needDelete == C_OK) {
+            freeStringObject(selectcmd);
+        }
 
         if (dictSize(d) != 0 && crdtSendMergeRequest(rdb, error, rsi, di, db) == C_ERR) {
             goto werr;

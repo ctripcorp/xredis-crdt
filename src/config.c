@@ -162,7 +162,11 @@ void queueLoadModule(sds path, sds *argv, int argc) {
     struct moduleLoadQueueEntry *loadmod;
 
     loadmod = zmalloc(sizeof(struct moduleLoadQueueEntry));
-    loadmod->argv = zmalloc(sizeof(robj*)*argc);
+    if (argc > 0) {
+        loadmod->argv = zmalloc(sizeof(robj *) * argc);
+    } else {
+        loadmod->argv = NULL;
+    }
     loadmod->path = sdsnew(path);
     loadmod->argc = argc;
     for (i = 0; i < argc; i++) {
