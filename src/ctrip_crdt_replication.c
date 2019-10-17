@@ -1369,7 +1369,7 @@ void crdtReplicationCron(void) {
     /**!!!!Important!!!!!
      * Connect crdt master if and only if I'm NOT a SLAVE here
      * SLAVE SHOULD RECEIVE DATA from their masters*/
-    if (!server.master) {
+    if (!server.masterhost) {
         listRewind(crdtServer.crdtMasters, &li);
         while ((ln = listNext(&li)) != NULL) {
             CRDT_Master_Instance *crdtMaster = ln->value;
