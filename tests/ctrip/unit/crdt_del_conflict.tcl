@@ -86,6 +86,9 @@ start_server {tags {"crdt-del"} overrides {crdt-gid 1} config {crdt.conf} module
             [lindex $peers 0] del k
 
             puts [format "tombstone size: %lld" [[lindex $peers 1] tombstonesize]]
+
+            [lindex $peers 1] debug set-crdt-ovc 1
+            [lindex $peers 1] debug set-crdt-ovc 1
         }
 
     }
