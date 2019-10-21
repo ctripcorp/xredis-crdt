@@ -85,9 +85,12 @@ void setKeyToTombstone(redisDb *db, robj *key, robj *val) {
     } else {
         CrdtCommon *existingCrdtCommon = retrieveCrdtCommon(existing);
         CrdtCommon *incomeCrdtCommon = retrieveCrdtCommon(val);
-        if (isVectorClockMonoIncr(existingCrdtCommon->vectorClock, incomeCrdtCommon->vectorClock)) {
-            tombstoneOverwrite(db, key, val);
+        if (!isVectorClockMonoIncr(existingCrdtCommon->vectorClock, incomeCrdtCommon->vectorClock)) {
+            VectorClock *toFree = incomeCrdtCommon->vectorClock;
+            incomeCrdtCommon->vectorClock = vectorClockMerge(existingCrdtCommon->vectorClock, incomeCrdtCommon->vectorClock);
+            freeVectorClock(toFree);
         }
+        tombstoneOverwrite(db, key, val);
     }
     incrRefCount(val);
     signalModifiedKey(db,key);
