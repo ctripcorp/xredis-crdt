@@ -292,12 +292,14 @@ crdtMergeDelCommand(client *c) {
         goto error;
     }
 
-    /* Merge the new object in the hash table */
+    /**
+     * For tombstone object, if it has been deleted, we need to delete our object first
+     * **/
     CrdtCommon *tombstoneCrdtCommon = retrieveCrdtCommon(obj);
     robj *currentVal = lookupKeyRead(c->db, key);
     if (currentVal) {
         CrdtCommon *currentCrdtCommon = retrieveCrdtCommon(currentVal);
-        if (currentCrdtCommon && tombstoneCrdtCommon  &&
+        if (currentCrdtCommon && tombstoneCrdtCommon &&
                 isVectorClockMonoIncr(currentCrdtCommon->vectorClock, tombstoneCrdtCommon->vectorClock)) {
             dbDelete(c->db, key);
         }
@@ -309,7 +311,7 @@ crdtMergeDelCommand(client *c) {
     server.dirty++;
     return;
 
-    error:
+error:
     crdtCancelReplicationHandshake(sourceGid);
     return;
 
@@ -347,7 +349,10 @@ crdtMergeCommand(client *c) {
     CrdtCommon *common = (CrdtCommon *) moduleDataType;
 
     mergeVectorClockUnit(crdtServer.vectorClock, getVectorClockUnit(common->vectorClock, common->gid));
-    // check tombstone first, do not insert the key if tombstone is partially ordered after the insert
+
+    /**
+     * check tombstone first, do not insert the key if tombstone is partially ordered after the insert
+     * **/
     dictEntry *de = dictFind(c->db->deleted_keys,key->ptr);
     if (de) {
         robj *tombstone = dictGetVal(de);
@@ -365,6 +370,7 @@ crdtMergeCommand(client *c) {
         if (ccm->type != common->type) {
             serverLog(LL_WARNING, "[INCONSIS][MERGE] key: %s, local type: %d, merge type %d",
                     key->ptr, ccm->type, common->type);
+            decrRefCount(obj);
             return;
         }
         moduleValue *cmv = currentVal->ptr;

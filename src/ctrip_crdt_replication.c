@@ -243,6 +243,7 @@ crdtMergeStartCommand(client *c) {
     VectorClock *vclock = sdsToVectorClock(c->argv[2]->ptr);
     VectorClock *curGcVclock = crdtServer.gcVectorClock;
     crdtServer.gcVectorClock = vectorClockMerge(crdtServer.gcVectorClock, vclock);
+    addVectorClockUnit(crdtServer.vectorClock, sourceGid, 0);
     freeVectorClock(vclock);
     freeVectorClock(curGcVclock);
     server.dirty ++;
