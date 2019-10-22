@@ -62,6 +62,7 @@ start_server {tags {"crdt-del"} overrides {crdt-gid 1} config {crdt.conf} module
                 fail "peers not synchronized yet"
             }
         }
+
         test "crdt tombstone conflict" {
             [lindex $peers 0] del k
             wait_for_condition 500 100 {
@@ -91,5 +92,17 @@ start_server {tags {"crdt-del"} overrides {crdt-gid 1} config {crdt.conf} module
             [lindex $peers 1] debug set-crdt-ovc 1
         }
 
+        test "crdt del hash then k/v" {
+            [lindex $peers 0] hmset key-hash-key f v f1 v1 f2 v2
+            [lindex $peers 0] del key-hash-key
+            [lindex $peers 0] set key-hash-key val
+            [lindex $peers 0] del key-hash-key
+
+            wait_for_condition 500 100 {
+                [[lindex $peers 0] tombstonesize] eq 0
+            } else {
+                fail "tombstone not gced"
+            }
+        }
     }
 }

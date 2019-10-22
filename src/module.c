@@ -1416,6 +1416,7 @@ int RM_CrdtMultiWrappedReplicate(RedisModuleCtx *ctx, const char *cmdname, const
     return REDISMODULE_OK;
 }
 
+//todo: re-use
 void * RM_CurrentVectorClock() {
     return dupVectorClock(crdtServer.vectorClock);
 }
