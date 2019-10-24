@@ -1595,24 +1595,11 @@ CRDT_Master_Instance *createPeerMaster(client *c, long long gid);
 void crdtOvcCommand(client *c);
 void feedCrdtBacklog(robj **argv, int argc);
 void replicationFeedAllSlaves(int dictid, robj **argv, int argc);
+void crdtCancelReplicationHandshake(long long gid);
 
 /* CRDT Command */
 void crdtDelCommand(client *c);
 CrdtCommon *retrieveCrdtCommon(robj *obj);
-
-/* Macro to initialize an IO context. Note that the 'ver' field is populated
- * inside rdb.c according to the version of the value to load. */
-inline int isModuleCrdt(robj *obj) {
-    if(obj->type != OBJ_MODULE) {
-        return C_ERR;
-    }
-    moduleValue *mv = obj->ptr;
-    if(strncmp(CRDT_MODULE_OBJECT_PREFIX, mv->type->name, 4) == 0) {
-        return C_OK;
-    }
-    return C_ERR;
-}
-
 
 /* Generic persistence functions */
 void startLoading(FILE *fp);

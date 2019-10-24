@@ -34,17 +34,24 @@
 #include "ctrip_crdt_rdb.h"
 #include "rdb.h"
 #include "rio.h"
-#include "server.h"
-#include "ctrip_crdt_replication.h"
 
 
 /**---------------------------CRDT RDB Send Functions--------------------------------*/
 /* Spawn an RDB child that writes the RDB to the sockets of the slaves
  * that are currently in SLAVE_STATE_WAIT_BGSAVE_START state. */
 
-// replace to `int rdbSaveToSlavesSockets(rdbSaveInfo *rsi)`
-
-
+/* Macro to initialize an IO context. Note that the 'ver' field is populated
+ * inside rdb.c according to the version of the value to load. */
+static inline int isModuleCrdt(robj *obj) {
+    if(obj->type != OBJ_MODULE) {
+        return C_ERR;
+    }
+    moduleValue *mv = obj->ptr;
+    if(strncmp(CRDT_MODULE_OBJECT_PREFIX, mv->type->name, 4) == 0) {
+        return C_OK;
+    }
+    return C_ERR;
+}
 
 //CRDT.MERGE_START <local-gid> <vector-clock> <repl_id>
 //CRDT.Merge <src-gid> <key> <vc> <timestamp/-1> <expire> <value>
@@ -241,7 +248,7 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
         }
         if(rioWriteBulkObject(rdb, selectcmd) == 0) goto werr;
         if (needDelete == C_OK) {
-            freeStringObject(selectcmd);
+            decrRefCount(selectcmd);
         }
 
         if (dictSize(d) != 0 && crdtSendMergeRequest(rdb, error, rsi, di, db) == C_ERR) {

@@ -33,42 +33,7 @@
 #ifndef REDIS_CRDT_REPLICATION_H
 #define REDIS_CRDT_REPLICATION_H
 
-/* Slave replication state. Used in server.repl_state for slaves to remember
- * what to do next. */
-#define CRDT_REPL_STATE_NONE 0 /* No active replication */
-#define CRDT_REPL_STATE_CONNECT 1 /* Must connect to master */
-#define CRDT_REPL_STATE_CONNECTING 2 /* Connecting to master */
-/* --- Handshake states, must be ordered --- */
-#define CRDT_REPL_STATE_RECEIVE_PONG 3 /* Wait for PING reply */
-#define CRDT_REPL_STATE_SEND_AUTH 4 /* Send AUTH to master */
-#define CRDT_REPL_STATE_RECEIVE_AUTH 5 /* Wait for AUTH reply */
-#define CRDT_REPL_STATE_SEND_PORT 6 /* Send REPLCONF listening-port */
-#define CRDT_REPL_STATE_RECEIVE_PORT 7 /* Wait for REPLCONF reply */
-#define CRDT_REPL_STATE_SEND_IP 8 /* Send REPLCONF ip-address */
-#define CRDT_REPL_STATE_RECEIVE_IP 9 /* Wait for REPLCONF reply */
-#define CRDT_REPL_STATE_SEND_CAPA 10 /* Send REPLCONF capa */
-#define CRDT_REPL_STATE_RECEIVE_CAPA 11 /* Wait for REPLCONF reply */
-#define CRDT_REPL_STATE_SEND_VECTOR_CLOCK 12 /* Send PSYNC */
-#define CRDT_REPL_STATE_RECEIVE_VECTOR_CLOCK 13 /* Wait for PSYNC reply */
-#define CRDT_REPL_STATE_SEND_PSYNC 14 /* Send PSYNC */
-#define CRDT_REPL_STATE_RECEIVE_PSYNC 15 /* Wait for PSYNC reply */
-/* --- End of handshake states --- */
-#define CRDT_REPL_STATE_TRANSFER 16 /* Receiving .rdb from master */
-#define CRDT_REPL_STATE_CONNECTED 17 /* Connected to master */
-
-/* State of slaves from the POV of the master. Used in client->replstate.
- * In SEND_BULK and ONLINE state the slave receives new updates
- * in its output queue. In the WAIT_BGSAVE states instead the server is waiting
- * to start the next background saving in order to send updates to it. */
-#define CRDT_SLAVE_STATE_WAIT_BGSAVE_START 6 /* We need to produce a new RDB file. */
-#define CRDT_SLAVE_STATE_WAIT_BGSAVE_END 7 /* Waiting RDB file creation to finish. */
-#define CRDT_SLAVE_STATE_SEND_BULK 8 /* Sending RDB file to slave. */
-#define CRDT_SLAVE_STATE_ONLINE 9 /* RDB file transmitted, sending just updates. */
-
 #include "server.h"
-
-
-void crdtCancelReplicationHandshake(long long gid);
 
 
 #endif //REDIS_CRDT_REPLICATION_H
