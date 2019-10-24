@@ -31,10 +31,22 @@
 //
 
 #include "ctrip_crdt_common.h"
-#include "sds.h"
 #include "server.h"
 
 #include <stdlib.h>
+
+/* Macro to initialize an IO context. Note that the 'ver' field is populated
+ * inside rdb.c according to the version of the value to load. */
+static inline int isModuleCrdt(robj *obj) {
+    if(obj->type != OBJ_MODULE) {
+        return C_ERR;
+    }
+    moduleValue *mv = obj->ptr;
+    if(strncmp(CRDT_MODULE_OBJECT_PREFIX, mv->type->name, 4) == 0) {
+        return C_OK;
+    }
+    return C_ERR;
+}
 
 CrdtCommon *retrieveCrdtCommon(robj *obj) {
     if (obj == NULL || isModuleCrdt(obj) == C_ERR) return NULL;

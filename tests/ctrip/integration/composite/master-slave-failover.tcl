@@ -202,6 +202,10 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                         }
                     }
                     if {$retry == 0} {
+                        puts "index 0:"
+                        puts [[lindex $peers 0] crdt.info replication]
+                        puts "index 1:"
+                        puts [[lindex $peers 1] crdt.info replication]
                         error "assertion:Peers not correctly synchronized"
                     }
                 }

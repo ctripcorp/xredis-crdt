@@ -14,23 +14,17 @@ source tests/support/util.tcl
 
 
 set ::all_tests {
-    ctrip/unit/crdt_register
-   ctrip/unit/crdt_del
-   ctrip/unit/gc
-   ctrip/unit/crdt_hash
    ctrip/unit/crdt_conflict
-   ctrip/unit/crdt_del_conflict
-
-    ctrip/integration/master-master/replication
-   ctrip/integration/master-master/full_sync
-   ctrip/integration/master-master/full_sync-2
-   ctrip/integration/master-master/partial-sync
-   ctrip/integration/master-master/replication-2
-   ctrip/integration/master-master/full_sync-3
-
    ctrip/integration/composite/full-sync
    ctrip/integration/composite/concurrent-conflict-full
    ctrip/integration/composite/master-slave-failover
+
+   ctrip/integration/master-master/replication
+    ctrip/integration/master-master/full_sync
+    ctrip/integration/master-master/full_sync-2
+    ctrip/integration/master-master/partial-sync
+    ctrip/integration/master-master/replication-2
+    ctrip/integration/master-master/full_sync-3
 }
 
 set ::temp_tests {
