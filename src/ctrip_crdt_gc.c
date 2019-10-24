@@ -55,9 +55,6 @@ void tombstoneAdd(redisDb *db, robj *key, robj *val) {
  *
  * The program is aborted if the key was not already present. */
 void tombstoneOverwrite(redisDb *db, robj *key, robj *val) {
-    dictEntry *de = dictFind(db->deleted_keys,key->ptr);
-
-    serverAssertWithInfo(NULL,key,de != NULL);
     dictReplace(db->deleted_keys, key->ptr, val);
 }
 
