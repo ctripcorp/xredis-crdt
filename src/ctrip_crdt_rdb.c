@@ -95,7 +95,7 @@ werr: /* Write error. */
     return C_ERR;
 }
 
-int crdtSendMergeRequest(rio *rdb, int *error, crdtRdbSaveInfo *rsi, dictIterator *di, redisDb *db) {
+int crdtSendMergeRequest(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di, redisDb *db) {
     dictEntry *de;
     long long now = mstime();
     rio payload;
@@ -138,23 +138,24 @@ int crdtSendMergeRequest(rio *rdb, int *error, crdtRdbSaveInfo *rsi, dictIterato
             if (ttl < 1) ttl = 1;
         }
         serverAssertWithInfo(NULL, &key, sdsEncodedObject((&key)));
-        serverAssertWithInfo(NULL, &key, rioWriteBulkCount(rdb, '*', 7));
+        if(!rioWriteBulkCount(rdb, '*', 7)) return C_ERR;
 
-        serverAssertWithInfo(NULL, &key, rioWriteBulkString(rdb,"CRDT.Merge",10));
-        serverAssertWithInfo(NULL, &key, rioWriteBulkLongLong(rdb, crdtServer.crdt_gid));
-        serverAssertWithInfo(NULL, &key, rioWriteBulkString(rdb, (&key)->ptr,sdslen((&key)->ptr)));
+        if(!rioWriteBulkString(rdb,"CRDT.Merge",10)) return C_ERR;
+        if(!rioWriteBulkLongLong(rdb, crdtServer.crdt_gid)) return C_ERR;
+        if(!rioWriteBulkString(rdb, (&key)->ptr,sdslen((&key)->ptr))) return C_ERR;
         sds vclockStr = vectorClockToSds(common->vectorClock);
-        serverAssertWithInfo(NULL, &key, rioWriteBulkString(rdb, vclockStr, sdslen(vclockStr)));
+        if(!rioWriteBulkString(rdb, vclockStr, sdslen(vclockStr))) return C_ERR;
         sdsfree(vclockStr);
-        serverAssertWithInfo(NULL, &key, rioWriteBulkLongLong(rdb, common->timestamp));
-        serverAssertWithInfo(NULL, &key, rioWriteBulkLongLong(rdb, ttl));
+        if(!rioWriteBulkLongLong(rdb, common->timestamp)) return C_ERR;
+        if(!rioWriteBulkLongLong(rdb, ttl)) return C_ERR;
 
         /* Emit the payload argument, that is the serialized object using
          * * the DUMP format. */
         createDumpPayload(&payload, o);
-        serverAssertWithInfo(NULL, &key,
-                             rioWriteBulkString(rdb, payload.io.buffer.ptr,
-                                                sdslen(payload.io.buffer.ptr)));
+        if (!rioWriteBulkString(rdb, payload.io.buffer.ptr, sdslen(payload.io.buffer.ptr))) {
+            sdsfree(payload.io.buffer.ptr);
+            return C_ERR;
+        }
         sdsfree(payload.io.buffer.ptr);
 
     }
@@ -162,7 +163,7 @@ int crdtSendMergeRequest(rio *rdb, int *error, crdtRdbSaveInfo *rsi, dictIterato
 }
 
 // CRDT.Merge_Del <gid> <key> <vc> <timestamp/-1> <val>
-int crdtSendMergeDelRequest(rio *rdb, int *error, crdtRdbSaveInfo *rsi, dictIterator *di) {
+int crdtSendMergeDelRequest(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di) {
     dictEntry *de;
     rio payload;
 
@@ -193,22 +194,24 @@ int crdtSendMergeDelRequest(rio *rdb, int *error, crdtRdbSaveInfo *rsi, dictIter
         initStaticStringObject(key,keystr);
 
         serverAssertWithInfo(NULL, &key, sdsEncodedObject((&key)));
-        serverAssertWithInfo(NULL, &key, rioWriteBulkCount(rdb, '*', 6));
+        if(!rioWriteBulkCount(rdb, '*', 6)) return C_ERR;
 
-        serverAssertWithInfo(NULL, &key, rioWriteBulkString(rdb,"CRDT.Merge_Del",14));
-        serverAssertWithInfo(NULL, &key, rioWriteBulkLongLong(rdb, crdtServer.crdt_gid));
-        serverAssertWithInfo(NULL, &key, rioWriteBulkString(rdb, (&key)->ptr,sdslen((&key)->ptr)));
+        if(!rioWriteBulkString(rdb,"CRDT.Merge_Del",14))    return C_ERR;
+        if(!rioWriteBulkLongLong(rdb, crdtServer.crdt_gid)) return C_ERR;
+        if(!rioWriteBulkString(rdb, (&key)->ptr,sdslen((&key)->ptr)))   return C_ERR;
         sds vclockStr = vectorClockToSds(common->vectorClock);
-        serverAssertWithInfo(NULL, &key, rioWriteBulkString(rdb, vclockStr, sdslen(vclockStr)));
+        if(!rioWriteBulkString(rdb, vclockStr, sdslen(vclockStr)))  return C_ERR;
         sdsfree(vclockStr);
-        serverAssertWithInfo(NULL, &key, rioWriteBulkLongLong(rdb, common->timestamp));
+        if(!rioWriteBulkLongLong(rdb, common->timestamp))   return C_ERR;
 
         /* Emit the payload argument, that is the serialized object using
          * * the DUMP format. */
         createDumpPayload(&payload, o);
-        serverAssertWithInfo(NULL, &key,
-                             rioWriteBulkString(rdb, payload.io.buffer.ptr,
-                                                sdslen(payload.io.buffer.ptr)));
+        if(!rioWriteBulkString(rdb, payload.io.buffer.ptr,
+                                                sdslen(payload.io.buffer.ptr))) {
+            sdsfree(payload.io.buffer.ptr);
+            return C_ERR;
+        }
         sdsfree(payload.io.buffer.ptr);
     }
     return C_OK;
@@ -251,7 +254,7 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
             decrRefCount(selectcmd);
         }
 
-        if (dictSize(d) != 0 && crdtSendMergeRequest(rdb, error, rsi, di, db) == C_ERR) {
+        if (dictSize(d) != 0 && crdtSendMergeRequest(rdb, rsi, di, db) == C_ERR) {
             goto werr;
         }
         dictReleaseIterator(di);
@@ -259,7 +262,7 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
         d = db->deleted_keys;
         di = dictGetSafeIterator(d);
         if (!di) return C_ERR;
-        if (dictSize(d) != 0 && crdtSendMergeDelRequest(rdb, error, rsi, di) == C_ERR) {
+        if (dictSize(d) != 0 && crdtSendMergeDelRequest(rdb, rsi, di) == C_ERR) {
             goto werr;
         }
         dictReleaseIterator(di);
