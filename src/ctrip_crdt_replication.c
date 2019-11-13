@@ -137,7 +137,7 @@ void crdtReplicationSendAck(CRDT_Master_Instance *masterInstance) {
 // peerof <gid> <ip> <port>
 //  0       1    2    3
 void peerofCommand(client *c) {
-    /* SLAVEOF is not allowed in cluster mode as replication is automatically
+    /* PEEROF is not allowed in cluster mode as replication is automatically
     * configured using the current address of the master node. */
     if (server.cluster_enabled) {
         addReplyError(c,"PEEROF not allowed in cluster mode.");
