@@ -18,8 +18,8 @@ start_server {tags {"crdt-del"} overrides {crdt-gid 1} config {crdt.conf} module
     set server_log [srv 0 stdout]
 
     test {conflict is record} {
-        r CRDT.SET key-1 val2 3 [expr [clock milliseconds] - 10]  "1:10;2:99;3:100"
-        r CRDT.SET key-1 val1 2 [clock milliseconds]  "1:10;2:100;3:99"
+        r CRDT.SET key-1 val2 3 [expr [clock milliseconds] - 10]  "1:10;2:99;3:100" 10000
+        r CRDT.SET key-1 val1 2 [clock milliseconds]  "1:10;2:100;3:99" 10000
 
         set redis_server [srv 0 client]
         set conflict [crdt_stats $redis_server crdt_conflict]
@@ -33,8 +33,8 @@ start_server {tags {"crdt-del"} overrides {crdt-gid 1} config {crdt.conf} module
     }
 
     test {conflict dropped is record} {
-        r CRDT.SET key-1 val2 3 [clock milliseconds] "1:10;2:99;3:100"
-        r CRDT.SET key-1 val1 2 [expr [clock milliseconds] - 10]   "1:10;2:100;3:99"
+        r CRDT.SET key-1 val2 3 [clock milliseconds] "1:10;2:99;3:100"  10000
+        r CRDT.SET key-1 val1 2 [expr [clock milliseconds] - 10]   "1:10;2:100;3:99"  10000
 
         set redis_server [srv 0 client]
         set conflict [crdt_stats $redis_server crdt_conflict]
