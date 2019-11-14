@@ -1,0 +1,21 @@
+XRedis-CRDT 1.0 release notes
+=======================
+
+--------------------------------------------------------------------------------
+Upgrade urgency levels:
+
+LOW:      No need to upgrade unless there are new features you want to use.
+MODERATE: Program an upgrade of the server, but it's not urgent.
+HIGH:     There is a critical bug that may affect a subset of users. Upgrade!
+CRITICAL: There is a critical bug affecting MOST USERS. Upgrade ASAP.
+--------------------------------------------------------------------------------
+
+================================================================================
+XRedis-CRDT 1.0.2  Released Thu Nov 14 11:17:40 CST 2019
+================================================================================
+This version aim to address the issue, that a crash would happen due to networking writing when full sync with peers.
+Root cause of this issue, is because the author(which is me) stupidly considered the write work as an "must-be" stuff. The idea comes from the piece of code that I copied from 'cluster.c', which, after serious struggling understanding the proposal of the original code, that I finally figure it out, was actually writing into a rio wrapped 'sds'. Of course, it'll work, as if a writing failure with mem means Redis is predictable not working any more.
+
+CRITICAL: Redis would crash during peer full sync.
+
+Chen Zhu
