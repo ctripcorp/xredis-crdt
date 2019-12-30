@@ -14,8 +14,8 @@ source tests/support/util.tcl
 
 
 set ::all_tests {
-   
-   ctrip/integration/composite/master-slave-failover
+    ctrip/unit/peerof
+    ctrip/integration/composite/master-slave-failover
 }
 
 set ::temp_tests {

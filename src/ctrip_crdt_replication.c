@@ -77,13 +77,15 @@ void freePeerMaster(CRDT_Master_Instance *masterInstance) {
         freeVectorClock(masterInstance->vectorClock);
         masterInstance->vectorClock = NULL;
     }
-    if (masterInstance->cached_master) {
-        zfree(masterInstance->cached_master);
-        masterInstance->cached_master = NULL;
-    }
     if (masterInstance->master) {
+        masterInstance->master ->flags &= ~CLIENT_CRDT_MASTER;
         freeClient(masterInstance->master);
         masterInstance->master = NULL;
+    }
+    if (masterInstance->cached_master) {
+        masterInstance->cached_master ->flags &= ~CLIENT_CRDT_MASTER;
+        freeClient(masterInstance->cached_master);
+        masterInstance->cached_master = NULL;
     }
     zfree(masterInstance);
 
@@ -216,6 +218,10 @@ void crdtReplicationSetMaster(long long gid, char *ip, int port) {
 void crdtReplicationUnsetMaster(long long gid) {
     CRDT_Master_Instance *peerMaster;
     if ((peerMaster = getPeerMaster(gid)) == NULL) return;
+    if(peerMaster->masterhost) {
+        sdsfree(peerMaster->masterhost);
+        peerMaster->masterhost = NULL;
+    }
     crdtCancelReplicationHandshake(gid);
     freePeerMaster(peerMaster);
 }

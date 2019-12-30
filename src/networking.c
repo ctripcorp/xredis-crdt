@@ -820,8 +820,8 @@ void freeClient(client *c) {
             replicationGetSlaveName(c));
     }
 
-    /* Log link disconnection with slave */
-    if ((c->flags & CLIENT_SLAVE) && !(c->flags & CLIENT_MONITOR)) {
+    /* Log link disconnection with crdt slave */
+    if ((c->flags & CLIENT_CRDT_SLAVE)) {
         serverLog(LL_WARNING,"[CRDT]Connection with slave %s lost.",
                   replicationGetSlaveName(c));
     }
