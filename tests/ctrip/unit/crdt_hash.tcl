@@ -186,3 +186,124 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so}} {
         }
     }
 }
+
+
+start_server { tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskless-sync-delay 1} module {crdt.so}} {
+    set peers {}
+    set peer_hosts {}
+    set peer_ports {}
+    set peer_gids  {}
+
+    lappend peers [srv 0 client]
+    lappend peer_hosts [srv 0 host]
+    lappend peer_ports [srv 0 port]
+    lappend peer_gids 1
+
+    [lindex $peers 0] config crdt.set repl-diskless-sync-delay 1
+    [lindex $peers 0] config set repl-diskless-sync-delay 1
+    start_server {config {crdt.conf} overrides {crdt-gid 2 repl-diskless-sync-delay 1} module {crdt.so}} {
+        lappend peers [srv 0 client]
+        lappend peer_hosts [srv 0 host]
+        lappend peer_ports [srv 0 port]
+        lappend peer_gids 2
+        [lindex $peers 1] config crdt.set repl-diskless-sync-delay 1
+        [lindex $peers 1] config set repl-diskless-sync-delay 1
+    
+        
+        test "full-sync-hash-merge test1" {
+            [lindex $peers 0] hset key field v0
+            after 10
+            [lindex $peers 1] hset key field v1
+            [lindex $peers 1] peerof [lindex $peer_gids 0] [lindex $peer_hosts 0] [lindex $peer_ports 0]
+            # [lindex $peers 1] slaveof [lindex $peer_hosts 0] [lindex $peer_ports 0]
+            set retry 50
+            while {$retry} {
+                set info [[lindex $peers 0] crdt.info replication]
+                if {[string match {*slave0:*state=online*} $info]} {
+                    break
+                } else {
+                    incr retry -1
+                    after 100
+                }
+            }
+            if {$retry == 0} {
+                error "assertion: Master-Slave not correctly synchronized"
+            }
+            assert {[[lindex $peers 1] hget key field] eq {v1} }
+            assert {[[lindex $peers 0] hget key field] eq {v0} }
+            # [lindex $peers 1] slaveof no one
+            
+        }
+        test "full-sync-hash-merge test2" {
+            [lindex $peers 1] peerof [lindex $peer_gids 0] no one  
+            after 100          
+            [lindex $peers 0] hset key field v2
+            after 100
+            [lindex $peers 1] hset key field v3
+            assert {[[lindex $peers 0] hget key field] eq {v2}}
+            assert {[[lindex $peers 1] hget key field] eq {v3}}
+            [lindex $peers 0] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
+            set retry 50
+            while {$retry} {
+                set info [[lindex $peers 1] crdt.info replication]
+                if {[string match {*slave0:*state=online*} $info]} {
+                    break
+                } else {
+                    incr retry -1
+                    after 100
+                }
+            }
+            if {$retry == 0} {
+                error "assertion: Master-Slave not correctly synchronized"
+            }
+            assert {[[lindex $peers 0] hget key field] eq {v3} }
+            assert {[[lindex $peers 1] hget key field] eq {v3} }            
+        }
+        test "full-sync-hash-merge test3" {
+            [lindex $peers 0] peerof [lindex $peer_gids 1] no one
+            after 100
+            [lindex $peers 0] hset key field v4
+            after 100
+            [lindex $peers 1] hset key field v5
+            assert {[[lindex $peers 0] hget key field] eq {v4}}
+            assert {[[lindex $peers 1] hget key field] eq {v5}}
+            [lindex $peers 0] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
+            [lindex $peers 1] peerof [lindex $peer_gids 0] [lindex $peer_hosts 0] [lindex $peer_ports 0]
+            set retry 50
+            while {$retry} {
+                set info [[lindex $peers 0] crdt.info replication]
+                if {[string match {*slave0:*state=online*} $info]} {
+                    break
+                } else {
+                    incr retry -1
+                    after 100
+                }
+            }
+            if {$retry == 0} {
+                error "assertion: Master-Slave not correctly synchronized"
+            }
+            set retry 50
+            while {$retry} {
+                set info [[lindex $peers 1] crdt.info replication]
+                if {[string match {*slave0:*state=online*} $info]} {
+                    break
+                } else {
+                    incr retry -1
+                    after 100
+                }
+            }
+            if {$retry == 0} {
+                error "assertion: Master-Slave not correctly synchronized"
+            }
+            assert {[[lindex $peers 0] hget key field] eq {v5} }
+            assert {[[lindex $peers 1] hget key field] eq {v5} }
+            [lindex $peers 0] peerof [lindex $peer_gids 1] no one
+            [lindex $peers 1] peerof [lindex $peer_gids 0] no one
+            [lindex $peers 0] hset key field v0
+            [lindex $peers 1] hset key field v1
+            assert {[[lindex $peers 0] hget key field] eq {v0}}
+            assert {[[lindex $peers 1] hget key field] eq {v1}}
+        }
+    }
+}
+
