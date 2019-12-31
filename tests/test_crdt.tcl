@@ -16,6 +16,7 @@ source tests/support/util.tcl
 set ::all_tests {
     ctrip/integration/bug/redis-crash-when-full-sync-hash-merge
     ctrip/unit/crdt_hash
+    ctrip/unit/tombstone
 }
 
 set ::temp_tests {
