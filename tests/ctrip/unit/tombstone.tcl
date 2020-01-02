@@ -93,16 +93,16 @@ start_server { tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskl
             [lindex $peers 2] config set repl-diskless-sync-delay 1
             test "full sync tombstone" {
                 [lindex $peers 0] set key v0
-                [lindex $peers 0] hset key1 f v1
-                [lindex $peers 0] hset key2 f v2
-                [lindex $peers 0] hset key2 f1 v1
+                [lindex $peers 0] hset hash-key1 f v1
+                [lindex $peers 0] hset hash-key2 f v2
+                [lindex $peers 0] hset hash-key2 f1 v1
                 [lindex $peers 1] peerof [lindex $peer_gids 0] [lindex $peer_hosts 0] [lindex $peer_ports 0]
                 set retry 50
                 wait [lindex $peers 0] 0 
                 [lindex $peers 1] del key
-                [lindex $peers 1] hset key1 f1 f1 
-                [lindex $peers 1] hdel key1 f
-                [lindex $peers 1] del key2 
+                [lindex $peers 1] hset hash-key1 f1 f1 
+                [lindex $peers 1] hdel hash-key1 f
+                [lindex $peers 1] del hash-key2 
                 [lindex $peers 2] peerof [lindex $peer_gids 0] [lindex $peer_hosts 0] [lindex $peer_ports 0]
                 [lindex $peers 2] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
                 wait [lindex $peers 0] 1
@@ -110,20 +110,20 @@ start_server { tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskl
                 after 1000
                 assert {[[lindex $peers 1] get key] eq {}}
                 assert {[[lindex $peers 2] get key] eq {}}
-                assert {[[lindex $peers 1] hget key1 f] eq {}}
-                assert {[[lindex $peers 2] hget key1 f] eq {}}
-                assert {[[lindex $peers 1] hget key2 f] eq {}}
-                assert {[[lindex $peers 2] hget key2 f] eq {}}
-                assert {[[lindex $peers 1] hget key2 f1] eq {}}
-                assert {[[lindex $peers 2] hget key2 f1] eq {}}
+                assert {[[lindex $peers 1] hget hash-key1 f] eq {}}
+                assert {[[lindex $peers 2] hget hash-key1 f] eq {}}
+                assert {[[lindex $peers 1] hget hash-key2 f] eq {}}
+                assert {[[lindex $peers 2] hget hash-key2 f] eq {}}
+                assert {[[lindex $peers 1] hget hash-key2 f1] eq {}}
+                assert {[[lindex $peers 2] hget hash-key2 f1] eq {}}
                 [lindex $peers 2] set key v10
-                [lindex $peers 2] hset key1 f v11
-                [lindex $peers 2] hset key2 f v12
-                [lindex $peers 2] hset key2 f1 v13
+                [lindex $peers 2] hset hash-key1 f v11
+                [lindex $peers 2] hset hash-key2 f v12
+                [lindex $peers 2] hset hash-key2 f1 v13
                 assert {[[lindex $peers 2] get key] eq {v10}}
-                assert {[[lindex $peers 2] hget key1 f] eq {v11}}
-                assert {[[lindex $peers 2] hget key2 f] eq {v12}}
-                assert {[[lindex $peers 2] hget key2 f1] eq {v13}}
+                assert {[[lindex $peers 2] hget hash-key1 f] eq {v11}}
+                assert {[[lindex $peers 2] hget hash-key2 f] eq {v12}}
+                assert {[[lindex $peers 2] hget hash-key2 f1] eq {v13}}
 
             }
         }
