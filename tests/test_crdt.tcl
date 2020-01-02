@@ -17,6 +17,7 @@ set ::all_tests {
     ctrip/integration/bug/redis-crash-when-full-sync-hash-merge
     ctrip/unit/crdt_hash
     ctrip/unit/tombstone
+    ctrip/unit/merge_different_type
 }
 
 set ::temp_tests {
