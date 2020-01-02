@@ -294,7 +294,7 @@ crdtMergeDelCommand(client *c) {
     if (verifyDumpPayload(c->argv[5]->ptr,sdslen(c->argv[5]->ptr)) == C_ERR) {
         goto error;
     }
-
+    
     rioInitWithBuffer(&payload,c->argv[5]->ptr);
     if (((type = rdbLoadObjectType(&payload)) == -1) ||
         ((obj = rdbLoadObject(type,&payload)) == NULL))
@@ -305,7 +305,34 @@ crdtMergeDelCommand(client *c) {
     /**
      * For tombstone object, if it has been deleted, we need to delete our object first
      * **/
-    CrdtCommon *tombstoneCrdtCommon = retrieveCrdtCommon(obj);
+    CrdtCommon *tombstoneCrdtCommon = NULL;
+    dictEntry *de = dictFind(c->db->deleted_keys,key->ptr);
+    if (de) {
+        robj* tombstone= dictGetVal(de);
+        moduleValue *mv = obj->ptr;
+        moduleType *mt = mv->type;
+        void *moduleDataType = mv->value;
+        CrdtCommon *common = (CrdtCommon *) moduleDataType;
+        moduleValue *old_mv = tombstone->ptr;
+        moduleType *old_mt = old_mv->type;
+        void *oldModuleDataType = old_mv->value;
+        CrdtCommon *oldCommon = (CrdtCommon *) oldModuleDataType;
+        if (common->type != oldCommon->type) {
+            serverLog(LL_WARNING, "[INCONSIS][MERGE] key: %s, tombstone type: %d, merge type %d",
+                    key->ptr, oldCommon->type, common->type);
+            decrRefCount(obj);
+            return;
+        }
+        void *mergedVal = common->merge(old_mv->value,mv->value);
+        old_mv->type->free(old_mv->value);
+        old_mv->value = mergedVal;
+        tombstoneCrdtCommon = retrieveCrdtCommon(tombstone);
+        decrRefCount(obj);
+    }else{
+        tombstoneCrdtCommon = retrieveCrdtCommon(obj);
+        sds copy = sdsdup(key->ptr);
+        dictAdd(c->db->deleted_keys, copy, obj);
+    }
     robj *currentVal = lookupKeyRead(c->db, key);
     if (currentVal) {
         CrdtCommon *currentCrdtCommon = retrieveCrdtCommon(currentVal);
@@ -315,9 +342,7 @@ crdtMergeDelCommand(client *c) {
         }
     }
     mergeVectorClockUnit(crdtServer.vectorClock, getVectorClockUnit(tombstoneCrdtCommon->vectorClock, tombstoneCrdtCommon->gid));
-    sds copy = sdsdup(key->ptr);
-    dictAdd(c->db->deleted_keys, copy, obj);
-
+    
     server.dirty++;
     return;
 
