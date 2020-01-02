@@ -16,6 +16,12 @@ proc wait { client index}  {
         error "assertion: Master-Slave not correctly synchronized"
     }
 }
+proc log_file_matches {log pattern} {
+    set fp [open $log r]
+    set content [read $fp]
+    close $fp
+    string match $pattern $content
+}
 
 
 test "tombstone kv" {
@@ -124,3 +130,139 @@ start_server { tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskl
     }
 }
 
+start_server { tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskless-sync-delay 1} module {crdt.so}} {
+    set peers {}
+    set peer_hosts {}
+    set peer_ports {}
+    set peer_gids  {}
+
+    lappend peers [srv 0 client]
+    lappend peer_hosts [srv 0 host]
+    lappend peer_ports [srv 0 port]
+    lappend peer_gids 1
+    [lindex $peers 0] config crdt.set repl-diskless-sync-delay 1
+    [lindex $peers 0] config set repl-diskless-sync-delay 1
+    start_server {config {crdt.conf} overrides {crdt-gid 2 repl-diskless-sync-delay 1} module {crdt.so}} {
+        lappend peers [srv 0 client]
+        lappend peer_hosts [srv 0 host]
+        lappend peer_ports [srv 0 port]
+        lappend peer_gids 2
+        [lindex $peers 1] config crdt.set repl-diskless-sync-delay 1
+        [lindex $peers 1] config set repl-diskless-sync-delay 1
+        start_server {config {crdt.conf} overrides {crdt-gid 3 repl-diskless-sync-delay 1} module {crdt.so}} {
+            lappend peers [srv 0 client]
+            lappend peer_hosts [srv 0 host]
+            lappend peer_ports [srv 0 port]
+            lappend peer_gids 3
+            [lindex $peers 2] config crdt.set repl-diskless-sync-delay 1
+            [lindex $peers 2] config set repl-diskless-sync-delay 1
+            start_server {config {crdt.conf} overrides {crdt-gid 4 repl-diskless-sync-delay 1} module {crdt.so}} {
+                lappend peers [srv 0 client]
+                lappend peer_hosts [srv 0 host]
+                lappend peer_ports [srv 0 port]
+                lappend peer_gids 4
+                [lindex $peers 3] config crdt.set repl-diskless-sync-delay 1
+                [lindex $peers 3] config set repl-diskless-sync-delay 1
+                test "full-sync tombstone merge some type" {
+                    [lindex $peers 0] set key v1
+                    [lindex $peers 0] hset hash-key f1 v1
+                    [lindex $peers 0] hset hash-key f2 v2
+                    [lindex $peers 1] peerof [lindex $peer_gids 0] [lindex $peer_hosts 0] [lindex $peer_ports 0]
+                    [lindex $peers 2] peerof [lindex $peer_gids 0] [lindex $peer_hosts 0] [lindex $peer_ports 0]
+                    wait [lindex $peers 0] 0
+                    wait [lindex $peers 0] 1
+                    [lindex $peers 1] del key 
+                    [lindex $peers 2] del key 
+                    [lindex $peers 1] hdel hash-key f1
+                    [lindex $peers 2] hdel hash-key f2
+                    [lindex $peers 3] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
+                    [lindex $peers 3] peerof [lindex $peer_gids 2] [lindex $peer_hosts 2] [lindex $peer_ports 2]
+                    wait [lindex $peers 1] 0
+                    wait [lindex $peers 2] 0
+                    after 1000
+                    assert {[[lindex $peers 3] get key] eq {}}
+                    assert {[[lindex $peers 3] hget hash-key f1] eq {}}
+                    assert {[[lindex $peers 3] hget hash-key f2] eq {}}
+                }
+            }
+        }
+    }
+}
+
+start_server { tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskless-sync-delay 1} module {crdt.so}} {
+    set peers {}
+    set peer_hosts {}
+    set peer_ports {}
+    set peer_gids  {}
+
+    lappend peers [srv 0 client]
+    lappend peer_hosts [srv 0 host]
+    lappend peer_ports [srv 0 port]
+    lappend peer_gids 1
+    [lindex $peers 0] config crdt.set repl-diskless-sync-delay 1
+    [lindex $peers 0] config set repl-diskless-sync-delay 1
+    start_server {config {crdt.conf} overrides {crdt-gid 2 repl-diskless-sync-delay 1} module {crdt.so}} {
+        lappend peers [srv 0 client]
+        lappend peer_hosts [srv 0 host]
+        lappend peer_ports [srv 0 port]
+        lappend peer_gids 2
+        [lindex $peers 1] config crdt.set repl-diskless-sync-delay 1
+        [lindex $peers 1] config set repl-diskless-sync-delay 1
+        start_server {config {crdt.conf} overrides {crdt-gid 3 repl-diskless-sync-delay 1} module {crdt.so}} {
+            lappend peers [srv 0 client]
+            lappend peer_hosts [srv 0 host]
+            lappend peer_ports [srv 0 port]
+            lappend peer_gids 3
+            [lindex $peers 2] config crdt.set repl-diskless-sync-delay 1
+            [lindex $peers 2] config set repl-diskless-sync-delay 1
+            start_server {config {crdt.conf} overrides {crdt-gid 4 repl-diskless-sync-delay 1} module {crdt.so}} {
+                lappend peers [srv 0 client]
+                lappend peer_hosts [srv 0 host]
+                lappend peer_ports [srv 0 port]
+                lappend peer_gids 4
+                [lindex $peers 3] config crdt.set repl-diskless-sync-delay 1
+                [lindex $peers 3] config set repl-diskless-sync-delay 1
+                start_server {config {crdt.conf} overrides {crdt-gid 5 repl-diskless-sync-delay 1} module {crdt.so}} {
+                    lappend peers [srv 0 client]
+                    lappend peer_hosts [srv 0 host]
+                    lappend peer_ports [srv 0 port]
+                    lappend peer_gids 5
+                    set stdout5 [srv 0 stdout]
+                    [lindex $peers 4] config crdt.set repl-diskless-sync-delay 1
+                    [lindex $peers 4] config set repl-diskless-sync-delay 1
+                    test "tombstone different type" {
+                        [lindex $peers 0] hset key field value
+                        [lindex $peers 1] peerof [lindex $peer_gids 0] [lindex $peer_hosts 0] [lindex $peer_ports 0]
+                        wait [lindex $peers 0] 0
+                        [lindex $peers 1] hdel key field
+                        [lindex $peers 2] set key value
+                        [lindex $peers 3] peerof [lindex $peer_gids 2] [lindex $peer_hosts 2] [lindex $peer_ports 2]
+                        wait [lindex $peers 2] 0
+                        [lindex $peers 3] del key
+                        [lindex $peers 4] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
+                        [lindex $peers 4] peerof [lindex $peer_gids 3] [lindex $peer_hosts 3] [lindex $peer_ports 3]
+                        wait [lindex $peers 1] 0
+                        wait [lindex $peers 3] 0
+                        wait_for_condition 50 100 {
+                            [log_file_matches $stdout5 {*tombstone*}]
+                        } else {
+                            fail "no merge tombstone fail log"
+                        }
+                        for { set i 0 }  {$i < 5} {incr i} {
+                            for {set pi 0} {$pi < 5} {incr pi} {
+                                if {$i != $pi} {
+                                    [lindex $peers $i] peerof [lindex $peer_gids $pi] [lindex $peer_hosts $pi] [lindex $peer_ports $pi]
+                                    after 1000
+                                }
+                            }
+                        }
+                        for { set i 0 }  {$i < 5} {incr i} {
+                            assert {[[lindex $peers $i] ping] eq {PONG}}
+                        }
+                        
+                    }
+                }
+            }
+        }
+    }
+}
