@@ -14,17 +14,19 @@ source tests/support/util.tcl
 
 
 set ::all_tests {
-    ctrip/integration/bug/redis-crash-when-full-sync-hash-merge
+    ctrip/unit/crdt_register
     ctrip/unit/crdt_hash
     ctrip/unit/tombstone
-    ctrip/unit/merge_different_type
+    ctrip/unit/crdt_del
 }
 
 set ::temp_tests {
+    ctrip/integration/bug/redis-crash-when-full-sync-hash-merge
+    
+    ctrip/unit/tombstone
+    ctrip/unit/merge_different_type
     ctrip/integration/composite/master-slave-failover
     ctrip/unit/crdt_hdel_mem_leak
-    ctrip/unit/crdt_register
-    ctrip/unit/crdt_del
     ctrip/unit/gc
     
     ctrip/unit/crdt_conflict

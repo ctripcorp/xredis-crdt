@@ -9,6 +9,15 @@ proc stop_bg_hash_data {handle} {
     catch {exec /bin/kill -9 $handle}
 }
 
+proc encode_binary_str {str size} {
+    append type "H" $size
+    binary format $type $str
+}
+proc decode_binary_str {binary_str size} {
+    append type "H" $size
+    binary scan $binary_str $type result
+    return $result
+}
 start_server {tags {"crdt-hash"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so}} {
 
     set redis_host [srv 0 host]
@@ -50,6 +59,10 @@ start_server {tags {"crdt-hash"} overrides {crdt-gid 1} config {crdt.conf} modul
         stop_write_load $load_handle0
         stop_write_load $load_handle1
     }
+    test {"[crdt_hash.tcl]binary hash map "} {
+        r hset hash binary [encode_binary_str abcdef 6]
+        decode_binary_str [ r hget hash binary ] 6
+    } {abcdef}
 }
 
 start_server {tags {"crdt-hash-more"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so}} {
@@ -113,6 +126,12 @@ start_server {tags {"crdt-hash-more"} overrides {crdt-gid 1} config {crdt.conf} 
         r CRDT.HSET k-hash-8 1 [clock milliseconds] "1:201;2:200" 6 f v f1 v1 f2 v2
         r hdel k-hash-8 f
         r hget k-hash-8 f
+    } {}
+    # hdel binary
+    test {"[crdt_hash.tcl]Test Normal H-DEL-2"} {
+        r CRDT.HSET k-hash-9 1 [clock milliseconds] "1:202;2:200" 6 f [encode_binary_str abcdef 6] f1 v1 f2 v2
+        r hdel k-hash-9 f
+        r hget k-hash-9 f
     } {}
 }
 

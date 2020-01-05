@@ -16,6 +16,15 @@ proc wait { client index}  {
         error "assertion: Master-Slave not correctly synchronized"
     }
 }
+proc encode_binary_str {str size} {
+    append type "H" $size
+    binary format $type $str
+}
+proc decode_binary_str {binary_str size} {
+    append type "H" $size
+    binary scan $binary_str $type result
+    return $result
+}
 proc log_file_matches {log pattern} {
     set fp [open $log r]
     set content [read $fp]
@@ -41,7 +50,7 @@ test "tombstone kv" {
             [lindex $peers 0] config set repl-diskless-sync-delay 1
             set time [clock milliseconds]
             [lindex $peers 0] crdt.rem_hash  hash-key  2 $time "2:2;3:1" field
-            [lindex $peers 0] crdt.hset hash-key 3 [expr $time - 10] "2:1;3:1" 2 field val
+            [lindex $peers 0] crdt.hset hash-key 3 [expr $time - 10] "2:1;3:1" 2 field [encode_binary_str {abc} 3]
             assert {[[lindex $peers 0] hget hash-key field ] eq {}}
             [lindex $peers 0] crdt.hset hash-key 3 [expr $time + 10] "2:2;3:2" 2 field val1 
             assert {[[lindex $peers 0] hget hash-key field] eq {val1}}
@@ -53,10 +62,10 @@ test "tombstone kv" {
         
         test "tomstone kv" {
             set time [clock milliseconds]
-            [lindex $peers 0] crdt.del_reg  key  2 $time "2:4;3:4" field 
-            [lindex $peers 0] crdt.set key val 3 [expr $time - 10] "2:3;3:4" 10000
+            [lindex $peers 0] crdt.del_reg  key  2 $time "2:4;3:4"  
+            [lindex $peers 0] crdt.set key [encode_binary_str {abc} 3] 3 [expr $time - 10] "2:3;3:4" 10000
             
-            assert {[[lindex $peers 0] hget key field ] eq {}}
+            assert {[[lindex $peers 0] get key ] eq {}}
 
             [lindex $peers 0] crdt.set key val1 3 [expr $time + 10] "2:4;3:5" 10000 
             assert {[[lindex $peers 0] get key] eq {val1}}
@@ -95,7 +104,7 @@ start_server { tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskl
                 [lindex $peers 0] set key v0
                 [lindex $peers 0] hset hash-key1 f v1
                 [lindex $peers 0] hset hash-key2 f v2
-                [lindex $peers 0] hset hash-key2 f1 v1
+                [lindex $peers 0] hset hash-key2 f1 [encode_binary_str ab 2]
                 [lindex $peers 1] peerof [lindex $peer_gids 0] [lindex $peer_hosts 0] [lindex $peer_ports 0]
                 set retry 50
                 wait [lindex $peers 0] 0 
@@ -119,11 +128,11 @@ start_server { tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskl
                 [lindex $peers 2] set key v10
                 [lindex $peers 2] hset hash-key1 f v11
                 [lindex $peers 2] hset hash-key2 f v12
-                [lindex $peers 2] hset hash-key2 f1 v13
+                [lindex $peers 2] hset hash-key2 f1 [encode_binary_str abc 3]
                 assert {[[lindex $peers 2] get key] eq {v10}}
                 assert {[[lindex $peers 2] hget hash-key1 f] eq {v11}}
                 assert {[[lindex $peers 2] hget hash-key2 f] eq {v12}}
-                assert {[[lindex $peers 2] hget hash-key2 f1] eq {v13}}
+                assert {[decode_binary_str [[lindex $peers 2] hget hash-key2 f1] 3] eq {abc}}
 
             }
         }
