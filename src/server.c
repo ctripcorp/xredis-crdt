@@ -3430,6 +3430,10 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
         if (sections++) info = sdscat(info,"\r\n");
         info = sdscatprintf(info,
                             "# CRDT Replication\r\n");
+        sds vectorClockStr = vectorClockToSds(crdtServer.vectorClock);                    
+        info = sdscatprintf(info, 
+                            "ovc:%s\r\n", vectorClockStr);
+        sdsfree(vectorClockStr);
         if (listLength(crdtServer.crdtMasters)) {
             listNode *ln;
             listIter li;
