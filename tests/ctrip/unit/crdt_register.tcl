@@ -1,4 +1,12 @@
-
+proc encode_binary_str {str size} {
+    append type "H" $size
+    binary format $type $str
+}
+proc decode_binary_str {binary_str size} {
+    append type "H" $size
+    binary scan $binary_str $type result
+    return $result
+}
 start_server {tags {"crdt-register"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
 
     test {"[crdt_register.tcl]SET and GET"} {
@@ -68,5 +76,10 @@ start_server {tags {"crdt-register"} overrides {crdt-gid 1} config {crdt.conf} m
         r CRDT.DEL_REG key-del-2 2 [expr [clock milliseconds] - 2000] "2:101"
         r get key-del-2
     } {val}
+    test {"[crdt_register.tcl]Test Concurrent set-binary"} {
+        r set key-binary [encode_binary_str abcdef 6]
+        decode_binary_str [ r get key-binary ] 6
+        
+    } {abcdef}
 
 }
