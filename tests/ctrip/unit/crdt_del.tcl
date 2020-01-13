@@ -1,4 +1,13 @@
 
+proc encode_binary_str {str size} {
+    append type "H" $size
+    binary format $type $str
+}
+proc decode_binary_str {binary_str size} {
+    append type "H" $size
+    binary scan $binary_str $type result
+    return $result
+}
 start_server {tags {"crdt-del"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
 
     test {"[crdt_del.tcl]basic delete"} {
@@ -41,4 +50,14 @@ start_server {tags {"crdt-del"} overrides {crdt-gid 1} config {crdt.conf} module
         r CRDT.DEL_REG key-del-6 2 [clock milliseconds] "2:100"
         r get key-del-6
     } {val2}
+    test {"[crdt_hash.tcl] del hash binary"} {
+        r hset hash binary [encode_binary_str abcdef 6]
+        r del hash binary
+        r hget hash binary
+    } {}
+    test {"[crdt_hash.tcl] del key binary"} {
+        r set  binary [encode_binary_str abcdef 6]
+        r del  binary
+        r get binary
+    } {}
 }
