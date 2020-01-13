@@ -273,6 +273,7 @@ crdtMergeEndCommand(client *c) {
         freeVectorClock(peerMaster->vectorClock);
     }
     peerMaster->vectorClock = sdsToVectorClock(c->argv[2]->ptr);
+    mergeVectorClockUnit(crdtServer.vectorClock, getVectorClockUnit(peerMaster->vectorClock, sourceGid));
     refreshGcVectorClock(peerMaster->vectorClock);
     memcpy(peerMaster->master_replid, c->argv[3]->ptr, sizeof(peerMaster->master_replid));
     if (getLongLongFromObjectOrReply(c, c->argv[4], &offset, NULL) != C_OK) return;

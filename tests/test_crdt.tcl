@@ -15,6 +15,8 @@ source tests/support/util.tcl
 
 set ::all_tests {
     ctrip/unit/crdt_register
+    ctrip/integration/bug/redis-crash-when-full-sync-hash-merge
+    ctrip/integration/bug/redis-when-full-sync-mater-timeout-vectorclock-update
     ctrip/unit/crdt_hash
     ctrip/unit/tombstone
     ctrip/unit/crdt_del

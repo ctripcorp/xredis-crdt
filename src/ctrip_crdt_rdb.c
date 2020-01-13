@@ -341,8 +341,6 @@ crdtMergeDelCommand(client *c) {
             dbDelete(c->db, key);
         }
     }
-    mergeVectorClockUnit(crdtServer.vectorClock, getVectorClockUnit(tombstoneCrdtCommon->vectorClock, tombstoneCrdtCommon->gid));
-    
     server.dirty++;
     return;
 
@@ -382,8 +380,6 @@ crdtMergeCommand(client *c) {
     moduleType *mt = mv->type;
     void *moduleDataType = mv->value;
     CrdtCommon *common = (CrdtCommon *) moduleDataType;
-
-    mergeVectorClockUnit(crdtServer.vectorClock, getVectorClockUnit(common->vectorClock, common->gid));
 
     /**
      * check tombstone first, do not insert the key if tombstone is partially ordered after the insert
