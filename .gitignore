@@ -38,7 +38,6 @@ deps/lua/src/liblua.a
 Makefile.dep
 
 *.o
-*.so
 *.pyc
 *.a
 .vscode/
