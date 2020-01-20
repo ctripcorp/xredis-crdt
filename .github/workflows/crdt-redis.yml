@@ -1,0 +1,14 @@
+name: CRDT-Redis CI
+
+on: [push, pull_request]
+
+jobs:
+   build-macos-latest:
+    strategy:
+      matrix:
+        platform: [macos-latest, macOS-10.14]
+    runs-on: ${{ matrix.platform }}
+    steps:
+    - uses: actions/checkout@v1
+    - name: make crdt-test
+      run: make crdt-test
