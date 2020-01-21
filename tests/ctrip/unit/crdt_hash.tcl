@@ -133,6 +133,38 @@ start_server {tags {"crdt-hash-more"} overrides {crdt-gid 1} config {crdt.conf} 
         r hdel k-hash-9 f
         r hget k-hash-9 f
     } {}
+    test {"[crdt_hash.tcl]Test Normal CRDT-HGET"} {
+        r crdt.hget k-hash-10 field 
+    } {}
+    test {"[crdt_hash.tcl]Test Normal CRDT-HGET-2"} {
+        set time [clock milliseconds]
+        r hset k-hash-10 field value
+        set result [r crdt.hget k-hash-10 field]
+        assert {[lindex $result 0] == {value}}
+        assert {[lindex $result 1] == {1}}
+        assert {[lindex $result 2] >= $time}
+        r hdel k-hash-10 field 
+        assert {[r crdt.hget k-hash-10 field] == {}}
+    } 
+    test {"[crdt_hash.tcl]Test Normal CRDT-HGET-3"} {
+        set time [clock milliseconds]
+        r CRDT.HSET k-hash-11 1 $time "1:203;2:200" 6 f v f1 v1 
+        set result [r crdt.hget k-hash-11 f]
+        assert {[lindex $result 0] == {v}}
+        assert {[lindex $result 1] == {1}}
+        assert {[lindex $result 2] == $time}
+        assert {[lindex $result 3] == {1:203;2:200}}
+        set result1 [r crdt.hget k-hash-11 f1]
+        assert {[lindex $result1 0] == {v1}}
+        assert {[lindex $result1 1] == {1}}
+        assert {[lindex $result1 2] == $time}
+        assert {[lindex $result1 3] == {1:203;2:200}}
+        r hdel k-hash-10 f
+        assert {[r crdt.hget k-hash-11 f] == {}} 
+        assert {[llength [r crdt.hget k-hash-11 f1]] == 4} 
+        r del k-hash-10
+        assert {[r crdt.hget k-hash-11 f1] == {}} 
+    }
 }
 
 start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so}} {
@@ -186,6 +218,12 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so}} {
             $master hmset k-hash-10 f v f1 v1 f2 v2 f3 v3 f4 v4
             after 100
             [lindex $slaves 0] hget k-hash-10 f4
+        } {v4}
+        test "master-set-slave-crdt.hget" {
+            $master hmset k-hash-10 f v f1 v1 f2 v2 f3 v3 f4 v4
+            after 100
+            set result [[lindex $slaves 0] crdt.hget k-hash-10 f4]
+            lindex $result 0
         } {v4}
 
         test "huge hset/hmset between master and slave" {

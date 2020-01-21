@@ -905,6 +905,15 @@ int RM_StringToDouble(const RedisModuleString *str, double *d) {
     int retval = getDoubleFromObject(str,d);
     return (retval == C_OK) ? REDISMODULE_OK : REDISMODULE_ERR;
 }
+/* Convert the string into a sds, return it
+ * if the type is not OBJ_String  return NULL 
+ * be used for read only accesses and never modified.*/
+void* RM_GetSds(const RedisModuleString *str) {
+    if(str->type == OBJ_STRING) {
+        return str->ptr;
+    }
+    return NULL;
+}
 
 /* Compare two string objects, returning -1, 0 or 1 respectively if
  * a < b, a == b, a > b. Strings are compared byte by byte as two
@@ -4168,6 +4177,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(ListPop);
     REGISTER_API(StringToLongLong);
     REGISTER_API(StringToDouble);
+    REGISTER_API(GetSds);
     REGISTER_API(Call);
     REGISTER_API(CallReplyProto);
     REGISTER_API(FreeCallReply);
