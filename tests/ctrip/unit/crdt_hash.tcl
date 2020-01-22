@@ -159,10 +159,10 @@ start_server {tags {"crdt-hash-more"} overrides {crdt-gid 1} config {crdt.conf} 
         assert {[lindex $result1 1] == {1}}
         assert {[lindex $result1 2] == $time}
         assert {[lindex $result1 3] == {1:203;2:200}}
-        r hdel k-hash-10 f
+        r hdel k-hash-11 f
         assert {[r crdt.hget k-hash-11 f] == {}} 
         assert {[llength [r crdt.hget k-hash-11 f1]] == 4} 
-        r del k-hash-10
+        r del k-hash-11
         assert {[r crdt.hget k-hash-11 f1] == {}} 
     }
 }

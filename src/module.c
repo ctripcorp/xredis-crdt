@@ -1259,12 +1259,18 @@ int RM_Replicate(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...)
  * new state starting from the old one.
  *
  * The function always returns REDISMODULE_OK. */
-int RM_ReplicateVerbatim(RedisModuleCtx *ctx) {
+int Verbatim(RedisModuleCtx *ctx, int flags) {
     alsoPropagate(ctx->client->cmd,ctx->client->db->id,
         ctx->client->argv,ctx->client->argc,
-        PROPAGATE_AOF|PROPAGATE_REPL);
+        flags);
     server.dirty++;
     return REDISMODULE_OK;
+}
+int RM_ReplicateVerbatim(RedisModuleCtx *ctx) {
+    return Verbatim(ctx, PROPAGATE_AOF|PROPAGATE_REPL);
+}
+int RM_CrdtReplicateVerbatim(RedisModuleCtx *ctx) {
+    return Verbatim(ctx, PROPAGATE_AOF|PROPAGATE_CRDT_REPL);
 }
 
 /* This function will replicate the command exactly as it was defined.
@@ -4196,6 +4202,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(AutoMemory);
     REGISTER_API(Replicate);
     REGISTER_API(ReplicateVerbatim);
+    REGISTER_API(CrdtReplicateVerbatim);
     REGISTER_API(DeleteKey);
     REGISTER_API(UnlinkKey);
     REGISTER_API(StringSet);
