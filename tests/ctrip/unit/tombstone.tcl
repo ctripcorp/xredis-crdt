@@ -54,8 +54,8 @@ test "tombstone kv" {
             assert {[[lindex $peers 0] hget hash-key field ] eq {}}
             [lindex $peers 0] crdt.hset hash-key 3 [expr $time + 10] "2:2;3:2" 2 field val1 
             assert {[[lindex $peers 0] hget hash-key field] eq {val1}}
-            [lindex $peers 0] crdt.del_reg  hash-key  2 [expr $time + 30] "2:3;3:3" field
-            assert {[[lindex $peers 0] hget hash-key field] eq {}}
+            [lindex $peers 0] crdt.del_hash  hash-key  2 [expr $time + 30] "2:3;3:3" "2:3;3:3" 
+            assert {[[lindex $peers 0] hget hash-key field1] eq {}}
             [lindex $peers 0] crdt.hset hash-key 3 [expr $time + 20] "2:2;3:3" 2 field1 val1
             assert {[[lindex $peers 0] hget hash-key field1] eq {}}
         }

@@ -184,6 +184,7 @@ void *REDISMODULE_API_FUNC(RedisModule_GetSds)(const RedisModuleString *str);
 void REDISMODULE_API_FUNC(RedisModule_AutoMemory)(RedisModuleCtx *ctx);
 int REDISMODULE_API_FUNC(RedisModule_Replicate)(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...);
 int REDISMODULE_API_FUNC(RedisModule_ReplicateVerbatim)(RedisModuleCtx *ctx);
+int REDISMODULE_API_FUNC(RedisModule_CrdtReplicateVerbatim)(RedisModuleCtx *ctx);
 int REDISMODULE_API_FUNC(RedisModule_ReplicateStraightForward)(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...);
 int REDISMODULE_API_FUNC(RedisModule_CrdtReplicate)(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...);
 int REDISMODULE_API_FUNC(RedisModule_CrdtReplicateAlsoNormReplicate)(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...);
@@ -322,6 +323,7 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(AutoMemory);
     REDISMODULE_GET_API(Replicate);
     REDISMODULE_GET_API(ReplicateVerbatim);
+    REDISMODULE_GET_API(CrdtReplicateVerbatim);
     REDISMODULE_GET_API(ReplicateStraightForward);
     REDISMODULE_GET_API(CrdtReplicate);
     REDISMODULE_GET_API(CrdtReplicateAlsoNormReplicate);

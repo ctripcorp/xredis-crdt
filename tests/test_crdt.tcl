@@ -14,18 +14,57 @@ source tests/support/util.tcl
 
 
 set ::all_tests {
+    
+    
+    
+    ctrip/basic/basic_crdt_type
+    ctrip/basic/basic_type
+
     ctrip/unit/crdt_register
+    ctrip/unit/crdt_del 
+
+    ctrip/integration/master-slave/replication-psync
+    ctrip/unit/crdt_hash
+    ctrip/unit/crdt_del 
+    ctrip/unit/crdt_register
+    ctrip/unit/merge_different_type
+    ctrip/integration/composite/master-slave-failover
+    ctrip/unit/crdt_hdel_mem_leak
+    ctrip/unit/gc
     ctrip/integration/bug/redis-crash-when-full-sync-hash-merge
     ctrip/integration/bug/redis-when-full-sync-mater-timeout-vectorclock-update
-    ctrip/unit/crdt_hash
-    ctrip/unit/tombstone
-    ctrip/unit/crdt_del
+    ctrip/integration/master-slave/replication
+    ctrip/integration/master-slave/replication-1
+    ctrip/integration/master-slave/replication-2
+    ctrip/integration/master-slave/replication-3
+    ctrip/integration/master-slave/replication-4
+    ctrip/integration/master-slave/psync2
+    ctrip/integration/master-slave/psync2-reg
+
+    ctrip/integration/master-master/replication
+    ctrip/integration/master-master/full_sync
+    ctrip/integration/master-master/full_sync-2
+    ctrip/integration/master-master/partial-sync
+    ctrip/integration/master-master/replication-2
+    ctrip/integration/master-master/full_sync-3
+
+    ctrip/integration/composite/full-sync
+    ctrip/integration/composite/concurrent-conflict-full
+    ctrip/integration/composite/master-slave-failover
+    ctrip/unit/crdt_conflict
+    ctrip/unit/crdt_del_conflict
 }
 
 set ::temp_tests {
-    ctrip/integration/bug/redis-crash-when-full-sync-hash-merge
     
-    ctrip/unit/tombstone
+    
+    
+
+    ////
+    ctrip/integration/bug/redis-crash-when-full-sync-hash-merge
+    ctrip/integration/bug/redis-when-full-sync-mater-timeout-vectorclock-update
+    
+    
     ctrip/unit/merge_different_type
     ctrip/integration/composite/master-slave-failover
     ctrip/unit/crdt_hdel_mem_leak
@@ -54,6 +93,7 @@ set ::temp_tests {
     ctrip/integration/composite/concurrent-conflict-full
     ctrip/integration/composite/master-slave-failover
     ctrip/integration/master-slave/replication-psync
+
 }
 
 
