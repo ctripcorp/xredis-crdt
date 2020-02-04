@@ -905,6 +905,15 @@ int RM_StringToDouble(const RedisModuleString *str, double *d) {
     int retval = getDoubleFromObject(str,d);
     return (retval == C_OK) ? REDISMODULE_OK : REDISMODULE_ERR;
 }
+/* Convert the string into a sds, return it
+ * if the type is not OBJ_String  return NULL 
+ * be used for read only accesses and never modified.*/
+void* RM_GetSds(const RedisModuleString *str) {
+    if(str->type == OBJ_STRING) {
+        return str->ptr;
+    }
+    return NULL;
+}
 
 /* Compare two string objects, returning -1, 0 or 1 respectively if
  * a < b, a == b, a > b. Strings are compared byte by byte as two
@@ -1250,12 +1259,18 @@ int RM_Replicate(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...)
  * new state starting from the old one.
  *
  * The function always returns REDISMODULE_OK. */
-int RM_ReplicateVerbatim(RedisModuleCtx *ctx) {
+int Verbatim(RedisModuleCtx *ctx, int flags) {
     alsoPropagate(ctx->client->cmd,ctx->client->db->id,
         ctx->client->argv,ctx->client->argc,
-        PROPAGATE_AOF|PROPAGATE_REPL);
+        flags);
     server.dirty++;
     return REDISMODULE_OK;
+}
+int RM_ReplicateVerbatim(RedisModuleCtx *ctx) {
+    return Verbatim(ctx, PROPAGATE_AOF|PROPAGATE_REPL);
+}
+int RM_CrdtReplicateVerbatim(RedisModuleCtx *ctx) {
+    return Verbatim(ctx, PROPAGATE_AOF|PROPAGATE_CRDT_REPL);
 }
 
 /* This function will replicate the command exactly as it was defined.
@@ -4168,6 +4183,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(ListPop);
     REGISTER_API(StringToLongLong);
     REGISTER_API(StringToDouble);
+    REGISTER_API(GetSds);
     REGISTER_API(Call);
     REGISTER_API(CallReplyProto);
     REGISTER_API(FreeCallReply);
@@ -4186,6 +4202,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(AutoMemory);
     REGISTER_API(Replicate);
     REGISTER_API(ReplicateVerbatim);
+    REGISTER_API(CrdtReplicateVerbatim);
     REGISTER_API(DeleteKey);
     REGISTER_API(UnlinkKey);
     REGISTER_API(StringSet);
