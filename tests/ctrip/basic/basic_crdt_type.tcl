@@ -744,6 +744,18 @@ proc basic_test { type create check delete} {
                     set result {key field {} 1 100000 {"1:13;2:12"} }
                     run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
                 }
+                test [format "%s-expire" $type] {
+                    set add {key field value 1 100000 {"1:20;2:20"} }
+                    set result {key field {} 1 100000 {"1:20;2:20"} }
+                    run [replace [replace_client $create {[lindex $peers 0]}] $add] 1
+                    run [replace [replace_client $check {[lindex $peers 0]}] $add] 1
+                    [lindex $peers 0] expire key 1
+                    after 1000
+                    run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
+                    set add {key field value 1 100000 {"1:20;2:20"} }
+                    run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
+
+                }
             
             }
         }

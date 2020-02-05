@@ -1126,6 +1126,19 @@ void propagateExpire(redisDb *db, robj *key, int lazy) {
     decrRefCount(argv[1]);
 }
 
+void crdtPropagateExpire(redisDb *db, robj *key) {
+    dictEntry* entry = dictFind(db->dict, key);
+    if (entry != NULL) {
+        robj *val = dictGetVal(entry);
+        if (val != NULL) {
+            struct moduleValue* rm = (struct moduleValue*)val->ptr;
+            CrdtCommon* common = ((CrdtCommon*)(rm->value));
+            common->expire(db, db->id, key);
+        }
+    }
+}
+
+
 int expireIfNeeded(redisDb *db, robj *key) {
     mstime_t when = getExpire(db,key);
     mstime_t now;
@@ -1156,7 +1169,8 @@ int expireIfNeeded(redisDb *db, robj *key) {
 
     /* Delete the key */
     server.stat_expiredkeys++;
-    propagateExpire(db,key,server.lazyfree_lazy_expire);
+    //propagateExpire(db,key,server.lazyfree_lazy_expire);
+    crdtPropagateExpire(db, key);
     notifyKeyspaceEvent(NOTIFY_EXPIRED,
         "expired",key,db->id);
     return server.lazyfree_lazy_expire ? dbAsyncDelete(db,key) :

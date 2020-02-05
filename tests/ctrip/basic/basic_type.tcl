@@ -91,6 +91,7 @@ proc basic_test { type create check delete} {
                 set result {key, field, {}}
                 run [replace [replace_client $check {[lindex $peers 1]}] $result] 1
             }
+            
         }
     }
     
@@ -206,6 +207,79 @@ proc basic_test { type create check delete} {
                         [get_info_replication_attr_value [lindex $peers 1] crdt.info peer0_repl_offset]
                     }
                 }
+                test [format "%s-expire" $type]  {
+                    set argv1 {key-expire field value} 
+                    run [replace [replace_client $create {[lindex $peers 0]}] $argv1] 1
+                    after 500
+                    run [replace [replace_client $check {[lindex $peers 1]}] $argv1] 1
+                    [lindex $peers 0] expire key-expire 1
+                    after 1200
+                    set result {key-expire field {}} 
+                    run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
+                    
+                    assert {
+                        [get_info_replication_attr_value [lindex $peers 0] info master_repl_offset]
+                        eq
+                        [get_info_replication_attr_value [lindex $slaves 0] info master_repl_offset]
+                    }
+                    assert {
+                        [get_info_replication_attr_value [lindex $peers 0] crdt.info master_repl_offset]
+                        eq
+                        [get_info_replication_attr_value [lindex $slaves 0] crdt.info master_repl_offset]
+                    }
+                    assert {
+                        [get_info_replication_attr_value [lindex $peers 0] crdt.info master_repl_offset]
+                        eq
+                        [get_info_replication_attr_value [lindex $peers 1] crdt.info peer0_repl_offset]
+                    }
+                }
+
+                test [format "%s-expire2" $type] {
+                    set argv1 {key-expire2 field value} 
+                    run [replace [replace_client $create {[lindex $peers 0]}] $argv1] 1
+                    after 500
+                    run [replace [replace_client $check {[lindex $peers 1]}] $argv1] 1
+                    [lindex $peers 0] expire key-expire2 1
+                    set argv2 {key-expire2 field v}
+                    run [replace [replace_client $create {[lindex $peers 0]}] $argv2] 1
+                    after 1200
+                    # set result {key-expire2 field {}} 
+
+                    run [replace [replace_client $check {[lindex $peers 0]}] $argv2] 1
+                    
+                    assert {
+                        [get_info_replication_attr_value [lindex $peers 0] info master_repl_offset]
+                        eq
+                        [get_info_replication_attr_value [lindex $slaves 0] info master_repl_offset]
+                    }
+                    assert {
+                        [get_info_replication_attr_value [lindex $peers 0] crdt.info master_repl_offset]
+                        eq
+                        [get_info_replication_attr_value [lindex $slaves 0] crdt.info master_repl_offset]
+                    }
+                    assert {
+                        [get_info_replication_attr_value [lindex $peers 0] crdt.info master_repl_offset]
+                        eq
+                        [get_info_replication_attr_value [lindex $peers 1] crdt.info peer0_repl_offset]
+                    }
+                }
+                test [format "%s-expire2" $type] {
+                    set argv1 {key-expire3 field value} 
+                    run [replace [replace_client $create {[lindex $peers 0]}] $argv1] 1
+                    after 500
+                    run [replace [replace_client $check {[lindex $peers 1]}] $argv1] 1
+                    [lindex $peers 0] expire key-expire3 1
+                    set argv2 {key-expire3 field v}
+                    run [replace [replace_client $delete {[lindex $peers 0]}] $argv2] 1
+                    run [replace [replace_client $create {[lindex $peers 0]}] $argv2] 1
+                    after 1200
+                    # set result {key-expire2 field {}} 
+
+                    run [replace [replace_client $check {[lindex $peers 0]}] $argv2] 1
+                    
+                    
+                }
+
             }
         }
     }

@@ -56,8 +56,8 @@ int activeExpireCycleTryExpire(redisDb *db, dictEntry *de, long long now) {
     if (now > t) {
         sds key = dictGetKey(de);
         robj *keyobj = createStringObject(key,sdslen(key));
-
-        propagateExpire(db,keyobj,server.lazyfree_lazy_expire);
+        // propagateExpire(db,keyobj,server.lazyfree_lazy_expire);
+        crdtPropagateExpire(db, keyobj);
         if (server.lazyfree_lazy_expire)
             dbAsyncDelete(db,keyobj);
         else

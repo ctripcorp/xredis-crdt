@@ -1273,6 +1273,25 @@ int RM_CrdtReplicateVerbatim(RedisModuleCtx *ctx) {
     return Verbatim(ctx, PROPAGATE_AOF|PROPAGATE_CRDT_REPL);
 }
 
+int RM_ReplicationFeedAllSlaves(int id, const char *cmdname, const char* fmt, ...) {
+        // replicationFeedAllSlaves(id, argv, argc);
+    robj **argv = NULL;
+    int argc = 0, flags = 0, j;
+    va_list ap;
+    va_start(ap, fmt);
+    argv = moduleCreateArgvFromUserFormat(cmdname,fmt,&argc,&flags,ap);
+    va_end(ap);
+    if (argv == NULL) return REDISMODULE_ERR;
+
+    replicationFeedAllSlaves(id, argv, argc);
+    
+    for (j = 0; j < argc; j++) decrRefCount(argv[j]);
+    zfree(argv);
+    server.dirty++;
+    return REDISMODULE_OK;
+
+}
+
 /* This function will replicate the command exactly as it was defined.
  * Note that this function will not wrap the command into
  * a MULTI/EXEC stanza, so it should not be mixed with other replication
@@ -1557,6 +1576,37 @@ int RM_SelectDb(RedisModuleCtx *ctx, int newid) {
     return (retval == C_OK) ? REDISMODULE_OK : REDISMODULE_ERR;
 }
 
+void *RM_CreateKey(void* data,robj *keyname, int mode) {
+    redisDb* db = (redisDb*)data;
+    RedisModuleKey *kp;
+    robj *value, *tombstone = NULL;
+
+    if (mode & REDISMODULE_WRITE) {
+        value = lookupKeyWrite(db,keyname);
+    } else {
+        value = lookupKeyRead(db,keyname);
+        if (value == NULL) {
+            return NULL;
+        }
+    }
+    if (mode & REDISMODULE_TOMBSTONE) {
+        tombstone = lookupTombstoneKey(db,keyname);
+    }
+
+    /* Setup the key handle. */
+    kp = zmalloc(sizeof(*kp));
+    kp->ctx = NULL;
+    kp->db = db;
+    kp->key = keyname;
+    incrRefCount(keyname);
+    kp->value = value;
+    kp->tombstone = tombstone;
+    kp->iter = NULL;
+    kp->mode = mode;
+    zsetKeyReset(kp);
+    return (void*)kp;
+}
+
 /* Return an handle representing a Redis key, so that it is possible
  * to call other APIs with the key handle as argument to perform
  * operations on the key.
@@ -1572,45 +1622,30 @@ int RM_SelectDb(RedisModuleCtx *ctx, int newid) {
  * call RedisModule_CloseKey() and RedisModule_KeyType() on a NULL
  * value. */
 void *RM_OpenKey(RedisModuleCtx *ctx, robj *keyname, int mode) {
-    RedisModuleKey *kp;
-    robj *value, *tombstone = NULL;
-
-    if (mode & REDISMODULE_WRITE) {
-        value = lookupKeyWrite(ctx->client->db,keyname);
-    } else {
-        value = lookupKeyRead(ctx->client->db,keyname);
-        if (value == NULL) {
-            return NULL;
-        }
+    RedisModuleKey *kp = RM_CreateKey(ctx->client->db, keyname, mode);
+    if (kp == NULL) {
+        return NULL;
     }
-    if (mode & REDISMODULE_TOMBSTONE) {
-        tombstone = lookupTombstoneKey(ctx->client->db,keyname);
-    }
-
-    /* Setup the key handle. */
-    kp = zmalloc(sizeof(*kp));
     kp->ctx = ctx;
-    kp->db = ctx->client->db;
-    kp->key = keyname;
-    incrRefCount(keyname);
-    kp->value = value;
-    kp->tombstone = tombstone;
-    kp->iter = NULL;
-    kp->mode = mode;
-    zsetKeyReset(kp);
     autoMemoryAdd(ctx,REDISMODULE_AM_KEY,kp);
-    return (void*)kp;
+    return kp;
 }
-
-/* Close a key handle. */
-void RM_CloseKey(RedisModuleKey *key) {
+/* Free a key handle. */
+void RM_FreeKey(RedisModuleKey* key) {
     if (key == NULL) return;
     if (key->mode & REDISMODULE_WRITE) signalModifiedKey(key->db,key->key);
     /* TODO: if (key->iter) RM_KeyIteratorStop(kp); */
     RM_ZsetRangeStop(key);
     decrRefCount(key->key);
-    autoMemoryFreed(key->ctx,REDISMODULE_AM_KEY,key);
     zfree(key);
+}
+
+/* Close a key handle. */
+void RM_CloseKey(RedisModuleKey *key) {
+    if(key != NULL) {
+        autoMemoryFreed(key->ctx,REDISMODULE_AM_KEY,key);
+        RM_FreeKey(key);
+    }
 }
 
 /* Return the type of the key. If the key pointer is NULL then
@@ -1703,6 +1738,10 @@ int RM_SetExpire(RedisModuleKey *key, mstime_t expire) {
         removeExpire(key->db,key->key);
     }
     return REDISMODULE_OK;
+}
+
+void RM_RemoveExpire(RedisModuleKey *key) {
+    dictDelete(key->db->expires,key->key->ptr);
 }
 
 /* --------------------------------------------------------------------------
@@ -4175,7 +4214,9 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(ReplyWithDouble);
     REGISTER_API(GetSelectedDb);
     REGISTER_API(SelectDb);
+    REGISTER_API(CreateKey);
     REGISTER_API(OpenKey);
+    REGISTER_API(FreeKey);
     REGISTER_API(CloseKey);
     REGISTER_API(KeyType);
     REGISTER_API(ValueLength);
@@ -4203,6 +4244,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(Replicate);
     REGISTER_API(ReplicateVerbatim);
     REGISTER_API(CrdtReplicateVerbatim);
+    REGISTER_API(ReplicationFeedAllSlaves);
     REGISTER_API(DeleteKey);
     REGISTER_API(UnlinkKey);
     REGISTER_API(StringSet);
@@ -4210,6 +4252,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(StringTruncate);
     REGISTER_API(SetExpire);
     REGISTER_API(GetExpire);
+    REGISTER_API(RemoveExpire);
     REGISTER_API(ZsetAdd);
     REGISTER_API(ZsetIncrby);
     REGISTER_API(ZsetScore);

@@ -42,6 +42,7 @@ typedef void *(*crdtMergeFunc)(void *curVal, void *value);
 // RM_CrdtMultiWrappedReplicate should be called during this
 typedef int (*crdtDelFunc)(void *ctx, void *keyRobj, void *key, void *crdtObj);
 //typedef void (*crdtGcFunc)(void *crdtObj);
+typedef void (*crdtExpireFunc)(void* db,int id, struct redisObject* keyRobj);
 typedef struct CrdtCommon {
     int gid;
     int type;
@@ -51,6 +52,7 @@ typedef struct CrdtCommon {
     //CRDT Merge Function
     crdtMergeFunc merge;
     crdtDelFunc delFunc;
+    crdtExpireFunc expire;
 } __attribute__((packed, aligned(4))) CrdtCommon;
 
 #endif //REDIS_CTRIP_CRDT_COMMON_H
