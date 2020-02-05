@@ -49,7 +49,7 @@ start_server {tags {"crdt-del"} overrides {crdt-gid 1} config {crdt.conf} module
         r CRDT.SET key-del-6 val2 1 [expr [clock milliseconds] - 10]  "1:10"  10000
         r CRDT.DEL_REG key-del-6 2 [clock milliseconds] "2:100"
         r get key-del-6
-    } {val2}
+    } {}
     test {"[crdt_hash.tcl] del hash binary"} {
         r hset hash binary [encode_binary_str abcdef 6]
         r del hash binary
