@@ -6,6 +6,8 @@ compile_commands.json
 tmp
 .settings
 
+*.so
+*.json
 .*.swp
 *.o
 *.log
@@ -52,6 +54,3 @@ venv/
  tests/.cache/
 cmake-build-debug/
 
-
-*.so
-*.json
