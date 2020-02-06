@@ -64,6 +64,15 @@ CRDT_Master_Instance *createPeerMaster(client *c, long long gid) {
     return masterInstance;
 }
 
+int updateReplTransferLastio(long long gid) {
+    CRDT_Master_Instance *peerMasterServer = getPeerMaster(gid);
+    if(peerMasterServer == NULL) {
+        return C_ERR;
+    }
+    peerMasterServer->repl_transfer_lastio = server.unixtime;
+    return C_OK;
+}
+
 void freePeerMaster(CRDT_Master_Instance *masterInstance) {
     if (!masterInstance) {
         return;
@@ -246,6 +255,7 @@ crdtMergeStartCommand(client *c) {
         }
         listAddNodeTail(crdtServer.crdtMasters, peerMaster);
     }
+    peerMaster->repl_transfer_lastio = server.unixtime;
     VectorClock *vclock = sdsToVectorClock(c->argv[2]->ptr);
     VectorClock *curGcVclock = crdtServer.gcVectorClock;
     crdtServer.gcVectorClock = vectorClockMerge(crdtServer.gcVectorClock, vclock);
@@ -266,6 +276,7 @@ crdtMergeEndCommand(client *c) {
     if (getLongLongFromObjectOrReply(c, c->argv[1], &sourceGid, NULL) != C_OK) return;
 
     CRDT_Master_Instance *peerMaster = getPeerMaster(sourceGid);
+    peerMaster->repl_transfer_lastio = server.unixtime;
     if (!peerMaster) goto err;
     serverLog(LL_NOTICE, "[CRDT][crdtMergeEndCommand][begin] master gid: %lld", sourceGid);
 

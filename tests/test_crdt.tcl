@@ -15,7 +15,7 @@ source tests/support/util.tcl
 
 set ::all_tests {
     
-    
+    ctrip/integration/bug/full-sync-timeout
     
     ctrip/basic/basic_crdt_type
     ctrip/basic/basic_type

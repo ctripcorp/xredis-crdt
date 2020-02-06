@@ -286,7 +286,7 @@ crdtMergeDelCommand(client *c) {
     int type;
     long long sourceGid, timestamp;
     if (getLongLongFromObjectOrReply(c, c->argv[1], &sourceGid, NULL) != C_OK) goto error;
-
+    updateReplTransferLastio(c->gid);
     robj *key = c->argv[2];
 
     if (getLongLongFromObjectOrReply(c, c->argv[4], &timestamp, NULL) != C_OK) goto error;
@@ -359,6 +359,7 @@ crdtMergeCommand(client *c) {
     int type;
     long long sourceGid, timestamp, expire, ttl;
     if (getLongLongFromObjectOrReply(c, c->argv[1], &sourceGid, NULL) != C_OK) goto error;
+    updateReplTransferLastio(c->gid);
     robj *key = c->argv[2];
 
     if (getLongLongFromObjectOrReply(c, c->argv[4], &timestamp, NULL) != C_OK) goto error;
