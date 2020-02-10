@@ -383,8 +383,8 @@ char *crdtSendSynchronousCommand(CRDT_Master_Instance *crdtMaster, int flags, in
             == -1)
         {
             sdsfree(cmd);
-            return sdscatprintf(sdsempty(),"-Writing to master: %s",
-                                strerror(errno));
+            return sdscatprintf(sdsempty(),"-Writing to ip: %s port: %d error: %s",
+                                crdtMaster->masterhost, crdtMaster->masterport, strerror(errno));
         }
         sdsfree(cmd);
     }
@@ -396,8 +396,8 @@ char *crdtSendSynchronousCommand(CRDT_Master_Instance *crdtMaster, int flags, in
         if (syncReadLine(fd,buf,sizeof(buf),crdtServer.repl_syncio_timeout*1000)
             == -1)
         {
-            return sdscatprintf(sdsempty(),"-Reading from master: %s",
-                                strerror(errno));
+            return sdscatprintf(sdsempty(),"-Reading from ip: %s port: %d, error: %s",
+                                crdtMaster->masterhost, crdtMaster->masterport, strerror(errno));
         }
         crdtServer.repl_transfer_lastio = server.unixtime;
         return sdsnew(buf);
