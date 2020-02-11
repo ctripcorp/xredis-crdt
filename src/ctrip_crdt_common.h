@@ -42,15 +42,18 @@ typedef void *(*crdtMergeFunc)(void *curVal, void *value);
 // RM_CrdtMultiWrappedReplicate should be called during this
 typedef int (*crdtDelFunc)(void *ctx, void *keyRobj, void *key, void *crdtObj);
 //typedef void (*crdtGcFunc)(void *crdtObj);
+typedef struct CrdtCommonMethod {
+    crdtMergeFunc merge;
+    crdtDelFunc delFunc;
+} CrdtCommonMethod;
 typedef struct CrdtCommon {
     int gid;
     int type;
     VectorClock *vectorClock;
     long long timestamp;
-
     //CRDT Merge Function
-    crdtMergeFunc merge;
-    crdtDelFunc delFunc;
+    CrdtCommonMethod* method;
+    
 } __attribute__((packed, aligned(4))) CrdtCommon;
 
 #endif //REDIS_CTRIP_CRDT_COMMON_H
