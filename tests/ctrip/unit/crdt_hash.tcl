@@ -106,6 +106,16 @@ start_server {tags {"crdt-hash-more"} overrides {crdt-gid 1} config {crdt.conf} 
         r hget k-hash-6 f
     } {}
 
+    # del concurrent with del
+    test {"[crdt_hash.tcl]Test Concurrent Tombstone"} {
+        set time [clock milliseconds]
+        r CRDT.HSET k-hash-7 1 $time "1:110;2:110" 6 f v f1 v1 f2 v2
+        r CRDT.DEL_HASH k-hash-7 1 $time "1:111;2:111" "1:101;2:100"
+        r CRDT.HSET k-hash-7 2 $time "1:109;2:112" 6 f v f3 v3 
+        assert_equal [r hget k-hash-7 f] {}
+        r hget k-hash-7 f3
+    } {v3}
+
     test {"[crdt_hash.tcl]crdt hash lot"} {
         set hash_handle0 [start_crdt_hash_load $redis_host $redis_port 3]
         set hash_handle1 [start_crdt_hash_load $redis_host $redis_port 5]
@@ -165,6 +175,7 @@ start_server {tags {"crdt-hash-more"} overrides {crdt-gid 1} config {crdt.conf} 
         r del k-hash-11
         assert {[r crdt.hget k-hash-11 f1] == {}} 
     }
+
 }
 
 start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so}} {
