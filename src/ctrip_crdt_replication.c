@@ -64,6 +64,15 @@ CRDT_Master_Instance *createPeerMaster(client *c, long long gid) {
     return masterInstance;
 }
 
+int updateReplTransferLastio(long long gid) {
+    CRDT_Master_Instance *peerMasterServer = getPeerMaster(gid);
+    if(peerMasterServer == NULL) {
+        return C_ERR;
+    }
+    peerMasterServer->repl_transfer_lastio = server.unixtime;
+    return C_OK;
+}
+
 void freePeerMaster(CRDT_Master_Instance *masterInstance) {
     if (!masterInstance) {
         return;
@@ -246,6 +255,7 @@ crdtMergeStartCommand(client *c) {
         }
         listAddNodeTail(crdtServer.crdtMasters, peerMaster);
     }
+    peerMaster->repl_transfer_lastio = server.unixtime;
     VectorClock *vclock = sdsToVectorClock(c->argv[2]->ptr);
     VectorClock *curGcVclock = crdtServer.gcVectorClock;
     crdtServer.gcVectorClock = vectorClockMerge(crdtServer.gcVectorClock, vclock);
@@ -266,6 +276,7 @@ crdtMergeEndCommand(client *c) {
     if (getLongLongFromObjectOrReply(c, c->argv[1], &sourceGid, NULL) != C_OK) return;
 
     CRDT_Master_Instance *peerMaster = getPeerMaster(sourceGid);
+    peerMaster->repl_transfer_lastio = server.unixtime;
     if (!peerMaster) goto err;
     serverLog(LL_NOTICE, "[CRDT][crdtMergeEndCommand][begin] master gid: %lld", sourceGid);
 
@@ -347,7 +358,7 @@ int crdtSlaveIsInHandshakeState(CRDT_Master_Instance *crdtMaster) {
 #define SYNC_CMD_READ (1<<0)
 #define SYNC_CMD_WRITE (1<<1)
 #define SYNC_CMD_FULL (SYNC_CMD_READ|SYNC_CMD_WRITE)
-char *crdtSendSynchronousCommand(int flags, int fd, ...) {
+char *crdtSendSynchronousCommand(CRDT_Master_Instance *crdtMaster, int flags, int fd, ...) {
 
     /* Create the command to send to the master, we use simple inline
      * protocol for simplicity as currently we only send simple strings. */
@@ -372,8 +383,8 @@ char *crdtSendSynchronousCommand(int flags, int fd, ...) {
             == -1)
         {
             sdsfree(cmd);
-            return sdscatprintf(sdsempty(),"-Writing to master: %s",
-                                strerror(errno));
+            return sdscatprintf(sdsempty(),"-Writing to ip: %s port: %d error: %s",
+                                crdtMaster->masterhost, crdtMaster->masterport, strerror(errno));
         }
         sdsfree(cmd);
     }
@@ -385,8 +396,8 @@ char *crdtSendSynchronousCommand(int flags, int fd, ...) {
         if (syncReadLine(fd,buf,sizeof(buf),crdtServer.repl_syncio_timeout*1000)
             == -1)
         {
-            return sdscatprintf(sdsempty(),"-Reading from master: %s",
-                                strerror(errno));
+            return sdscatprintf(sdsempty(),"-Reading from ip: %s port: %d, error: %s",
+                                crdtMaster->masterhost, crdtMaster->masterport, strerror(errno));
         }
         crdtServer.repl_transfer_lastio = server.unixtime;
         return sdsnew(buf);
@@ -473,7 +484,7 @@ int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, i
         }
 
         /* Issue the PSYNC command */
-        reply = crdtSendSynchronousCommand(SYNC_CMD_WRITE, fd, "CRDT.PSYNC", psync_replid, psync_offset, NULL);
+        reply = crdtSendSynchronousCommand(masterInstance, SYNC_CMD_WRITE, fd, "CRDT.PSYNC", psync_replid, psync_offset, NULL);
         if (reply != NULL) {
             serverLog(LL_WARNING,"[CRDT]Unable to send PSYNC to master: %s",reply);
             sdsfree(reply);
@@ -484,7 +495,7 @@ int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, i
     }
 
     /* Reading half */
-    reply = crdtSendSynchronousCommand(SYNC_CMD_READ, fd, NULL);
+    reply = crdtSendSynchronousCommand(masterInstance, SYNC_CMD_READ, fd, NULL);
     if (sdslen(reply) == 0) {
         /* The master may send empty newlines after it receives PSYNC
          * and before to reply, just to keep the connection alive. */
@@ -631,14 +642,14 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
         crdtMaster->repl_state = REPL_STATE_RECEIVE_PONG;
         /* Send the PING, don't check for errors at all, we have the timeout
          * that will take care about this. */
-        err = crdtSendSynchronousCommand(SYNC_CMD_WRITE, fd, "PING", NULL);
+        err = crdtSendSynchronousCommand(crdtMaster, SYNC_CMD_WRITE, fd, "PING", NULL);
         if (err) goto write_error;
         return;
     }
 
     /* Receive the PONG command. */
     if (crdtMaster->repl_state == REPL_STATE_RECEIVE_PONG) {
-        err = crdtSendSynchronousCommand(SYNC_CMD_READ, fd, NULL);
+        err = crdtSendSynchronousCommand(crdtMaster, SYNC_CMD_READ, fd, NULL);
 
         /* We accept only two replies as valid, a positive +PONG reply
          * (we just check for "+") or an authentication error.
@@ -663,7 +674,7 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
     /* AUTH with the master if required. */
     if (crdtMaster->repl_state == REPL_STATE_SEND_AUTH) {
         if (crdtMaster->masterauth) {
-            err = crdtSendSynchronousCommand(SYNC_CMD_WRITE, fd, "AUTH", crdtMaster->masterauth, NULL);
+            err = crdtSendSynchronousCommand(crdtMaster, SYNC_CMD_WRITE, fd, "AUTH", crdtMaster->masterauth, NULL);
             if (err) goto write_error;
             crdtMaster->repl_state = REPL_STATE_RECEIVE_AUTH;
             return;
@@ -674,7 +685,7 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
 
     /* Receive AUTH reply. */
     if (crdtMaster->repl_state == REPL_STATE_RECEIVE_AUTH) {
-        err = crdtSendSynchronousCommand(SYNC_CMD_READ, fd, NULL);
+        err = crdtSendSynchronousCommand(crdtMaster, SYNC_CMD_READ, fd, NULL);
         if (err[0] == '-') {
             serverLog(LL_WARNING,"[CRDT]Unable to AUTH to MASTER: %s",err);
             sdsfree(err);
@@ -693,7 +704,7 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
                                    crdtServer.slave_announce_port : server.port);
         serverLog(LL_NOTICE,
                   "[CRDT]send listening-port: %s to master", port);
-        err = crdtSendSynchronousCommand(SYNC_CMD_WRITE, fd, "CRDT.REPLCONF",
+        err = crdtSendSynchronousCommand(crdtMaster, SYNC_CMD_WRITE, fd, "CRDT.REPLCONF",
                                          "listening-port", port, NULL);
         sdsfree(port);
         if (err) goto write_error;
@@ -704,7 +715,7 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
 
     /* Receive REPLCONF listening-port reply. */
     if (crdtMaster->repl_state == REPL_STATE_RECEIVE_PORT) {
-        err = crdtSendSynchronousCommand(SYNC_CMD_READ, fd, NULL);
+        err = crdtSendSynchronousCommand(crdtMaster, SYNC_CMD_READ, fd, NULL);
         /* Ignore the error if any, not all the Redis versions support
          * REPLCONF listening-port. */
         if (err[0] == '-') {
@@ -725,7 +736,7 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
     /* Set the slave ip, so that Master's INFO command can list the
      * slave IP address port correctly in case of port forwarding or NAT. */
     if (crdtMaster->repl_state == REPL_STATE_SEND_IP) {
-        err = crdtSendSynchronousCommand(SYNC_CMD_WRITE, fd, "CRDT.REPLCONF",
+        err = crdtSendSynchronousCommand(crdtMaster, SYNC_CMD_WRITE, fd, "CRDT.REPLCONF",
                                          "ip-address", server.slave_announce_ip, NULL);
         if (err) goto write_error;
         sdsfree(err);
@@ -735,7 +746,7 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
 
     /* Receive REPLCONF ip-address reply. */
     if (crdtMaster->repl_state == REPL_STATE_RECEIVE_IP) {
-        err = crdtSendSynchronousCommand(SYNC_CMD_READ, fd, NULL);
+        err = crdtSendSynchronousCommand(crdtMaster, SYNC_CMD_READ, fd, NULL);
         /* Ignore the error if any, not all the Redis versions support
          * REPLCONF listening-port. */
         if (err[0] == '-') {
@@ -753,7 +764,7 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
      *
      * The master will ignore capabilities it does not understand. */
     if (crdtMaster->repl_state == REPL_STATE_SEND_CAPA) {
-        err = crdtSendSynchronousCommand(SYNC_CMD_WRITE, fd, "CRDT.REPLCONF",
+        err = crdtSendSynchronousCommand(crdtMaster, SYNC_CMD_WRITE, fd, "CRDT.REPLCONF",
                                          "capa", "eof", "capa", "psync2", NULL);
         if (err) goto write_error;
         sdsfree(err);
@@ -763,7 +774,7 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
 
     /* Receive CAPA reply. */
     if (crdtMaster->repl_state == REPL_STATE_RECEIVE_CAPA) {
-        err = crdtSendSynchronousCommand(SYNC_CMD_READ, fd, NULL);
+        err = crdtSendSynchronousCommand(crdtMaster, SYNC_CMD_READ, fd, NULL);
         /* Ignore the error if any, not all the Redis versions support
          * REPLCONF capa. */
         if (err[0] == '-') {
@@ -782,7 +793,7 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
      * The master will ignore capabilities it does not understand. */
     if (crdtMaster->repl_state == REPL_STATE_SEND_VC) {
         sds vc = vectorClockToSds(crdtServer.vectorClock);
-        err = crdtSendSynchronousCommand(SYNC_CMD_WRITE, fd, "CRDT.REPLCONF",
+        err = crdtSendSynchronousCommand(crdtMaster, SYNC_CMD_WRITE, fd, "CRDT.REPLCONF",
                                          "min-vc", vc, NULL);
 
         serverLog(LL_NOTICE,
@@ -796,7 +807,7 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
 
     /* Receive Vector Clock reply. */
     if (crdtMaster->repl_state == REPL_STATE_RECEIVE_VC) {
-        err = crdtSendSynchronousCommand(SYNC_CMD_READ, fd, NULL);
+        err = crdtSendSynchronousCommand(crdtMaster, SYNC_CMD_READ, fd, NULL);
         /* Ignore the error if any, not all the Redis versions support
          * REPLCONF capa. */
         if (err[0] == '-') {

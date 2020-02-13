@@ -286,7 +286,7 @@ crdtMergeDelCommand(client *c) {
     int type;
     long long sourceGid, timestamp;
     if (getLongLongFromObjectOrReply(c, c->argv[1], &sourceGid, NULL) != C_OK) goto error;
-
+    if (updateReplTransferLastio(sourceGid) != C_OK) goto error;
     robj *key = c->argv[2];
 
     if (getLongLongFromObjectOrReply(c, c->argv[4], &timestamp, NULL) != C_OK) goto error;
@@ -323,7 +323,7 @@ crdtMergeDelCommand(client *c) {
             decrRefCount(obj);
             return;
         }
-        void *mergedVal = common->merge(old_mv->value,mv->value);
+        void *mergedVal = common->method->merge(old_mv->value,mv->value);
         old_mv->type->free(old_mv->value);
         old_mv->value = mergedVal;
         tombstoneCrdtCommon = retrieveCrdtCommon(tombstone);
@@ -359,6 +359,7 @@ crdtMergeCommand(client *c) {
     int type;
     long long sourceGid, timestamp, expire, ttl;
     if (getLongLongFromObjectOrReply(c, c->argv[1], &sourceGid, NULL) != C_OK) goto error;
+    if (updateReplTransferLastio(sourceGid) != C_OK) goto error;
     robj *key = c->argv[2];
 
     if (getLongLongFromObjectOrReply(c, c->argv[4], &timestamp, NULL) != C_OK) goto error;
@@ -406,10 +407,10 @@ crdtMergeCommand(client *c) {
         }
         moduleValue *cmv = currentVal->ptr;
         // call merge function, and store the merged val
-        mergedVal = common->merge(cmv->value, mv->value);
+        mergedVal = common->method->merge(cmv->value, mv->value);
         dbDelete(c->db, key);
     } else {
-        mergedVal = common->merge(NULL, mv->value);
+        mergedVal = common->method->merge(NULL, mv->value);
     }
     decrRefCount(obj);
     /* Create the key and set the TTL if any */
