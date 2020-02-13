@@ -277,6 +277,15 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
 }
 
 /**---------------------------CRDT Merge Command--------------------------------*/
+static int updateReplTransferLastio(long long gid) {
+    CRDT_Master_Instance *peerMasterServer = getPeerMaster(gid);
+    if(peerMasterServer == NULL) {
+        return C_ERR;
+    }
+    peerMasterServer->repl_transfer_lastio = server.unixtime;
+    return C_OK;
+}
+
 //CRDT.Merge_Del <gid> <key> <vc> <timestamp/-1>  <val>
 //   0             1     2     3    4               5
 void
@@ -310,11 +319,9 @@ crdtMergeDelCommand(client *c) {
     if (de) {
         robj* tombstone= dictGetVal(de);
         moduleValue *mv = obj->ptr;
-        moduleType *mt = mv->type;
         void *moduleDataType = mv->value;
         CrdtCommon *common = (CrdtCommon *) moduleDataType;
         moduleValue *old_mv = tombstone->ptr;
-        moduleType *old_mt = old_mv->type;
         void *oldModuleDataType = old_mv->value;
         CrdtCommon *oldCommon = (CrdtCommon *) oldModuleDataType;
         if (common->type != oldCommon->type) {

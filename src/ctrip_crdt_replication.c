@@ -64,15 +64,6 @@ CRDT_Master_Instance *createPeerMaster(client *c, long long gid) {
     return masterInstance;
 }
 
-int updateReplTransferLastio(long long gid) {
-    CRDT_Master_Instance *peerMasterServer = getPeerMaster(gid);
-    if(peerMasterServer == NULL) {
-        return C_ERR;
-    }
-    peerMasterServer->repl_transfer_lastio = server.unixtime;
-    return C_OK;
-}
-
 void freePeerMaster(CRDT_Master_Instance *masterInstance) {
     if (!masterInstance) {
         return;
@@ -1370,7 +1361,7 @@ void replicationFeedAllSlaves(int dictid, robj **argv, int argc) {
 }
 
 void crdtReplicationUnsetAllMasters() {
-    serverLog(LL_NOTICE, "[CRDT][begin]disconnect all crdt masters: %d", listLength(crdtServer.crdtMasters));
+    serverLog(LL_NOTICE, "[CRDT][begin]disconnect all crdt masters: %lu", listLength(crdtServer.crdtMasters));
     listIter li;
     listNode *ln;
     listRewind(crdtServer.crdtMasters, &li);

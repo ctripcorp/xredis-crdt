@@ -146,7 +146,7 @@ vectorClockToSds(VectorClock *vc) {
     int length = vc->length;
     sds vcStr = sdsempty();
     for(int i = 0; i < length; i++) {
-        vcStr = sdscatprintf(vcStr, "%d:%lld", vc->clocks[i].gid, vc->clocks[i].logic_time);
+        vcStr = sdscatprintf(vcStr, "%lld:%lld", vc->clocks[i].gid, vc->clocks[i].logic_time);
         if(i != length - 1) {
             vcStr = sdscat(vcStr, VECTOR_CLOCK_SEPARATOR);
         }
