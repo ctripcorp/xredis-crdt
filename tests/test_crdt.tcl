@@ -14,7 +14,7 @@ source tests/support/util.tcl
 
 
 set ::all_tests {
-    
+    ctrip/basic/basic_crdt_type_del
     ctrip/integration/bug/full-sync-timeout
     
     ctrip/basic/basic_crdt_type
@@ -60,7 +60,7 @@ set ::temp_tests {
     
     
 
-    ////
+    #####
     ctrip/integration/bug/redis-crash-when-full-sync-hash-merge
     ctrip/integration/bug/redis-when-full-sync-mater-timeout-vectorclock-update
     
