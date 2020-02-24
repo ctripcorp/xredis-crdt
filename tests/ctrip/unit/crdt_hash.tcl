@@ -112,7 +112,7 @@ start_server {tags {"crdt-hash-more"} overrides {crdt-gid 1} config {crdt.conf} 
         r CRDT.HSET k-hash-7 1 $time "1:110;2:110" 6 f v f1 v1 f2 v2
         r CRDT.DEL_HASH k-hash-7 1 $time "1:111;2:111" "1:101;2:100"
         r CRDT.HSET k-hash-7 2 $time "1:109;2:112" 6 f v f3 v3 
-        assert_equal [r hget k-hash-7 f] {}
+        assert_equal [r hget k-hash-7 f] v
         r hget k-hash-7 f3
     } {v3}
 

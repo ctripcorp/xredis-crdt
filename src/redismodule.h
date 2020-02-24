@@ -95,6 +95,22 @@
 
 #define REDISMODULE_NOT_USED(V) ((void) V)
 
+/* Keyspace changes notification classes. Every class is associated with a
+ * character for configuration purposes. */
+#define REDISMODULE_NOTIFY_KEYSPACE (1<<0)    /* K */
+#define REDISMODULE_NOTIFY_KEYEVENT (1<<1)    /* E */
+#define REDISMODULE_NOTIFY_GENERIC (1<<2)     /* g */
+#define REDISMODULE_NOTIFY_STRING (1<<3)      /* $ */
+#define REDISMODULE_NOTIFY_LIST (1<<4)        /* l */
+#define REDISMODULE_NOTIFY_SET (1<<5)         /* s */
+#define REDISMODULE_NOTIFY_HASH (1<<6)        /* h */
+#define REDISMODULE_NOTIFY_ZSET (1<<7)        /* z */
+#define REDISMODULE_NOTIFY_EXPIRED (1<<8)     /* x */
+#define REDISMODULE_NOTIFY_EVICTED (1<<9)     /* e */
+#define REDISMODULE_NOTIFY_STREAM (1<<10)     /* t */
+#define REDISMODULE_NOTIFY_ALL (NOTIFY_GENERIC | NOTIFY_STRING | NOTIFY_LIST | NOTIFY_SET | NOTIFY_HASH | NOTIFY_ZSET | NOTIFY_EXPIRED | NOTIFY_EVICTED | NOTIFY_STREAM) /* A flag */
+
+
 /* ------------------------- End of common defines ------------------------ */
 
 #ifndef REDISMODULE_CORE
@@ -253,6 +269,7 @@ void REDISMODULE_API_FUNC(RedisModule_IncrLocalVectorClock) (long long delta);
 void REDISMODULE_API_FUNC(RedisModule_MergeVectorClock) (long long gid, void *vclock);
 int REDISMODULE_API_FUNC(RedisModule_ModuleTombstoneSetValue) (RedisModuleKey *key, RedisModuleType *mt, void *value);
 void *REDISMODULE_API_FUNC(RedisModule_ModuleTypeGetTombstone)(RedisModuleKey *key);
+void REDISMODULE_API_FUNC(RedisModule_NotifyKeyspaceEvent)(RedisModuleCtx *ctx,int type, char *event, RedisModuleString *key);
 
 /* Experimental APIs */
 #ifdef REDISMODULE_EXPERIMENTAL_API
@@ -389,6 +406,7 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(MergeVectorClock);
     REDISMODULE_GET_API(ModuleTombstoneSetValue);
     REDISMODULE_GET_API(ModuleTypeGetTombstone);
+    REDISMODULE_GET_API(NotifyKeyspaceEvent);
 
 #ifdef REDISMODULE_EXPERIMENTAL_API
     REDISMODULE_GET_API(GetThreadSafeContext);

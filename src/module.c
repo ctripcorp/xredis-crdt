@@ -3187,6 +3187,17 @@ void *RM_ModuleTypeGetTombstone(RedisModuleKey *key) {
     return mv->value;
 }
 
+
+/* The API provided to the rest of the Redis core is a simple function:
+ *
+ * notifyKeyspaceEvent(char *event, robj *key, int dbid);
+ *
+ * 'event' is a C string representing the event name.
+ * 'key' is a Redis object representing the key name.
+ * 'dbid' is the database ID where the key lives.  */
+void RM_NotifyKeyspaceEvent(RedisModuleCtx *ctx,int type, char *event, robj *key) {
+    notifyKeyspaceEvent(type, event, key, ctx->client->db->id);
+}
 /* --------------------------------------------------------------------------
  * RDB loading and saving functions
  * -------------------------------------------------------------------------- */
@@ -4278,4 +4289,5 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(MergeVectorClock);
     REGISTER_API(ModuleTombstoneSetValue);
     REGISTER_API(ModuleTypeGetTombstone);
+    REGISTER_API(NotifyKeyspaceEvent);
 }

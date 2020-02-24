@@ -14,7 +14,7 @@ source tests/support/util.tcl
 
 
 set ::all_tests {
-    ctrip/basic/basic_crdt_type_del
+    
     ctrip/integration/bug/full-sync-timeout
     
     ctrip/basic/basic_crdt_type
@@ -31,6 +31,8 @@ set ::all_tests {
     ctrip/integration/composite/master-slave-failover
     ctrip/unit/crdt_hdel_mem_leak
     ctrip/unit/gc
+    ctrip/unit/pubsub
+
     ctrip/integration/bug/redis-crash-when-full-sync-hash-merge
     ctrip/integration/bug/redis-when-full-sync-mater-timeout-vectorclock-update
     ctrip/integration/master-slave/replication
