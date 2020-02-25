@@ -45,6 +45,11 @@ start_server {tags {"crdt-hash"} overrides {crdt-gid 1} config {crdt.conf} modul
         r hset k-hash-3 f v2
         r hget k-hash-3 f
     } {v2}
+    test {"[crdt_hash.tcl]basic hdel"} {
+        r hmset k-hash-4 f v f1 v1 f2 v2
+        r hdel k-hash-4 f f1
+        r hget k-hash-4 f1
+    } {}
 
     test {"[crdt_hash.tcl]big hash map"} {
         set load_handle0 [start_bg_hash_data $redis_host $redis_port 9 100000]

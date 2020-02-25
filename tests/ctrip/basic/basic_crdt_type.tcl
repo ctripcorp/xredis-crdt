@@ -81,6 +81,14 @@ proc basic_test { type create check delete} {
             set result {key field {} 1 100000 "1:1" }
             run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
         }
+        test [format "%s-del2" $type] {
+            set argv1 {key-del field value 1 100000 "1:2"}
+            run [replace [replace_client $create {[lindex $peers 0]}] $argv1] 1
+            set argv2 {key-del field1 value 1 100000 "1:2"}
+            run [replace [replace_client $delete {[lindex $peers 0]}] $argv2] 1
+            set result {key-del field1 {} 1 100000 "1:2" }
+            run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
+        }
         
         
         start_server {tags {[format "crdt-basic-%s" $type]} overrides {crdt-gid 2} config {crdt.conf} module {crdt.so} } {
