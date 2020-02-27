@@ -1005,6 +1005,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
                 server.stat_net_input_bytes);
         trackInstantaneousMetric(STATS_METRIC_NET_OUTPUT,
                 server.stat_net_output_bytes);
+        trackInstantaneousMetric(STATS_METRIC_WRITE, server.write_bytes);
     }
 
     /* We have just LRU_BITS bits per object for LRU information.
@@ -1896,6 +1897,7 @@ void resetServerStats(struct redisServer *srv) {
             sizeof(srv->inst_metric[j].samples));
     }
     srv->stat_net_input_bytes = 0;
+    srv->write_bytes = 0;
     srv->stat_net_output_bytes = 0;
     srv->aof_delayed_fsync = 0;
 }
@@ -3235,6 +3237,7 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
             "total_net_output_bytes:%lld\r\n"
             "instantaneous_input_kbps:%.2f\r\n"
             "instantaneous_output_kbps:%.2f\r\n"
+            "instantaneous_write_kbps:%.2f\r\n"
             "rejected_connections:%lld\r\n"
             "sync_full:%lld\r\n"
             "sync_partial_ok:%lld\r\n"
@@ -3259,6 +3262,7 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
             server.stat_net_output_bytes,
             (float)getInstantaneousMetric(STATS_METRIC_NET_INPUT)/1024,
             (float)getInstantaneousMetric(STATS_METRIC_NET_OUTPUT)/1024,
+            (float)getInstantaneousMetric(STATS_METRIC_WRITE)/1024,
             server.stat_rejected_conn,
             server.stat_sync_full,
             server.stat_sync_partial_ok,

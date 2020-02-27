@@ -1470,6 +1470,7 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
         }
     }
     server.stat_net_input_bytes += nread;
+    server.write_bytes += nread;
     if (sdslen(c->querybuf) > server.client_max_querybuf_len) {
         sds ci = catClientInfoString(sdsempty(),c), bytes = sdsempty();
 

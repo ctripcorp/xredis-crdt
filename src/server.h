@@ -179,7 +179,9 @@ typedef long long mstime_t; /* millisecond time type. */
 #define STATS_METRIC_COMMAND 0      /* Number of commands executed. */
 #define STATS_METRIC_NET_INPUT 1    /* Bytes read to network .*/
 #define STATS_METRIC_NET_OUTPUT 2   /* Bytes written to network. */
-#define STATS_METRIC_COUNT 3
+#define STATS_METRIC_WRITE 3
+#define STATS_METRIC_COUNT 4
+
 
 /* Protocol and I/O related defines */
 #define PROTO_MAX_QUERYBUF_LEN  (1024*1024*1024) /* 1GB max query buffer. */
@@ -1010,6 +1012,7 @@ struct redisServer {
     size_t stat_aof_cow_bytes;      /* Copy on write bytes during AOF rewrite. */
     /* The following two are used to track instantaneous metrics, like
      * number of operations per second, network traffic. */
+    long long write_bytes;
     struct {
         long long last_sample_time; /* Timestamp of last sample in ms */
         long long last_sample_count;/* Count in last sample */
