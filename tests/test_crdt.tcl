@@ -14,6 +14,7 @@ source tests/support/util.tcl
 
 
 set ::all_tests {
+    ctrip/integration/master-slave/auth-gid
     ctrip/integration/bug/hash-miss-send-when-full-sync
     ctrip/integration/bug/full-sync-timeout
     

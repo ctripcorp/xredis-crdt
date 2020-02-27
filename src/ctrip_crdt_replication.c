@@ -659,6 +659,30 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
                       "[CRDT]Crdt Master replied to PING, replication can continue...");
         }
         sdsfree(err);
+        // crdtMaster->repl_state = REPL_STATE_SEND_AUTH;
+        crdtMaster->repl_state = REPL_STATE_SEND_GID;
+    }
+    if(crdtMaster->repl_state == REPL_STATE_SEND_GID) {
+        sds gid = sdsfromlonglong(crdtMaster->gid);
+        err = crdtSendSynchronousCommand(crdtMaster, SYNC_CMD_WRITE, fd, "CRDT.AUTHGID", gid, NULL);
+        sdsfree(gid);
+        if (err) {
+            sdsfree(err);
+            goto write_error;
+        }
+        crdtMaster->repl_state = REPL_STATE_RECEIVE_GID;
+        return;
+    } 
+
+    if(crdtMaster->repl_state == REPL_STATE_RECEIVE_GID) {
+        err = crdtSendSynchronousCommand(crdtMaster, SYNC_CMD_READ, fd, NULL);
+        if (err[0] == '-') {
+            serverLog(LL_NOTICE,"[CRDT] Unable to GID to MASTER gid: %lld , error: '%s'", 
+                    crdtMaster->gid, err);
+            sdsfree(err);
+            goto error;
+        }
+        sdsfree(err);
         crdtMaster->repl_state = REPL_STATE_SEND_AUTH;
     }
 
@@ -1169,6 +1193,23 @@ void crdtOvcCommand(client *c) {
     }
     addReply(c, shared.ok);
     forceCommandPropagation(c, flags);
+}
+
+void crdtAuthGidCommand(client *c) {
+    if (c->argc != 2) {
+        addReply(c, shared.syntaxerr);
+        return;
+    }
+    long long gid;
+    if (getLongLongFromObject(c->argv[1], &gid) != C_OK) {
+        addReply(c, shared.syntaxerr);
+        return;
+    }
+    if (gid != crdtServer.crdt_gid) {
+        addReplyError(c,"invalid gid");
+        return;
+    }
+    addReply(c, shared.ok);
 }
 
 void feedCrdtBacklog(robj **argv, int argc) {
