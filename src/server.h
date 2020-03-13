@@ -1599,7 +1599,9 @@ void crdtCancelReplicationHandshake(long long gid);
 
 /* CRDT Command */
 void crdtDelCommand(client *c);
-CrdtCommon *retrieveCrdtCommon(robj *obj);
+CrdtObject *retrieveCrdtObject(robj *obj);
+CrdtTombstone *retrieveCrdtTombstone(robj *obj);
+moduleType* getModuleType(robj *obj);
 
 /* Generic persistence functions */
 void startLoading(FILE *fp);
