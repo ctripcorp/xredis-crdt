@@ -59,7 +59,7 @@ typedef struct CrdtObjectMethod {
 typedef struct CrdtObject {
     int type;
     CrdtObjectMethod* method;
-} __attribute__((packed, aligned(4))) CrdtObject;
+} CrdtObject;
 typedef struct CrdtTombstoneMethod {
     crdtMergeFunc merge;
     crdtFilterFunc filter;
@@ -70,5 +70,5 @@ typedef struct CrdtTombstoneMethod {
 typedef struct CrdtTombstone {
     int type;
     CrdtTombstoneMethod* method;
-} __attribute__((packed, aligned(4))) CrdtTombstone;
+} CrdtTombstone;
 #endif //REDIS_CTRIP_CRDT_COMMON_H

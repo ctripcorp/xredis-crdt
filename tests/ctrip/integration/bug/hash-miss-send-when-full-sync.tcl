@@ -37,12 +37,24 @@ start_server { tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskl
         lappend peer_gids 2
         [lindex $peers 1] config crdt.set repl-diskless-sync-delay 1
         [lindex $peers 1] config set repl-diskless-sync-delay 1
-        
-        [lindex $peers 1] hset key f1 v1
-        [lindex $peers 1] crdt.hset key 3 [clock milliseconds] "3:1;1:2" 2 f2 v2
-        [lindex $peers 0] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
-        wait [lindex $peers 1] 0 crdt.info
-        assert_equal [[lindex $peers 0] hget key f1] v1
+        test "value" {
+            [lindex $peers 1] hset key f1 v1
+            [lindex $peers 1] crdt.hset key 3 [clock milliseconds] "3:1;1:2" 2 f2 v2
+            [lindex $peers 0] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
+            wait [lindex $peers 1] 0 crdt.info
+            assert_equal [[lindex $peers 0] hget key f1] v1
+        }
+        test "tombstone" {
+            [lindex $peers 0] peerof [lindex $peer_gids 1] no one
+            [lindex $peers 1] crdt.rem_hash key 1 [clock milliseconds] "3:2;1:3" f1 
+            assert_equal [[lindex $peers 1] hget key f1] {}
+            [lindex $peers 1] crdt.rem_hash key 3 [clock milliseconds] "3:3;1:3" f2
+            [lindex $peers 1] crdt.hset key 1 100000 {1:1} 2 f1 v1
+            assert_equal [[lindex $peers 1] hget key f1] {}
+            [lindex $peers 0] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
+            wait [lindex $peers 1] 0 crdt.info
+            assert_equal [[lindex $peers 0] hget key f1] {}
+        }
         
     }
 }
