@@ -43,7 +43,7 @@ typedef void *(*crdtMergeFunc)(void *curVal, void *value);
 typedef int (*crdtDelFunc)(void *ctx, void *keyRobj, void *key, void *crdtObj);
 typedef void* (*crdtFilterFunc)(void* obj,long long gid, long long logic_time);
 typedef int (*crdtGCFunc)(void *crdtObj, VectorClock* clock);
-typedef int (*crdtCleanFunc)(void* value, void* tombstone);
+typedef int (*crdtPurageFunc)(void* tombstone, void* value);
 typedef struct CrdtMeta {
     int gid;
     long long timestamp;
@@ -54,7 +54,6 @@ typedef struct CrdtObjectMethod {
     crdtMergeFunc merge;
     crdtDelFunc del;
     crdtFilterFunc filter;
-    crdtCleanFunc clean;
 } CrdtObjectMethod;
 
 typedef struct CrdtObject {
@@ -65,6 +64,7 @@ typedef struct CrdtTombstoneMethod {
     crdtMergeFunc merge;
     crdtFilterFunc filter;
     crdtGCFunc gc;
+    crdtPurageFunc purage;
 } CrdtTombstoneMethod;
 
 typedef struct CrdtTombstone {

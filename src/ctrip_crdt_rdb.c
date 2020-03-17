@@ -325,7 +325,7 @@ crdtMergeDelCommand(client *c) {
     robj *currentVal = lookupKeyRead(c->db, key);
     if (currentVal) {
         CrdtObject *currentCrdtCommon = retrieveCrdtObject(currentVal);
-        if(currentCrdtCommon->method->clean(currentCrdtCommon, tombstoneCrdtCommon)) {
+        if(tombstoneCrdtCommon->method->purage(tombstoneCrdtCommon, currentCrdtCommon)) {
             dbDelete(c->db, key);
         }
     }
@@ -389,7 +389,7 @@ crdtMergeCommand(client *c) {
     if(de != NULL) {
         robj* tombstone= dictGetVal(de);
         CrdtTombstone* tom = retrieveCrdtTombstone(tombstone);
-        if(mergedVal->method->clean(mergedVal, tom)) {
+        if(tom->method->purage(tom, mergedVal)) {
             mergedVal = NULL;
         }
     }
