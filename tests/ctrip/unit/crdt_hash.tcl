@@ -46,6 +46,13 @@ start_server {tags {"crdt-hash"} overrides {crdt-gid 1} config {crdt.conf} modul
         r hget k-hash-3 f
     } {v2}
 
+    test {"[crdt_hash.tcl]basic hdel"} {
+        r hmset k-hash-4 f v f1 v1 f2 v2
+        r hdel k-hash-4 f f1
+        r hget k-hash-4 f1
+    } {}
+
+
     test {"[crdt_hash.tcl]big hash map"} {
         set load_handle0 [start_bg_hash_data $redis_host $redis_port 9 100000]
         after 1000
@@ -107,14 +114,14 @@ start_server {tags {"crdt-hash-more"} overrides {crdt-gid 1} config {crdt.conf} 
     } {}
 
     # del concurrent with del
-    test {"[crdt_hash.tcl]Test Concurrent Tombstone"} {
-        set time [clock milliseconds]
-        r CRDT.HSET k-hash-7 1 $time "1:110;2:110" 6 f v f1 v1 f2 v2
-        r CRDT.DEL_HASH k-hash-7 1 $time "1:111;2:111" "1:101;2:100"
-        r CRDT.HSET k-hash-7 2 $time "1:109;2:112" 6 f v f3 v3 
-        assert_equal [r hget k-hash-7 f] v
-        r hget k-hash-7 f3
-    } {v3}
+    # test {"[crdt_hash.tcl]Test Concurrent Tombstone"} {
+    #     set time [clock milliseconds]
+    #     r CRDT.HSET k-hash-7 1 $time "1:110;2:110" 6 f v f1 v1 f2 v2
+    #     r CRDT.DEL_HASH k-hash-7 1 $time "1:111;2:111" "1:101;2:100"
+    #     r CRDT.HSET k-hash-7 2 $time "1:109;2:112" 4 f v f3 v3 
+    #     assert_equal [r hget k-hash-7 f] v
+    #     r hget k-hash-7 f3
+    # } {v3}
 
     test {"[crdt_hash.tcl]crdt hash lot"} {
         set hash_handle0 [start_crdt_hash_load $redis_host $redis_port 3]

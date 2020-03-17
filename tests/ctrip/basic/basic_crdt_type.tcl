@@ -20,8 +20,14 @@ proc get_info_replication_attr_value {client type attr} {
 proc run {script level} {
     catch [uplevel $level $script ] result opts
 }
-proc wait { client index type}  {
-    set retry 50
+proc log_file_matches {log} {
+    set fp [open $log r]
+    set content [read $fp]
+    close $fp
+    puts $content
+}
+proc wait { client index type log}  {
+    set retry 100
     set match_str ""
     append match_str "*slave" $index ":*state=online*"
     while {$retry} {
@@ -34,6 +40,7 @@ proc wait { client index type}  {
         }
     }
     if {$retry == 0} {
+        log_file_matches $log
         error "assertion: Master-Slave not correctly synchronized"
     }
 }
@@ -62,11 +69,13 @@ proc basic_test { type create check delete} {
         set peer_hosts {}
         set peer_ports {}
         set peer_gids {}
+        set peer_stdouts {}
 
         lappend peers [srv 0 client]
         lappend peer_hosts [srv 0 host]
         lappend peer_ports [srv 0 port]
         lappend peer_gids 1
+        lappend peer_stdouts [srv 0 stdout]
         [lindex $peers 0] config crdt.set repl-diskless-sync-delay 1
         [lindex $peers 0] config set repl-diskless-sync-delay 1
         
@@ -75,25 +84,34 @@ proc basic_test { type create check delete} {
             run [replace [replace_client $create {[lindex $peers 0]}] $argv] 1
             run [replace [replace_client $check {[lindex $peers 0]}] $argv] 1
         }
-        test [format "%s-del" $type] {
-            set argv {key field value 1 100000 "1:1" }
-            run [replace [replace_client $delete {[lindex $peers 0]}] $argv] 1
-            set result {key field {} 1 100000 "1:1" }
+        # test [format "%s-del" $type] {
+        #     set argv {key field value 1 100000 "1:1" }
+        #     run [replace [replace_client $delete {[lindex $peers 0]}] $argv] 1
+        #     set result {key field {} 1 100000 "1:1" }
+        #     run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
+        # }
+        
+        test [format "%s-del2" $type] {
+            set argv1 {key-del field value 1 100000 "1:2"}
+            run [replace [replace_client $create {[lindex $peers 0]}] $argv1] 1
+            set argv2 {key-del field1 value 1 100000 "1:2"}
+            run [replace [replace_client $delete {[lindex $peers 0]}] $argv2] 1
+            set result {key-del field1 {} 1 100000 "1:2" }
             run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
         }
-        
-        
+
         start_server {tags {[format "crdt-basic-%s" $type]} overrides {crdt-gid 2} config {crdt.conf} module {crdt.so} } {
             lappend peers [srv 0 client]
             lappend peer_hosts [srv 0 host]
             lappend peer_ports [srv 0 port]
             lappend peer_gids 2
+            lappend peer_stdouts [srv 0 stdout]
             [lindex $peers 1] config crdt.set repl-diskless-sync-delay 1
             [lindex $peers 1] config set repl-diskless-sync-delay 1
             [lindex $peers 1] peerof  [lindex $peer_gids 0] [lindex $peer_hosts 0] [lindex $peer_ports 0]
             [lindex $peers 0] peerof  [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
-            wait [lindex $peers 0] 0 crdt.info
-            wait [lindex $peers 1] 0 crdt.info
+            wait [lindex $peers 0] 0 crdt.info [lindex $peer_stdouts 1]
+            wait [lindex $peers 1] 0 crdt.info [lindex $peer_stdouts 0]
             
             test [format "%s-peerof-create" $type] {
                 set argv2 {key field value 1 100000 "1:2"}
@@ -301,26 +319,26 @@ proc basic_test { type create check delete} {
             run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
     
         }
-        test [format "%s-double-delete6" $type] {
-            set add1 {tombstone2 field value 1 200001 {"1:60;2:60;3:1"}}
-            set del1 {tombstone2 field value 2 200001 {"1:60;2:61;3:1"}}
-            set add2 {tombstone2 field value2 1 200001 {"1:61;2:61;3:1"}}
-            set del2 {tombstone2 field value2 2 200001 {"1:61;2:62;3:1"}}
-            set result {tombstone2 field {} 2 200001 {"1:61;2:62;3:1"}}
+        # test [format "%s-double-delete6" $type] {
+        #     set add1 {tombstone2 field value 1 200001 {"1:60;2:60;3:1"}}
+        #     set del1 {tombstone2 field value 2 200001 {"1:60;2:61;3:1"}}
+        #     set add2 {tombstone2 field value2 1 200001 {"1:61;2:61;3:1"}}
+        #     set del2 {tombstone2 field value2 2 200001 {"1:61;2:62;3:1"}}
+        #     set result {tombstone2 field {} 2 200001 {"1:61;2:62;3:1"}}
 
-            run [replace [replace_client $delete {[lindex $peers 0]}] $del1] 1
-            run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
+        #     run [replace [replace_client $delete {[lindex $peers 0]}] $del1] 1
+        #     run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
 
-            run [replace [replace_client $delete {[lindex $peers 0]}] $del2] 1
-            run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
+        #     run [replace [replace_client $delete {[lindex $peers 0]}] $del2] 1
+        #     run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
 
-            run [replace [replace_client $create {[lindex $peers 0]}] $add1] 1
-            run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
+        #     run [replace [replace_client $create {[lindex $peers 0]}] $add1] 1
+        #     run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
 
-            run [replace [replace_client $create {[lindex $peers 0]}] $add2] 1
-            run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
+        #     run [replace [replace_client $create {[lindex $peers 0]}] $add2] 1
+        #     run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
     
-        }
+        # }
         
 
     }
@@ -442,26 +460,26 @@ proc basic_test { type create check delete} {
             run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
     
         }
-        test [format "%s-double-delete6" $type] {
-            set add1 {tombstone2 field value 1 200001 {"1:60;2:60;3:1"}}
-            set del1 {tombstone2 field value 2 200001 {"1:60;2:61;3:1"}}
-            set add2 {tombstone2 field value2 1 200001 {"1:61;2:61;3:1"}}
-            set del2 {tombstone2 field value2 2 200001 {"1:61;2:62;3:1"}}
-            set result {tombstone2 field {} 2 200001 {"1:61;2:62;3:1"}}
+        # test [format "%s-double-delete6" $type] {
+        #     set add1 {tombstone2 field value 1 200001 {"1:60;2:60;3:1"}}
+        #     set del1 {tombstone2 field value 2 200001 {"1:60;2:61;3:1"}}
+        #     set add2 {tombstone2 field value2 1 200001 {"1:61;2:61;3:1"}}
+        #     set del2 {tombstone2 field value2 2 200001 {"1:61;2:62;3:1"}}
+        #     set result {tombstone2 field {} 2 200001 {"1:61;2:62;3:1"}}
 
-            run [replace [replace_client $deleteHash {[lindex $peers 0]}] $del1] 1
-            run [replace [replace_client $checkHash {[lindex $peers 0]}] $result] 1
+        #     run [replace [replace_client $deleteHash {[lindex $peers 0]}] $del1] 1
+        #     run [replace [replace_client $checkHash {[lindex $peers 0]}] $result] 1
 
-            run [replace [replace_client $delete {[lindex $peers 0]}] $del2] 1
-            run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
+        #     run [replace [replace_client $delete {[lindex $peers 0]}] $del2] 1
+        #     run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
 
-            run [replace [replace_client $createHash {[lindex $peers 0]}] $add1] 1
-            run [replace [replace_client $checkHash {[lindex $peers 0]}] $result] 1
+        #     run [replace [replace_client $createHash {[lindex $peers 0]}] $add1] 1
+        #     run [replace [replace_client $checkHash {[lindex $peers 0]}] $result] 1
 
-            run [replace [replace_client $create {[lindex $peers 0]}] $add2] 1
-            run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
+        #     run [replace [replace_client $create {[lindex $peers 0]}] $add2] 1
+        #     run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
     
-        }
+        # }
 
         
         
@@ -583,26 +601,26 @@ proc basic_test { type create check delete} {
             run [replace [replace_client $checkHash {[lindex $peers 0]}] $result] 1
     
         }
-        test [format "%s-double-delete6" $type] {
-            set add1 {tombstone2 field value 1 200001 {"1:60;2:60;3:1"}}
-            set del1 {tombstone2 field value 2 200001 {"1:60;2:61;3:1"}}
-            set add2 {tombstone2 field value2 1 200001 {"1:61;2:61;3:1"}}
-            set del2 {tombstone2 field value2 2 200001 {"1:61;2:62;3:1"}}
-            set result {tombstone2 field {} 2 200001 {"1:61;2:62;3:1"}}
+        # test [format "%s-double-delete6" $type] {
+        #     set add1 {tombstone2 field value 1 200001 {"1:60;2:60;3:1"}}
+        #     set del1 {tombstone2 field value 2 200001 {"1:60;2:61;3:1"}}
+        #     set add2 {tombstone2 field value2 1 200001 {"1:61;2:61;3:1"}}
+        #     set del2 {tombstone2 field value2 2 200001 {"1:61;2:62;3:1"}}
+        #     set result {tombstone2 field {} 2 200001 {"1:61;2:62;3:1"}}
 
-            run [replace [replace_client $delete {[lindex $peers 0]}] $del1] 1
-            run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
+        #     run [replace [replace_client $delete {[lindex $peers 0]}] $del1] 1
+        #     run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
 
-            run [replace [replace_client $deleteHash {[lindex $peers 0]}] $del2] 1
-            run [replace [replace_client $checkHash {[lindex $peers 0]}] $result] 1
+        #     run [replace [replace_client $deleteHash {[lindex $peers 0]}] $del2] 1
+        #     run [replace [replace_client $checkHash {[lindex $peers 0]}] $result] 1
 
-            run [replace [replace_client $create {[lindex $peers 0]}] $add1] 1
-            run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
+        #     run [replace [replace_client $create {[lindex $peers 0]}] $add1] 1
+        #     run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
 
-            run [replace [replace_client $createHash {[lindex $peers 0]}] $add2] 1
-            run [replace [replace_client $checkHash {[lindex $peers 0]}] $result] 1
+        #     run [replace [replace_client $createHash {[lindex $peers 0]}] $add2] 1
+        #     run [replace [replace_client $checkHash {[lindex $peers 0]}] $result] 1
     
-        }
+        # }
     }
     start_server {tags {[format "crdt-create-%s" $type]} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so}} {
         set peers {}
@@ -616,46 +634,46 @@ proc basic_test { type create check delete} {
         lappend peer_gids 3
         [lindex $peers 0] config crdt.set repl-diskless-sync-delay 1
         [lindex $peers 0] config set repl-diskless-sync-delay 1
-        test "tombstone -add" {
+        test [format "tombstone -add-%s" $type] {
             set add1 {tombstone2 field value 1 200001 {"1:10;2:10;3:1"}}
             set del1 {tombstone2 field value 2 200001 {"1:10;2:11;3:1"}}
             set add2 {tombstone2 field value2 1 200001 {"1:10;2:10;3:1"}}
             set del2 {tombstone2 field value2 2 200001 {"1:10;2:11;3:1"}}
             set result {tombstone2 field {} 2 200001 {"1:11;2:12;3:1"}}
 
-            run [replace [replace_client $create {[lindex $peers 0]}] $add1] 1
-            run [replace [replace_client $check {[lindex $peers 0]}] $add1] 1
-            run [replace [replace_client $delete {[lindex $peers 0]}] $del1] 1
+            run [replace [replace_client $createHash {[lindex $peers 0]}] $add1] 1
+            run [replace [replace_client $checkHash {[lindex $peers 0]}] $add1] 1
+            run [replace [replace_client $deleteHash {[lindex $peers 0]}] $del1] 1
             run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
             run [replace [replace_client $createHash {[lindex $peers 0]}] $add2] 1
             run [replace [replace_client $checkHash {[lindex $peers 0]}] $result] 1
         }
-        test "tombstone -add2" {
+        test [format "tombstone -add2-%s" $type] {
             set add1 {tombstone2 field value 1 200001 {"1:20;2:20;3:1"}}
             set del1 {tombstone2 field value 2 200001 {"1:20;2:21;3:1"}}
-            set add2 {tombstone2 field value2 1 200001 {"1:20;2:20;3:1"}}
-            set del2 {tombstone2 field value2 2 200001 {"1:20;2:21;3:1"}}
+            set add2 {tombstone2 field value2 1 200001 {"1:21;2:21;3:1"}}
+            set del2 {tombstone2 field value2 2 200001 {"1:21;2:22;3:1"}}
             set result {tombstone2 field {} 2 200001 {"1:21;2:22;3:1"}}
 
-            run [replace [replace_client $createHash {[lindex $peers 0]}] $add1] 1
-            run [replace [replace_client $checkHash {[lindex $peers 0]}] $add1] 1
-            run [replace [replace_client $deleteHash {[lindex $peers 0]}] $del1] 1
-            run [replace [replace_client $checkHash {[lindex $peers 0]}] $result] 1
-            run [replace [replace_client $create {[lindex $peers 0]}] $add2] 1
+            run [replace [replace_client $create {[lindex $peers 0]}] $add1] 1
+            run [replace [replace_client $check {[lindex $peers 0]}] $add1] 1
+            run [replace [replace_client $delete {[lindex $peers 0]}] $del1] 1
             run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
+            run [replace [replace_client $create {[lindex $peers 0]}] $add2] 1
+            run [replace [replace_client $check {[lindex $peers 0]}] $add2] 1
         }
         test "tombstone -add3" {
-            set add1 {tombstone2 field value 1 200001 {"1:30;2:30;3:1"}}
-            set del1 {tombstone2 field value 2 200001 {"1:30;2:31;3:1"}}
-            set add2 {tombstone2 field value2 1 200000 {"1:31;2:30;3:1"}}
-            set add3 {tombstone2 field value2 1 200001 {"1:31;2:30;3:1"}}
-            set del2 {tombstone2 field value2 1 200001 {"1:32;2:30;3:1"}}
-            set result {tombstone2 field {} 2 200001 {"1:31;2:32;3:1"}}
+            set add1 {tombstone3 field value 1 200001 {"1:30;2:30;3:1"}}
+            set del1 {tombstone3 field value 2 200001 {"1:30;2:31;3:1"}}
+            set add2 {tombstone3 field value2 1 200000 {"1:31;2:30;3:1"}}
+            set add3 {tombstone3 field value2 1 200001 {"1:31;2:30;3:1"}}
+            set del2 {tombstone3 field value2 1 200001 {"1:32;2:30;3:1"}}
+            set result {tombstone3 field {} 2 200001 {"1:31;2:32;3:1"}}
 
-            run [replace [replace_client $createHash {[lindex $peers 0]}] $add1] 1
-            run [replace [replace_client $checkHash {[lindex $peers 0]}] $add1] 1
-            run [replace [replace_client $deleteHash {[lindex $peers 0]}] $del1] 1
-            run [replace [replace_client $checkHash {[lindex $peers 0]}] $result] 1
+            run [replace [replace_client $create {[lindex $peers 0]}] $add1] 1
+            run [replace [replace_client $check {[lindex $peers 0]}] $add1] 1
+            run [replace [replace_client $delete {[lindex $peers 0]}] $del1] 1
+            run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
             run [replace [replace_client $create {[lindex $peers 0]}] $add2] 1
             run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
             run [replace [replace_client $create {[lindex $peers 0]}] $add3] 1
@@ -665,11 +683,11 @@ proc basic_test { type create check delete} {
         }
         
         test "tombstone-del" {
-            set add1 {tombstone2 field value 1 200001 {"1:41;2:40;3:1"}}
-            set del1 {tombstone2 field value 1 200001 {"1:42;2:40;3:1"}}
-            set add2 {tombstone2 field value2 2 200001 {"1:40;2:41;3:1"}}
-            set del2 {tombstone2 field value2 2 200001 {"1:40;2:42;3:1"}}
-            set result {tombstone2 field {} 2 200001 {"1:41;2:42;3:1"}}
+            set add1 {tombstone4 field value 1 200001 {"1:41;2:40;3:1"}}
+            set del1 {tombstone4 field value 1 200001 {"1:42;2:40;3:1"}}
+            set add2 {tombstone4 field value2 2 200001 {"1:40;2:41;3:1"}}
+            set del2 {tombstone4 field value2 2 200001 {"1:40;2:42;3:1"}}
+            set result {tombstone4 field {} 2 200001 {"1:41;2:42;3:1"}}
 
             run [replace [replace_client $createHash {[lindex $peers 0]}] $add1] 1
             run [replace [replace_client $checkHash {[lindex $peers 0]}] $add1] 1
@@ -681,11 +699,11 @@ proc basic_test { type create check delete} {
             run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
         }
         test "tombstone-del" {
-            set add1 {tombstone2 field value 1 200001 {"1:51;2:50;3:1"}}
-            set del1 {tombstone2 field value 1 200001 {"1:52;2:50;3:1"}}
-            set add2 {tombstone2 field value2 2 200001 {"1:50;2:51;3:1"}}
-            set del2 {tombstone2 field value2 2 200001 {"1:50;2:52;3:1"}}
-            set result {tombstone2 field {} 2 200001 {"1:51;2:52;3:1"}}
+            set add1 {tombstone5 field value 1 200001 {"1:51;2:50;3:1"}}
+            set del1 {tombstone5 field value 1 200001 {"1:52;2:50;3:1"}}
+            set add2 {tombstone5 field value2 2 200001 {"1:50;2:51;3:1"}}
+            set del2 {tombstone5 field value2 2 200001 {"1:50;2:52;3:1"}}
+            set result {tombstone5 field {} 2 200001 {"1:51;2:52;3:1"}}
 
             run [replace [replace_client $createHash {[lindex $peers 0]}] $add2] 1
             run [replace [replace_client $checkHash {[lindex $peers 0]}] $add2] 1
@@ -702,11 +720,13 @@ proc basic_test { type create check delete} {
         set peer_hosts {}
         set peer_ports {}
         set peer_gids {}
+        set peer_stdouts {}
 
         lappend peers [srv 0 client]
         lappend peer_hosts [srv 0 host]
         lappend peer_ports [srv 0 port]
         lappend peer_gids 1
+        lappend peer_stdouts [srv 0 stdout]
         [lindex $peers 0] config crdt.set repl-diskless-sync-delay 1
         [lindex $peers 0] config set repl-diskless-sync-delay 1
         start_server {tags {[format "crdt-basic-%s" $type]} overrides {crdt-gid 2} config {crdt.conf} module {crdt.so} } {
@@ -714,6 +734,7 @@ proc basic_test { type create check delete} {
             lappend peer_hosts [srv 0 host]
             lappend peer_ports [srv 0 port]
             lappend peer_gids 2
+            lappend peer_stdouts [srv 0 stdout]
             [lindex $peers 1] config crdt.set repl-diskless-sync-delay 1
             [lindex $peers 1] config set repl-diskless-sync-delay 1
             start_server {tags {[format "crdt-basic-%s" $type]} overrides {crdt-gid 3} config {crdt.conf} module {crdt.so} } {
@@ -732,8 +753,8 @@ proc basic_test { type create check delete} {
                     [lindex $peers 2] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
                     [lindex $peers 2] peerof [lindex $peer_gids 0] [lindex $peer_hosts 0] [lindex $peer_ports 0]
                     
-                    wait [lindex $peers 1] 0 crdt.info
-                    wait [lindex $peers 0] 0 crdt.info
+                    wait [lindex $peers 1] 0 crdt.info [lindex $peer_stdouts 0]
+                    wait [lindex $peers 0] 0 crdt.info [lindex $peer_stdouts 1]
                     run [replace [replace_client $check {[lindex $peers 2]}] $argv2] 1
                 }
                 test [format "%s-before-del" $type] {
@@ -757,7 +778,8 @@ proc basic_test { type create check delete} {
         set slave_hosts {}
         set slave_ports {}
         set slave_logs {}
-
+        set peer_stdouts {}
+        lappend peer_stdouts [srv 0 stdout]
         lappend peers [srv 0 client]
         lappend peer_hosts [srv 0 host]
         lappend peer_ports [srv 0 port]
@@ -769,6 +791,7 @@ proc basic_test { type create check delete} {
             lappend slave_hosts [srv 0 host]
             lappend slave_ports [srv 0 port]
             lappend slave_logs  1
+
             [lindex $slaves 0] config crdt.set repl-diskless-sync-delay 1
             [lindex $slaves 0] config set repl-diskless-sync-delay 1
             start_server {overrides {crdt-gid 2} module {crdt.so}} {
@@ -776,11 +799,12 @@ proc basic_test { type create check delete} {
                 lappend peer_hosts [srv 0 host]
                 lappend peer_ports [srv 0 port]
                 lappend peer_gids  2
+                lappend peer_stdouts [srv 0 stdout]
                 [lindex $peers 1] config crdt.set repl-diskless-sync-delay 1
                 [lindex $peers 1] config set repl-diskless-sync-delay 1
                 test "when after slave and peerof" {
                     [lindex $slaves 0] slaveof [lindex $peer_hosts 0] [lindex $peer_ports 0]
-                    wait [lindex $peers 0] 0 info
+                    wait [lindex $peers 0] 0 info [lindex $peer_stdouts 0]
                     assert {
                         [get_info_replication_attr_value [lindex $peers 0] info master_repl_offset]
                         eq
@@ -792,7 +816,7 @@ proc basic_test { type create check delete} {
                         [get_info_replication_attr_value [lindex $slaves 0] crdt.info master_repl_offset]
                     }
                     [lindex $peers 1] peerof [lindex $peer_gids 0] [lindex $peer_hosts 0] [lindex $peer_ports 0]
-                    wait [lindex $peers 0] 0 crdt.info
+                    wait [lindex $peers 0] 0 crdt.info [lindex $peer_stdouts 1]
                     assert {
                         [get_info_replication_attr_value [lindex $peers 0] crdt.info master_repl_offset]
                         eq
@@ -896,22 +920,22 @@ proc basic_test { type create check delete} {
 
 # key field value gid timestamp vc
 #  0   1     2    3    4        5
-basic_test "kv" {
-    catch [$redis crdt.set $0 $2 $3 $4 $5 10000] error
-} {
-    set r [ $redis crdt.get $0 ]
-    if { {$2} == {} } {
-        assert {$r == {}}
-    } else {
-        assert { [lindex $r 0] == {$2} }
-        assert { [lindex $r 1] == {$3} }
-        assert { [lindex $r 2] == {$4} }
-        assert { [lindex $r 3] == [format "%s" $5] }
-    }
-    unset r
-} {
-    $redis crdt.del_reg $0 $3 $4 $5
-}
+# basic_test "kv" {
+#     catch [$redis crdt.set $0 $2 $3 $4 $5 10000] error
+# } {
+#     set r [ $redis crdt.get $0 ]
+#     if { {$2} == {} } {
+#         assert {$r == {}}
+#     } else {
+#         assert { [lindex $r 0] == {$2} }
+#         assert { [lindex $r 1] == {$3} }
+#         assert { [lindex $r 2] == {$4} }
+#         assert { [lindex $r 3] == [format "%s" $5] }
+#     }
+#     unset r
+# } {
+#     $redis crdt.del_reg $0 $3 $4 $5
+# }
 
 # key field value gid timestamp vc
 #  0   1     2    3    4        5

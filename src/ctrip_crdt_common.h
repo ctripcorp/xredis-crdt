@@ -41,19 +41,34 @@
 typedef void *(*crdtMergeFunc)(void *curVal, void *value);
 // RM_CrdtMultiWrappedReplicate should be called during this
 typedef int (*crdtDelFunc)(void *ctx, void *keyRobj, void *key, void *crdtObj);
-//typedef void (*crdtGcFunc)(void *crdtObj);
-typedef struct CrdtCommonMethod {
-    crdtMergeFunc merge;
-    crdtDelFunc delFunc;
-} CrdtCommonMethod;
-typedef struct CrdtCommon {
+typedef void* (*crdtFilterFunc)(void* obj,long long gid, long long logic_time);
+typedef int (*crdtGCFunc)(void *crdtObj, VectorClock* clock);
+typedef int (*crdtPurageFunc)(void* tombstone, void* value);
+typedef struct CrdtMeta {
     int gid;
-    int type;
-    VectorClock *vectorClock;
     long long timestamp;
-    //CRDT Merge Function
-    CrdtCommonMethod* method;
-    
-} __attribute__((packed, aligned(4))) CrdtCommon;
+    VectorClock *vectorClock;
+} CrdtMeta;
 
+typedef struct CrdtObjectMethod {
+    crdtMergeFunc merge;
+    crdtDelFunc del;
+    crdtFilterFunc filter;
+} CrdtObjectMethod;
+
+typedef struct CrdtObject {
+    int type;
+    CrdtObjectMethod* method;
+} CrdtObject;
+typedef struct CrdtTombstoneMethod {
+    crdtMergeFunc merge;
+    crdtFilterFunc filter;
+    crdtGCFunc gc;
+    crdtPurageFunc purage;
+} CrdtTombstoneMethod;
+
+typedef struct CrdtTombstone {
+    int type;
+    CrdtTombstoneMethod* method;
+} CrdtTombstone;
 #endif //REDIS_CTRIP_CRDT_COMMON_H

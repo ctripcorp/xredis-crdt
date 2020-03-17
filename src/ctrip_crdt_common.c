@@ -48,14 +48,25 @@ static inline int isModuleCrdt(robj *obj) {
     return C_ERR;
 }
 
-CrdtCommon *retrieveCrdtCommon(robj *obj) {
+
+void* getObjValue(robj *obj) {
     if (obj == NULL || isModuleCrdt(obj) == C_ERR) return NULL;
     moduleValue *mv = obj->ptr;
-    void *moduleDataType = mv->value;
-    CrdtCommon *common = (CrdtCommon *) moduleDataType;
-    return common;
+    return mv->value;
 }
 
+CrdtObject *retrieveCrdtObject(robj *obj) {
+    return (CrdtObject*)getObjValue(obj);
+}
+
+CrdtTombstone* retrieveCrdtTombstone(robj *obj) {
+    return (CrdtTombstone*)getObjValue(obj);
+}
+moduleType* getModuleType(robj *obj) {
+    moduleValue *mv = obj->ptr;
+    moduleType *mt = mv->type;
+    return mt;
+}
 #if defined(CRDT_COMMON_TEST_MAIN)
 #include <stdio.h>
 #include "testhelp.h"
