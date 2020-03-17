@@ -80,13 +80,13 @@ void setKeyToTombstone(redisDb *db, robj *key, robj *val) {
     if ((existing = lookupTombstone(db,key)) == NULL) {
         tombstoneAdd(db,key,val);
     } else {
-        CrdtCommon *existingCrdtCommon = retrieveCrdtCommon(existing);
-        CrdtCommon *incomeCrdtCommon = retrieveCrdtCommon(val);
-        if (!isVectorClockMonoIncr(existingCrdtCommon->vectorClock, incomeCrdtCommon->vectorClock)) {
-            VectorClock *toFree = incomeCrdtCommon->vectorClock;
-            incomeCrdtCommon->vectorClock = vectorClockMerge(existingCrdtCommon->vectorClock, incomeCrdtCommon->vectorClock);
-            freeVectorClock(toFree);
-        }
+        // CrdtCommon *existingCrdtCommon = retrieveCrdtCommon(existing);
+        // CrdtCommon *incomeCrdtCommon = retrieveCrdtCommon(val);
+        // if (!isVectorClockMonoIncr(existingCrdtCommon->vectorClock, incomeCrdtCommon->vectorClock)) {
+        //     VectorClock *toFree = incomeCrdtCommon->vectorClock;
+        //     incomeCrdtCommon->vectorClock = vectorClockMerge(existingCrdtCommon->vectorClock, incomeCrdtCommon->vectorClock);
+        //     freeVectorClock(toFree);
+        // }
         tombstoneOverwrite(db, key, val);
     }
     incrRefCount(val);
@@ -109,7 +109,7 @@ int gcIfNeeded(redisDb *db, robj *key) {
     if(val == NULL) {
         return 0;
     }
-    CrdtCommon *crdtCommon = retrieveCrdtCommon(val);
+    CrdtTombstone *tombstone = retrieveCrdtTombstone(val);
 
     /* Don't del anything while loading. It will be done later. */
     if (server.loading) return 0;
@@ -119,8 +119,8 @@ int gcIfNeeded(redisDb *db, robj *key) {
      * 2. if the vector clock of gcVectorClock is mono-increase, comparing to the deleted keys, the delete event will be triggered
      * */
     //todo: update gc vector clock, each time when set operation
-    //updateGcVectorClock();
-    if (!isVectorClockMonoIncr(crdtCommon->vectorClock, crdtServer.gcVectorClock)) {
+    updateGcVectorClock();
+    if(!tombstone->method->gc(tombstone, crdtServer.gcVectorClock)){
         return 0;
     }
 
@@ -208,15 +208,15 @@ void updateGcVectorClock() {
  * to the function to avoid too many gettimeofday() syscalls. */
 int activeGcCycleTryGc(redisDb *db, dictEntry *de) {
     robj *val = dictGetVal(de);
-    CrdtCommon *crdtCommon = retrieveCrdtCommon(val);
-    if (crdtCommon == NULL) {
+    CrdtTombstone *tombstone = retrieveCrdtTombstone(val);
+    if (tombstone == NULL) {
         return 0;
     }
     /* It's ready to be deleted, when and only when other peers already know what happend.
      * 1. Gc Vector Clock is collected from each peer's vector clock, and do a minimium of them
      * 2. if the vector clock of gcVectorClock is mono-increase, comparing to the deleted keys, the delete event will be triggered
      * */
-    if (!isVectorClockMonoIncr(crdtCommon->vectorClock, crdtServer.gcVectorClock)) {
+    if(!tombstone->method->gc(tombstone, crdtServer.gcVectorClock)) {
         return 0;
     }
     sds key = dictGetKey(de);

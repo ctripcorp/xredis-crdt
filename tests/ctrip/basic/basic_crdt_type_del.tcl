@@ -83,10 +83,10 @@ proc basic_test { type create check delete} {
             }
             
             test [format "%s-del-tombstone2" $type] {
-                set add1 {key field value 1 100000 {"1:1;2:1"} }
+                set add1 {key field value 1 100000 {"1:11;2:11"} }
                 run [replace [replace_client $create {[lindex $peers 0]}] $add1] 1
                 run [replace [replace_client $check {[lindex $peers 0]}] $add1] 1
-                set delete1 {key field {} 1 100000 {"1:2;2:1"} }
+                set delete1 {key field {} 1 100000 {"1:12;2:11"} }
                 [lindex $peers 0] del key
                 after 500
                 run [replace [replace_client $check {[lindex $peers 1]}] $delete1] 1
@@ -94,7 +94,7 @@ proc basic_test { type create check delete} {
                 run [replace [replace_client $check {[lindex $peers 1]}] $delete1] 1
                 run [replace [replace_client $create {[lindex $peers 0]}] $add1] 1
                 run [replace [replace_client $check {[lindex $peers 0]}] $delete1] 1
-                set add2 {key field value2 2 100000 {"1:1;2:2"}}
+                set add2 {key field value2 2 100000 {"1:11;2:12"}}
                 run [replace [replace_client $create {[lindex $peers 1]}] $add2] 1
                 run [replace [replace_client $check {[lindex $peers 1]}] $delete1] 1
                 run [replace [replace_client $create {[lindex $peers 0]}] $add2] 1
