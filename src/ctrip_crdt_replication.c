@@ -854,6 +854,7 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
     if (psync_result == PSYNC_FULLRESYNC) {
         serverLog(LL_NOTICE, "[CRDT] MASTER <-> SLAVE sync: Crdt Master accepted a Full Resynchronization.");
         crdtReplicationCreateMasterClient(crdtMaster, fd, -1);
+        crdtMaster->repl_transfer_s = -1;
     }
 
     /* Fall back to SYNC if needed. Otherwise psync_result == PSYNC_FULLRESYNC
@@ -913,9 +914,13 @@ int crdtConnectWithMaster(CRDT_Master_Instance *masterInstance) {
  * Never call this function directly, use cancelReplicationHandshake() instead.
  */
 void crdtUndoConnectWithMaster(CRDT_Master_Instance *masterInstance) {
+    if(masterInstance->repl_transfer_s == -1) {
+        return;
+    }
     int fd = masterInstance->repl_transfer_s;
 
     aeDeleteFileEvent(crdtServer.el,fd,AE_READABLE|AE_WRITABLE);
+    
     close(fd);
     masterInstance->repl_transfer_s = -1;
 }
@@ -926,6 +931,9 @@ void crdtUndoConnectWithMaster(CRDT_Master_Instance *masterInstance) {
 void crdtReplicationAbortSyncTransfer(CRDT_Master_Instance *masterInstance) {
     serverAssert(masterInstance->repl_state == REPL_STATE_TRANSFER);
     crdtUndoConnectWithMaster(masterInstance);
+    if(masterInstance->master != NULL) { freeClient(masterInstance->master); }
+    masterInstance->master = NULL;
+
 }
 
 /* This function aborts a non blocking replication attempt if there is one
@@ -1367,7 +1375,13 @@ void crdtReplicationUnsetAllMasters() {
     listRewind(crdtServer.crdtMasters, &li);
     while ((ln = listNext(&li)) != NULL) {
         CRDT_Master_Instance *crdtMaster = ln->value;
-        crdtUndoConnectWithMaster(crdtMaster);
+        crdtReplicationDiscardCachedMaster(crdtMaster);
+        if(crdtMaster->repl_state == REPL_STATE_CONNECTED) {
+            if(crdtMaster->master) {freeClient(crdtMaster->master);}
+        } else {
+            crdtCancelReplicationHandshake(crdtMaster->gid);
+        }
+        crdtMaster->repl_state = REPL_STATE_CONNECT;
     }
     serverLog(LL_NOTICE, "[CRDT][end]disconnect all crdt masters");
 }

@@ -14,6 +14,7 @@ source tests/support/util.tcl
 
 
 set ::all_tests {
+    ctrip/integration/bug/redis-unfree-client-when-master-to-slave
     ctrip/integration/bug/hash-miss-send-when-full-sync
     ctrip/integration/bug/full-sync-timeout
     
