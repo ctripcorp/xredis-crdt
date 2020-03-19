@@ -78,7 +78,7 @@ void freePeerMaster(CRDT_Master_Instance *masterInstance) {
         masterInstance->vectorClock = NULL;
     }
     if (masterInstance->master) {
-        masterInstance->master ->flags &= ~CLIENT_CRDT_MASTER;
+        masterInstance->master->flags &= ~CLIENT_CRDT_MASTER;
         freeClient(masterInstance->master);
         masterInstance->master = NULL;
     }
@@ -153,9 +153,10 @@ void peerofCommand(client *c) {
 
     if (!strcasecmp(c->argv[2]->ptr,"no") &&
         !strcasecmp(c->argv[3]->ptr,"one")) {
-
-        if (getPeerMaster(gid)) {
-            crdtReplicationUnsetMaster(gid);
+        CRDT_Master_Instance *peerMaster;
+        if ((peerMaster = getPeerMaster(gid)) != NULL) {
+            crdtReplicationUnsetMaster(peerMaster);
+            freePeerMaster(peerMaster);
             sds client = catClientInfoString(sdsempty(),c);
             serverLog(LL_NOTICE,"[CRDT] REMOVE MASTER %lld enabled (user request from '%s')",
                       gid, client);
@@ -215,15 +216,25 @@ void crdtReplicationSetMaster(long long gid, char *ip, int port) {
 }
 
 /* Cancel replication, setting the instance as a master itself. */
-void crdtReplicationUnsetMaster(long long gid) {
-    CRDT_Master_Instance *peerMaster;
-    if ((peerMaster = getPeerMaster(gid)) == NULL) return;
+
+void crdtReplicationUnsetMaster(CRDT_Master_Instance * peerMaster) {
+    if (!peerMaster) return;
     if(peerMaster->masterhost) {
         sdsfree(peerMaster->masterhost);
         peerMaster->masterhost = NULL;
     }
-    crdtCancelReplicationHandshake(gid);
-    freePeerMaster(peerMaster);
+
+    if (peerMaster->master) {
+        freeClient(peerMaster->master);
+        peerMaster->master = NULL;
+    }
+    crdtReplicationDiscardCachedMaster(peerMaster);
+    crdtCancelReplicationHandshake(peerMaster);
+    /* Disconnecting all the slaves is required: we need to inform slaves
+     * of the replication ID change (see shiftReplicationId() call). However
+     * the slaves will be able to partially resync with us, so it will be
+     * a very fast reconnection. */
+    peerMaster->repl_state = REPL_STATE_NONE;
 }
 
 
@@ -294,7 +305,7 @@ crdtMergeEndCommand(client *c) {
 err:
     serverLog(LL_NOTICE, "[CRDT][crdtMergeEndCommand][crdtCancelReplicationHandshake] master gid: %lld", sourceGid);
     if (!server.masterhost) {
-        crdtCancelReplicationHandshake(sourceGid);
+        crdtCancelReplicationHandshake(peerMaster);
     }
     return;
 }
@@ -854,6 +865,7 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
     if (psync_result == PSYNC_FULLRESYNC) {
         serverLog(LL_NOTICE, "[CRDT] MASTER <-> SLAVE sync: Crdt Master accepted a Full Resynchronization.");
         crdtReplicationCreateMasterClient(crdtMaster, fd, -1);
+        crdtMaster->repl_transfer_s = -1;
     }
 
     /* Fall back to SYNC if needed. Otherwise psync_result == PSYNC_FULLRESYNC
@@ -913,9 +925,13 @@ int crdtConnectWithMaster(CRDT_Master_Instance *masterInstance) {
  * Never call this function directly, use cancelReplicationHandshake() instead.
  */
 void crdtUndoConnectWithMaster(CRDT_Master_Instance *masterInstance) {
+    if(masterInstance->repl_transfer_s == -1) {
+        return;
+    }
     int fd = masterInstance->repl_transfer_s;
 
     aeDeleteFileEvent(crdtServer.el,fd,AE_READABLE|AE_WRITABLE);
+    
     close(fd);
     masterInstance->repl_transfer_s = -1;
 }
@@ -926,6 +942,10 @@ void crdtUndoConnectWithMaster(CRDT_Master_Instance *masterInstance) {
 void crdtReplicationAbortSyncTransfer(CRDT_Master_Instance *masterInstance) {
     serverAssert(masterInstance->repl_state == REPL_STATE_TRANSFER);
     crdtUndoConnectWithMaster(masterInstance);
+    if(masterInstance->master != NULL) {
+        freeClient(masterInstance->master);
+        masterInstance->master = NULL;
+    }
 }
 
 /* This function aborts a non blocking replication attempt if there is one
@@ -936,12 +956,11 @@ void crdtReplicationAbortSyncTransfer(CRDT_Master_Instance *masterInstance) {
  * the replication state (server.repl_state) set to REPL_STATE_CONNECT.
  *
  * Otherwise zero is returned and no operation is perforemd at all. */
-void crdtCancelReplicationHandshake(long long gid) {
-    CRDT_Master_Instance *masterInstance = getPeerMaster(gid);
-    if(masterInstance == NULL) {
+void crdtCancelReplicationHandshake(CRDT_Master_Instance * masterInstance) {
+    if(!masterInstance) {
         return;
     }
-    serverLog(LL_WARNING, "[CRDT] crdtCancelReplicationHandshake: %lld", gid);
+    serverLog(LL_WARNING, "[CRDT] crdtCancelReplicationHandshake: %lld", masterInstance->gid);
     if (masterInstance->repl_state == REPL_STATE_TRANSFER) {
         crdtReplicationAbortSyncTransfer(masterInstance);
         masterInstance->repl_state = REPL_STATE_CONNECT;
@@ -992,7 +1011,7 @@ void crdtReplicationResurrectCachedMaster(CRDT_Master_Instance *crdtMaster, int 
 void crdtReplicationDiscardCachedMaster(CRDT_Master_Instance *crdtMaster) {
     if (crdtMaster->cached_master == NULL) return;
 
-    serverLog(LL_NOTICE,"[CRDT]Discarding previously cached master state.");
+    serverLog(LL_NOTICE,"[CRDT][gid: %lld]Discarding previously cached master state.", crdtMaster->gid);
     crdtMaster->cached_master->flags &= ~CLIENT_CRDT_MASTER;
     freeClient(crdtMaster->cached_master);
     crdtMaster->cached_master = NULL;
@@ -1367,7 +1386,7 @@ void crdtReplicationUnsetAllMasters() {
     listRewind(crdtServer.crdtMasters, &li);
     while ((ln = listNext(&li)) != NULL) {
         CRDT_Master_Instance *crdtMaster = ln->value;
-        crdtUndoConnectWithMaster(crdtMaster);
+        crdtReplicationUnsetMaster(crdtMaster);
     }
     serverLog(LL_NOTICE, "[CRDT][end]disconnect all crdt masters");
 }
@@ -1390,16 +1409,20 @@ void crdtReplicationCron(void) {
             if (crdtMaster->masterhost &&
                 (crdtMaster->repl_state == REPL_STATE_CONNECTING || crdtSlaveIsInHandshakeState(crdtMaster)) &&
                 (time(NULL) - crdtMaster->repl_transfer_lastio) > crdtServer.repl_timeout) {
-                serverLog(LL_NOTICE, "[CRDT]Timeout connecting to the MASTER...");
-                crdtCancelReplicationHandshake(crdtMaster->gid);
+                serverLog(LL_NOTICE, "[CRDT][gid: %lld]Timeout connecting to the MASTER...", crdtMaster->gid);
+                crdtCancelReplicationHandshake(crdtMaster);
             }
 
             /* Bulk transfer I/O timeout? */
+            // mark by author: here's a diff with origin redis master-slave repl
+            // as in REPL_STATE_TRANSFER state, server.master shall be null, as not client will be generated before receive the whole RDB
+            // However, in CRDT implementation, in order to have a partiall-full sync, we need a client struct when RDB receving
+            // So, here's the problem, the client needs to be freed
             if (crdtMaster->masterhost && crdtMaster->repl_state == REPL_STATE_TRANSFER &&
                 (time(NULL) - crdtMaster->repl_transfer_lastio) > crdtServer.repl_timeout) {
                 serverLog(LL_NOTICE,
-                          "[CRDT]Timeout receiving bulk data from MASTER... If the problem persists try to set the 'repl-timeout' parameter in redis.conf to a larger value.");
-                crdtCancelReplicationHandshake(crdtMaster->gid);
+                          "[CRDT][gid: %lld]Timeout receiving bulk data from MASTER... If the problem persists try to set the 'repl-timeout' parameter in redis.conf to a larger value.", crdtMaster->gid);
+                crdtCancelReplicationHandshake(crdtMaster);
             }
 
             /* Timed out master when we are an already connected slave? */

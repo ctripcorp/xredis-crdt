@@ -12,7 +12,9 @@
       </CompDBProjectSettings>
     </option>
   </component>
-  <component name="CompDBWorkspace" PROJECT_DIR="$PROJECT_DIR$" />
+  <component name="CompDBWorkspace" PROJECT_DIR="$PROJECT_DIR$">
+    <contentRoot DIR="$PROJECT_DIR$/src" />
+  </component>
   <component name="JavaScriptSettings">
     <option name="languageLevel" value="ES6" />
   </component>

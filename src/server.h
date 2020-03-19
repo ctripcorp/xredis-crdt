@@ -1587,7 +1587,7 @@ CRDT_Master_Instance *getPeerMaster(long long gid);
 void refreshVectorClock(client *c, sds vcStr);
 long long getMyGidLogicTime(VectorClock *vc);
 long long getMyLogicTime();
-void crdtReplicationUnsetMaster(long long gid);
+void crdtReplicationUnsetMaster(CRDT_Master_Instance * peerMaster);
 void crdtReplicationUnsetAllMasters();
 void debugCancelCrdt(client *c);
 void crdtRoleCommand(client *c);
@@ -1595,7 +1595,7 @@ CRDT_Master_Instance *createPeerMaster(client *c, long long gid);
 void crdtOvcCommand(client *c);
 void feedCrdtBacklog(robj **argv, int argc);
 void replicationFeedAllSlaves(int dictid, robj **argv, int argc);
-void crdtCancelReplicationHandshake(long long gid);
+void crdtCancelReplicationHandshake(CRDT_Master_Instance * peerMaster);
 
 /* CRDT Command */
 void crdtDelCommand(client *c);

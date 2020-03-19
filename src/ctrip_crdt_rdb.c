@@ -333,7 +333,7 @@ crdtMergeDelCommand(client *c) {
     return;
 
 error:
-    crdtCancelReplicationHandshake(sourceGid);
+    crdtCancelReplicationHandshake(getPeerMaster(sourceGid));
     return;
 
 }
@@ -408,7 +408,7 @@ crdtMergeCommand(client *c) {
     return;
 
 error:
-    crdtCancelReplicationHandshake(sourceGid);
+    crdtCancelReplicationHandshake(getPeerMaster(sourceGid));
     return;
 
 }
