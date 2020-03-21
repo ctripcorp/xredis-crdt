@@ -1386,7 +1386,17 @@ void crdtReplicationUnsetAllMasters() {
     listRewind(crdtServer.crdtMasters, &li);
     while ((ln = listNext(&li)) != NULL) {
         CRDT_Master_Instance *crdtMaster = ln->value;
+<<<<<<< HEAD
         crdtReplicationUnsetMaster(crdtMaster);
+=======
+        crdtReplicationDiscardCachedMaster(crdtMaster);
+        if(crdtMaster->repl_state == REPL_STATE_CONNECTED) {
+            if(crdtMaster->master) {freeClient(crdtMaster->master);}
+        } else {
+            crdtCancelReplicationHandshake(crdtMaster->gid);
+        }
+        crdtMaster->repl_state = REPL_STATE_CONNECT;
+>>>>>>> 6edbbd09993d6f005346f95ac04b1ab237a6a47c
     }
     serverLog(LL_NOTICE, "[CRDT][end]disconnect all crdt masters");
 }
