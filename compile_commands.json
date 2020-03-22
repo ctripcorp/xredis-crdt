@@ -21,25 +21,20 @@
   "file": "lazyfree.c"
  }, 
  {
-  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
+  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/deps/lua/src", 
   "arguments": [
    "cc", 
-   "-std=c99", 
-   "-pedantic", 
-   "-DREDIS_STATIC=", 
-   "-Wall", 
-   "-W", 
-   "-Wno-missing-field-initializers", 
    "-O2", 
-   "-g", 
-   "-ggdb", 
-   "-I../deps/hiredis", 
-   "-I../deps/linenoise", 
-   "-I../deps/lua/src", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
    "-c", 
-   "ctrip_crdt_gc.c"
+   "-o", 
+   "ldblib.o", 
+   "ldblib.c"
   ], 
-  "file": "ctrip_crdt_gc.c"
+  "file": "ldblib.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/deps/lua/src", 
@@ -72,6 +67,27 @@
    "lmathlib.c"
   ], 
   "file": "lmathlib.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
+  "arguments": [
+   "cc", 
+   "-std=c99", 
+   "-pedantic", 
+   "-DREDIS_STATIC=", 
+   "-Wall", 
+   "-W", 
+   "-Wno-missing-field-initializers", 
+   "-O2", 
+   "-g", 
+   "-ggdb", 
+   "-I../deps/hiredis", 
+   "-I../deps/linenoise", 
+   "-I../deps/lua/src", 
+   "-c", 
+   "geohash_helper.c"
+  ], 
+  "file": "geohash_helper.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/deps/lua/src", 
@@ -316,6 +332,22 @@
   "file": "ltm.c"
  }, 
  {
+  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "llex.o", 
+   "llex.c"
+  ], 
+  "file": "llex.c"
+ }, 
+ {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
   "arguments": [
    "cc", 
@@ -400,20 +432,25 @@
   "file": "zipmap.c"
  }, 
  {
-  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/deps/lua/src", 
+  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
   "arguments": [
    "cc", 
-   "-O2", 
-   "-Wall", 
-   "-DLUA_ANSI", 
-   "-DENABLE_CJSON_GLOBAL", 
+   "-std=c99", 
+   "-pedantic", 
    "-DREDIS_STATIC=", 
+   "-Wall", 
+   "-W", 
+   "-Wno-missing-field-initializers", 
+   "-O2", 
+   "-g", 
+   "-ggdb", 
+   "-I../deps/hiredis", 
+   "-I../deps/linenoise", 
+   "-I../deps/lua/src", 
    "-c", 
-   "-o", 
-   "linit.o", 
-   "linit.c"
+   "redis-check-rdb.c"
   ], 
-  "file": "linit.c"
+  "file": "redis-check-rdb.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/deps/lua/src", 
@@ -511,9 +548,9 @@
    "-I../deps/linenoise", 
    "-I../deps/lua/src", 
    "-c", 
-   "ctrip_vector_clock.c"
+   "rio.c"
   ], 
-  "file": "ctrip_vector_clock.c"
+  "file": "rio.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/deps/lua/src", 
@@ -542,10 +579,10 @@
    "-DREDIS_STATIC=", 
    "-c", 
    "-o", 
-   "lstrlib.o", 
-   "lstrlib.c"
+   "lgc.o", 
+   "lgc.c"
   ], 
-  "file": "lstrlib.c"
+  "file": "lgc.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
@@ -627,46 +664,23 @@
   "file": "object.c"
  }, 
  {
-  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
+  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/deps/hiredis", 
   "arguments": [
    "cc", 
    "-std=c99", 
    "-pedantic", 
-   "-DREDIS_STATIC=", 
+   "-c", 
+   "-O3", 
+   "-fPIC", 
    "-Wall", 
    "-W", 
-   "-Wno-missing-field-initializers", 
-   "-O2", 
+   "-Wstrict-prototypes", 
+   "-Wwrite-strings", 
    "-g", 
    "-ggdb", 
-   "-I../deps/hiredis", 
-   "-I../deps/linenoise", 
-   "-I../deps/lua/src", 
-   "-c", 
-   "db.c"
+   "net.c"
   ], 
-  "file": "db.c"
- }, 
- {
-  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
-  "arguments": [
-   "cc", 
-   "-std=c99", 
-   "-pedantic", 
-   "-DREDIS_STATIC=", 
-   "-Wall", 
-   "-W", 
-   "-Wno-missing-field-initializers", 
-   "-O2", 
-   "-g", 
-   "-ggdb", 
-   "-I../deps/hiredis", 
-   "-I../deps/linenoise", 
-   "-I../deps/lua/src", 
-   "-c", 
-   "rio.c"
-  ], 
-  "file": "rio.c"
+  "file": "net.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
@@ -763,10 +777,10 @@
    "-DREDIS_STATIC=", 
    "-c", 
    "-o", 
-   "lgc.o", 
-   "lgc.c"
+   "lstrlib.o", 
+   "lstrlib.c"
   ], 
-  "file": "lgc.c"
+  "file": "lstrlib.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
@@ -811,25 +825,20 @@
   "file": "t_hash.c"
  }, 
  {
-  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
+  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/deps/lua/src", 
   "arguments": [
    "cc", 
-   "-std=c99", 
-   "-pedantic", 
-   "-DREDIS_STATIC=", 
-   "-Wall", 
-   "-W", 
-   "-Wno-missing-field-initializers", 
    "-O2", 
-   "-g", 
-   "-ggdb", 
-   "-I../deps/hiredis", 
-   "-I../deps/linenoise", 
-   "-I../deps/lua/src", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
    "-c", 
-   "redis-check-rdb.c"
+   "-o", 
+   "linit.o", 
+   "linit.c"
   ], 
-  "file": "redis-check-rdb.c"
+  "file": "linit.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
@@ -851,6 +860,22 @@
    "rand.c"
   ], 
   "file": "rand.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/deps/lua/src", 
+  "arguments": [
+   "cc", 
+   "-O2", 
+   "-Wall", 
+   "-DLUA_ANSI", 
+   "-DENABLE_CJSON_GLOBAL", 
+   "-DREDIS_STATIC=", 
+   "-c", 
+   "-o", 
+   "lbaselib.o", 
+   "lbaselib.c"
+  ], 
+  "file": "lbaselib.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
@@ -967,27 +992,6 @@
    "lundump.c"
   ], 
   "file": "lundump.c"
- }, 
- {
-  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
-  "arguments": [
-   "cc", 
-   "-std=c99", 
-   "-pedantic", 
-   "-DREDIS_STATIC=", 
-   "-Wall", 
-   "-W", 
-   "-Wno-missing-field-initializers", 
-   "-O2", 
-   "-g", 
-   "-ggdb", 
-   "-I../deps/hiredis", 
-   "-I../deps/linenoise", 
-   "-I../deps/lua/src", 
-   "-c", 
-   "geohash_helper.c"
-  ], 
-  "file": "geohash_helper.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
@@ -1227,27 +1231,6 @@
   "file": "hyperloglog.c"
  }, 
  {
-  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
-  "arguments": [
-   "cc", 
-   "-std=c99", 
-   "-pedantic", 
-   "-DREDIS_STATIC=", 
-   "-Wall", 
-   "-W", 
-   "-Wno-missing-field-initializers", 
-   "-O2", 
-   "-g", 
-   "-ggdb", 
-   "-I../deps/hiredis", 
-   "-I../deps/linenoise", 
-   "-I../deps/lua/src", 
-   "-c", 
-   "replication.c"
-  ], 
-  "file": "replication.c"
- }, 
- {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/deps/lua/src", 
   "arguments": [
    "cc", 
@@ -1299,9 +1282,9 @@
    "-I../deps/linenoise", 
    "-I../deps/lua/src", 
    "-c", 
-   "t_string.c"
+   "ae.c"
   ], 
-  "file": "t_string.c"
+  "file": "ae.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
@@ -1323,6 +1306,27 @@
    "aof.c"
   ], 
   "file": "aof.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
+  "arguments": [
+   "cc", 
+   "-std=c99", 
+   "-pedantic", 
+   "-DREDIS_STATIC=", 
+   "-Wall", 
+   "-W", 
+   "-Wno-missing-field-initializers", 
+   "-O2", 
+   "-g", 
+   "-ggdb", 
+   "-I../deps/hiredis", 
+   "-I../deps/linenoise", 
+   "-I../deps/lua/src", 
+   "-c", 
+   "server.c"
+  ], 
+  "file": "server.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
@@ -1425,6 +1429,27 @@
    "-I../deps/linenoise", 
    "-I../deps/lua/src", 
    "-c", 
+   "ctrip_vector_clock.c"
+  ], 
+  "file": "ctrip_vector_clock.c"
+ }, 
+ {
+  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
+  "arguments": [
+   "cc", 
+   "-std=c99", 
+   "-pedantic", 
+   "-DREDIS_STATIC=", 
+   "-Wall", 
+   "-W", 
+   "-Wno-missing-field-initializers", 
+   "-O2", 
+   "-g", 
+   "-ggdb", 
+   "-I../deps/hiredis", 
+   "-I../deps/linenoise", 
+   "-I../deps/lua/src", 
+   "-c", 
    "config.c"
   ], 
   "file": "config.c"
@@ -1446,9 +1471,9 @@
    "-I../deps/linenoise", 
    "-I../deps/lua/src", 
    "-c", 
-   "ctrip.c"
+   "ctrip_crdt_replication.c"
   ], 
-  "file": "ctrip.c"
+  "file": "ctrip_crdt_replication.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
@@ -1472,22 +1497,6 @@
   "file": "t_set.c"
  }, 
  {
-  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/deps/lua/src", 
-  "arguments": [
-   "cc", 
-   "-O2", 
-   "-Wall", 
-   "-DLUA_ANSI", 
-   "-DENABLE_CJSON_GLOBAL", 
-   "-DREDIS_STATIC=", 
-   "-c", 
-   "-o", 
-   "llex.o", 
-   "llex.c"
-  ], 
-  "file": "llex.c"
- }, 
- {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
   "arguments": [
    "cc", 
@@ -1504,9 +1513,9 @@
    "-I../deps/linenoise", 
    "-I../deps/lua/src", 
    "-c", 
-   "server.c"
+   "sort.c"
   ], 
-  "file": "server.c"
+  "file": "sort.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
@@ -1588,27 +1597,6 @@
    "-I../deps/linenoise", 
    "-I../deps/lua/src", 
    "-c", 
-   "slowlog.c"
-  ], 
-  "file": "slowlog.c"
- }, 
- {
-  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
-  "arguments": [
-   "cc", 
-   "-std=c99", 
-   "-pedantic", 
-   "-DREDIS_STATIC=", 
-   "-Wall", 
-   "-W", 
-   "-Wno-missing-field-initializers", 
-   "-O2", 
-   "-g", 
-   "-ggdb", 
-   "-I../deps/hiredis", 
-   "-I../deps/linenoise", 
-   "-I../deps/lua/src", 
-   "-c", 
    "dict.c"
   ], 
   "file": "dict.c"
@@ -1635,20 +1623,25 @@
   "file": "t_zset.c"
  }, 
  {
-  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/deps/lua/src", 
+  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
   "arguments": [
    "cc", 
-   "-O2", 
-   "-Wall", 
-   "-DLUA_ANSI", 
-   "-DENABLE_CJSON_GLOBAL", 
+   "-std=c99", 
+   "-pedantic", 
    "-DREDIS_STATIC=", 
+   "-Wall", 
+   "-W", 
+   "-Wno-missing-field-initializers", 
+   "-O2", 
+   "-g", 
+   "-ggdb", 
+   "-I../deps/hiredis", 
+   "-I../deps/linenoise", 
+   "-I../deps/lua/src", 
    "-c", 
-   "-o", 
-   "lparser.o", 
-   "lparser.c"
+   "replication.c"
   ], 
-  "file": "lparser.c"
+  "file": "replication.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
@@ -1667,9 +1660,9 @@
    "-I../deps/linenoise", 
    "-I../deps/lua/src", 
    "-c", 
-   "ae.c"
+   "t_string.c"
   ], 
-  "file": "ae.c"
+  "file": "t_string.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
@@ -1751,6 +1744,27 @@
   "file": "quicklist.c"
  }, 
  {
+  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
+  "arguments": [
+   "cc", 
+   "-std=c99", 
+   "-pedantic", 
+   "-DREDIS_STATIC=", 
+   "-Wall", 
+   "-W", 
+   "-Wno-missing-field-initializers", 
+   "-O2", 
+   "-g", 
+   "-ggdb", 
+   "-I../deps/hiredis", 
+   "-I../deps/linenoise", 
+   "-I../deps/lua/src", 
+   "-c", 
+   "slowlog.c"
+  ], 
+  "file": "slowlog.c"
+ }, 
+ {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/deps/lua/src", 
   "arguments": [
    "cc", 
@@ -1804,27 +1818,6 @@
   "file": "lstring.c"
  }, 
  {
-  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
-  "arguments": [
-   "cc", 
-   "-std=c99", 
-   "-pedantic", 
-   "-DREDIS_STATIC=", 
-   "-Wall", 
-   "-W", 
-   "-Wno-missing-field-initializers", 
-   "-O2", 
-   "-g", 
-   "-ggdb", 
-   "-I../deps/hiredis", 
-   "-I../deps/linenoise", 
-   "-I../deps/lua/src", 
-   "-c", 
-   "latency.c"
-  ], 
-  "file": "latency.c"
- }, 
- {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/deps/hiredis", 
   "arguments": [
    "cc", 
@@ -1865,20 +1858,25 @@
   "file": "redis-cli.c"
  }, 
  {
-  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/deps/lua/src", 
+  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
   "arguments": [
    "cc", 
-   "-O2", 
-   "-Wall", 
-   "-DLUA_ANSI", 
-   "-DENABLE_CJSON_GLOBAL", 
+   "-std=c99", 
+   "-pedantic", 
    "-DREDIS_STATIC=", 
+   "-Wall", 
+   "-W", 
+   "-Wno-missing-field-initializers", 
+   "-O2", 
+   "-g", 
+   "-ggdb", 
+   "-I../deps/hiredis", 
+   "-I../deps/linenoise", 
+   "-I../deps/lua/src", 
    "-c", 
-   "-o", 
-   "ldblib.o", 
-   "ldblib.c"
+   "ctrip_crdt_gc.c"
   ], 
-  "file": "ldblib.c"
+  "file": "ctrip_crdt_gc.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/deps/lua/src", 
@@ -1913,23 +1911,25 @@
   "file": "lfunc.c"
  }, 
  {
-  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/deps/hiredis", 
+  "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
   "arguments": [
    "cc", 
    "-std=c99", 
    "-pedantic", 
-   "-c", 
-   "-O3", 
-   "-fPIC", 
+   "-DREDIS_STATIC=", 
    "-Wall", 
    "-W", 
-   "-Wstrict-prototypes", 
-   "-Wwrite-strings", 
+   "-Wno-missing-field-initializers", 
+   "-O2", 
    "-g", 
    "-ggdb", 
-   "net.c"
+   "-I../deps/hiredis", 
+   "-I../deps/linenoise", 
+   "-I../deps/lua/src", 
+   "-c", 
+   "db.c"
   ], 
-  "file": "net.c"
+  "file": "db.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
@@ -1963,10 +1963,10 @@
    "-DREDIS_STATIC=", 
    "-c", 
    "-o", 
-   "lbaselib.o", 
-   "lbaselib.c"
+   "lparser.o", 
+   "lparser.c"
   ], 
-  "file": "lbaselib.c"
+  "file": "lparser.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
@@ -2022,9 +2022,9 @@
    "-I../deps/linenoise", 
    "-I../deps/lua/src", 
    "-c", 
-   "ctrip_crdt_replication.c"
+   "ctrip.c"
   ], 
-  "file": "ctrip_crdt_replication.c"
+  "file": "ctrip.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 
@@ -2043,9 +2043,9 @@
    "-I../deps/linenoise", 
    "-I../deps/lua/src", 
    "-c", 
-   "sort.c"
+   "latency.c"
   ], 
-  "file": "sort.c"
+  "file": "latency.c"
  }, 
  {
   "directory": "/Users/zhuchen/Develop/c/xredis-crdt/src", 

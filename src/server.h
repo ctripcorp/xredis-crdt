@@ -1588,7 +1588,7 @@ void refreshVectorClock(client *c, sds vcStr);
 long long getMyGidLogicTime(VectorClock *vc);
 long long getMyLogicTime();
 void crdtReplicationUnsetMaster(CRDT_Master_Instance * peerMaster);
-void crdtReplicationUnsetAllMasters();
+void crdtReplicationFreeAllMasters();
 void debugCancelCrdt(client *c);
 void crdtRoleCommand(client *c);
 CRDT_Master_Instance *createPeerMaster(client *c, long long gid);
