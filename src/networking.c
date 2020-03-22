@@ -132,11 +132,15 @@ client *createClient(int fd) {
     c->watched_keys = listCreate();
     c->pubsub_channels = dictCreate(&objectKeyPointerValueDictType,NULL);
     c->pubsub_patterns = listCreate();
+    c->crdt_pubsub_channels = dictCreate(&objectKeyPointerValueDictType,NULL);
+    c->crdt_pubsub_patterns = listCreate();
     c->peerid = NULL;
     c->gid = 0;
     c->vectorClock = NULL;
     listSetFreeMethod(c->pubsub_patterns,decrRefCountVoid);
     listSetMatchMethod(c->pubsub_patterns,listMatchObjects);
+    listSetFreeMethod(c->crdt_pubsub_patterns,decrRefCountVoid);
+    listSetMatchMethod(c->crdt_pubsub_patterns,listMatchObjects);
     if (fd != -1) listAddNodeTail(server.clients,c);
     initClientMultiState(c);
     return c;
@@ -841,11 +845,14 @@ void freeClient(client *c) {
     listRelease(c->watched_keys);
 
     /* Unsubscribe from all the pubsub channels */
-    pubsubUnsubscribeAllChannels(c,0);
-    pubsubUnsubscribeAllPatterns(c,0);
+    pubsubUnsubscribeAllChannels(&server,c,0);
+    pubsubUnsubscribeAllPatterns(&server,c,0);
+    pubsubUnsubscribeAllChannels(&crdtServer,c,0);
+    pubsubUnsubscribeAllPatterns(&crdtServer,c,0);
     dictRelease(c->pubsub_channels);
     listRelease(c->pubsub_patterns);
-
+    dictRelease(c->crdt_pubsub_channels);
+    listRelease(c->crdt_pubsub_patterns);
     /* Free data structures. */
     listRelease(c->reply);
     freeClientArgv(c);
@@ -1909,7 +1916,8 @@ int getClientType(client *c) {
     if (c->flags & CLIENT_MASTER) return CLIENT_TYPE_MASTER;
     if ((c->flags & CLIENT_SLAVE) && !(c->flags & CLIENT_MONITOR))
         return CLIENT_TYPE_SLAVE;
-    if (c->flags & CLIENT_PUBSUB) return CLIENT_TYPE_PUBSUB;
+    if (c->flags & CLIENT_PUBSUB ) return CLIENT_TYPE_PUBSUB;
+    if (c->flags & CLIENT_CRDT_PUBSUB) return CLIENT_TYPE_PUBSUB;
     return CLIENT_TYPE_NORMAL;
 }
 

@@ -270,6 +270,7 @@ void REDISMODULE_API_FUNC(RedisModule_MergeVectorClock) (long long gid, void *vc
 int REDISMODULE_API_FUNC(RedisModule_ModuleTombstoneSetValue) (RedisModuleKey *key, RedisModuleType *mt, void *value);
 void *REDISMODULE_API_FUNC(RedisModule_ModuleTypeGetTombstone)(RedisModuleKey *key);
 void REDISMODULE_API_FUNC(RedisModule_NotifyKeyspaceEvent)(RedisModuleCtx *ctx,int type, char *event, RedisModuleString *key);
+int REDISMODULE_API_FUNC(RedisModule_CrdtPubsubPublishMessage)(RedisModuleString *channel, RedisModuleString *message);
 
 /* Experimental APIs */
 #ifdef REDISMODULE_EXPERIMENTAL_API
@@ -407,6 +408,7 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(ModuleTombstoneSetValue);
     REDISMODULE_GET_API(ModuleTypeGetTombstone);
     REDISMODULE_GET_API(NotifyKeyspaceEvent);
+    REDISMODULE_GET_API(CrdtPubsubPublishMessage);
 
 #ifdef REDISMODULE_EXPERIMENTAL_API
     REDISMODULE_GET_API(GetThreadSafeContext);

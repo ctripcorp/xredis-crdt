@@ -266,11 +266,16 @@ struct redisCommand redisCommandTable[] = {
     {"debug",debugCommand,-1,"as",0,NULL,0,0,0,0,0},
     {"config",configCommand,-2,"lat",0,NULL,0,0,0,0,0},
    {"subscribe",subscribeCommand,-2,"pslt",0,NULL,0,0,0,0,0},
+   {"crdt.subscribe",crdtSubscribeCommand,-2,"pslt",0,NULL,0,0,0,0,0},
    {"unsubscribe",unsubscribeCommand,-1,"pslt",0,NULL,0,0,0,0,0},
+   {"crdt.unsubscribe",unCrdtSubscribeCommand,-1,"pslt",0,NULL,0,0,0,0,0},
    {"psubscribe",psubscribeCommand,-2,"pslt",0,NULL,0,0,0,0,0},
+   {"crdt.psubscribe",crdtPsubscribeCommand,-2,"pslt",0,NULL,0,0,0,0,0},
    {"punsubscribe",punsubscribeCommand,-1,"pslt",0,NULL,0,0,0,0,0},
+   {"crdt.punsubscribe",crdtPunsubscribeCommand,-1,"pslt",0,NULL,0,0,0,0,0},
    {"publish",publishCommand,3,"pltF",0,NULL,0,0,0,0,0},
    {"pubsub",pubsubCommand,-2,"pltR",0,NULL,0,0,0,0,0},
+   {"crdt.pubsub", crdtPubsubCommand,-2,"pltR",0,NULL,0,0,0,0,0},
 //    {"watch",watchCommand,-2,"sF",0,NULL,1,-1,1,0,0},
 //    {"unwatch",unwatchCommand,1,"sF",0,NULL,0,0,0,0,0},
 //    {"cluster",clusterCommand,-2,"a",0,NULL,0,0,0,0,0},
@@ -815,6 +820,7 @@ int clientsCronHandleTimeout(client *c, mstime_t now_ms) {
         !(c->flags & CLIENT_MASTER) &&   /* no timeout for masters */
         !(c->flags & CLIENT_BLOCKED) &&  /* no timeout for BLPOP */
         !(c->flags & CLIENT_PUBSUB) &&   /* no timeout for Pub/Sub clients */
+        !(c->flags & CLIENT_CRDT_PUBSUB) && /* no timeout for crdt Pub/Sub clients */
         (now - c->lastinteraction > server.maxidletime))
     {
         serverLog(LL_VERBOSE,"Closing idle client");
@@ -1390,9 +1396,13 @@ void createSharedObjects(void) {
     shared.messagebulk = createStringObject("$7\r\nmessage\r\n",13);
     shared.pmessagebulk = createStringObject("$8\r\npmessage\r\n",14);
     shared.subscribebulk = createStringObject("$9\r\nsubscribe\r\n",15);
+    shared.crdtsubscribebulk = createStringObject("$13\r\ncrdtsubscribe\r\n",20);
     shared.unsubscribebulk = createStringObject("$11\r\nunsubscribe\r\n",18);
+    shared.uncrdtsubscribebulk = createStringObject("$15\r\ncrdtunsubscribe\r\n",22);
     shared.psubscribebulk = createStringObject("$10\r\npsubscribe\r\n",17);
+    shared.crdtpsubscribebulk = createStringObject("$14\r\ncrdtpsubscribe\r\n",21);
     shared.punsubscribebulk = createStringObject("$12\r\npunsubscribe\r\n",19);
+    shared.crdtpunsubscribebulk = createStringObject("$16\r\ncrdtpunsubscribe\r\n",23);
     shared.del = createStringObject("DEL",3);
     shared.crdtdel = createStringObject("CRDT.DEL", 8);
     shared.unlink = createStringObject("UNLINK",6);
@@ -2590,8 +2600,17 @@ int processCommand(client *c) {
         c->cmd->proc != subscribeCommand &&
         c->cmd->proc != unsubscribeCommand &&
         c->cmd->proc != psubscribeCommand &&
-        c->cmd->proc != punsubscribeCommand) {
+        c->cmd->proc != punsubscribeCommand ) {
         addReplyError(c,"only (P)SUBSCRIBE / (P)UNSUBSCRIBE / PING / QUIT allowed in this context");
+        return C_OK;
+    }
+    if (c->flags & CLIENT_CRDT_PUBSUB &&
+        c->cmd->proc != pingCommand &&
+        c->cmd->proc != crdtSubscribeCommand &&
+        c->cmd->proc != unCrdtSubscribeCommand && 
+        c->cmd->proc != crdtPsubscribeCommand &&
+        c->cmd->proc != crdtPunsubscribeCommand) {
+        addReplyError(c,"only crdt (P)SUBSCRIBE / (P)UNSUBSCRIBE / PING / QUIT allowed in this context");
         return C_OK;
     }
 
@@ -2801,6 +2820,13 @@ void pingCommand(client *c) {
     }
 
     if (c->flags & CLIENT_PUBSUB) {
+        addReply(c,shared.mbulkhdr[2]);
+        addReplyBulkCBuffer(c,"pong",4);
+        if (c->argc == 1)
+            addReplyBulkCBuffer(c,"",0);
+        else
+            addReplyBulk(c,c->argv[1]);
+    } else if (c->flags & CLIENT_CRDT_PUBSUB) {
         addReply(c,shared.mbulkhdr[2]);
         addReplyBulkCBuffer(c,"pong",4);
         if (c->argc == 1)

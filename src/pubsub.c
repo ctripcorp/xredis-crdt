@@ -52,23 +52,32 @@ int clientSubscriptionsCount(client *c) {
     return dictSize(c->pubsub_channels)+
            listLength(c->pubsub_patterns);
 }
+int clientCrdtSubscriptionsCount(client *c) {
+    return dictSize(c->crdt_pubsub_channels) +
+        listLength(c->crdt_pubsub_patterns);
+}
 
 /* Subscribe a client to a channel. Returns 1 if the operation succeeded, or
  * 0 if the client was already subscribed to that channel. */
-int pubsubSubscribeChannel(client *c, robj *channel) {
+int pubsubSubscribeChannel(struct redisServer* srv, client *c, robj *channel) {
     dictEntry *de;
     list *clients = NULL;
     int retval = 0;
-
+    dict* pubsub_channels;
+    if(srv == &crdtServer) {
+        pubsub_channels = c->crdt_pubsub_channels;
+    } else {
+        pubsub_channels = c->pubsub_channels;
+    }
     /* Add the channel to the client -> channels hash table */
-    if (dictAdd(c->pubsub_channels,channel,NULL) == DICT_OK) {
+    if (dictAdd(pubsub_channels,channel,NULL) == DICT_OK) {
         retval = 1;
         incrRefCount(channel);
         /* Add the client to the channel -> list of clients hash table */
-        de = dictFind(server.pubsub_channels,channel);
+        de = dictFind(srv->pubsub_channels,channel);
         if (de == NULL) {
             clients = listCreate();
-            dictAdd(server.pubsub_channels,channel,clients);
+            dictAdd(srv->pubsub_channels,channel,clients);
             incrRefCount(channel);
         } else {
             clients = dictGetVal(de);
@@ -76,28 +85,37 @@ int pubsubSubscribeChannel(client *c, robj *channel) {
         listAddNodeTail(clients,c);
     }
     /* Notify the client */
-    addReply(c,shared.mbulkhdr[3]);
-    addReply(c,shared.subscribebulk);
-    addReplyBulk(c,channel);
-    addReplyLongLong(c,clientSubscriptionsCount(c));
+    if(srv == &crdtServer) {
+        addReply(c,shared.mbulkhdr[3]);
+        addReply(c,shared.crdtsubscribebulk);
+        addReplyBulk(c,channel);
+        addReplyLongLong(c, clientCrdtSubscriptionsCount(c));
+    } else {
+        addReply(c,shared.mbulkhdr[3]);
+        addReply(c,shared.subscribebulk);
+        addReplyBulk(c,channel);
+        addReplyLongLong(c,clientSubscriptionsCount(c));
+    
+    }
     return retval;
 }
 
 /* Unsubscribe a client from a channel. Returns 1 if the operation succeeded, or
  * 0 if the client was not subscribed to the specified channel. */
-int pubsubUnsubscribeChannel(client *c, robj *channel, int notify) {
+int pubsubUnsubscribeChannel(struct redisServer *srv, client *c, robj *channel, int notify) {
     dictEntry *de;
     list *clients;
     listNode *ln;
     int retval = 0;
+    dict* pubsub_channels = srv == &crdtServer? c->crdt_pubsub_channels: c->pubsub_channels;
 
     /* Remove the channel from the client -> channels hash table */
     incrRefCount(channel); /* channel may be just a pointer to the same object
                             we have in the hash tables. Protect it... */
-    if (dictDelete(c->pubsub_channels,channel) == DICT_OK) {
+    if (dictDelete(pubsub_channels,channel) == DICT_OK) {
         retval = 1;
         /* Remove the client from the channel -> clients list hash table */
-        de = dictFind(server.pubsub_channels,channel);
+        de = dictFind(srv->pubsub_channels,channel);
         serverAssertWithInfo(c,NULL,de != NULL);
         clients = dictGetVal(de);
         ln = listSearchKey(clients,c);
@@ -107,16 +125,25 @@ int pubsubUnsubscribeChannel(client *c, robj *channel, int notify) {
             /* Free the list and associated hash entry at all if this was
              * the latest client, so that it will be possible to abuse
              * Redis PUBSUB creating millions of channels. */
-            dictDelete(server.pubsub_channels,channel);
+            dictDelete(srv->pubsub_channels,channel);
         }
     }
     /* Notify the client */
     if (notify) {
-        addReply(c,shared.mbulkhdr[3]);
-        addReply(c,shared.unsubscribebulk);
-        addReplyBulk(c,channel);
-        addReplyLongLong(c,dictSize(c->pubsub_channels)+
-                       listLength(c->pubsub_patterns));
+        if (srv == &crdtServer) {
+            addReply(c,shared.mbulkhdr[3]);
+            addReply(c,shared.uncrdtsubscribebulk);
+            addReplyBulk(c,channel);
+            addReplyLongLong(c,dictSize(c->crdt_pubsub_channels)+
+                        listLength(c->crdt_pubsub_patterns));
+        } else {
+            addReply(c,shared.mbulkhdr[3]);
+            addReply(c,shared.unsubscribebulk);
+            addReplyBulk(c,channel);
+            addReplyLongLong(c,dictSize(c->pubsub_channels)+
+                        listLength(c->pubsub_patterns));
+        }
+        
 
     }
     decrRefCount(channel); /* it is finally safe to release it */
@@ -124,50 +151,75 @@ int pubsubUnsubscribeChannel(client *c, robj *channel, int notify) {
 }
 
 /* Subscribe a client to a pattern. Returns 1 if the operation succeeded, or 0 if the client was already subscribed to that pattern. */
-int pubsubSubscribePattern(client *c, robj *pattern) {
+int pubsubSubscribePattern(struct redisServer *srv, client *c, robj *pattern) {
     int retval = 0;
-
-    if (listSearchKey(c->pubsub_patterns,pattern) == NULL) {
+    list* pubsub_patterns;
+    if(srv == &crdtServer) {
+        pubsub_patterns = c->crdt_pubsub_patterns;
+    } else {
+        pubsub_patterns = c->pubsub_patterns;
+    }
+    if (listSearchKey(pubsub_patterns,pattern) == NULL) {
         retval = 1;
         pubsubPattern *pat;
-        listAddNodeTail(c->pubsub_patterns,pattern);
+        listAddNodeTail(pubsub_patterns,pattern);
         incrRefCount(pattern);
         pat = zmalloc(sizeof(*pat));
         pat->pattern = getDecodedObject(pattern);
         pat->client = c;
-        listAddNodeTail(server.pubsub_patterns,pat);
+        listAddNodeTail(srv->pubsub_patterns,pat);
     }
     /* Notify the client */
-    addReply(c,shared.mbulkhdr[3]);
-    addReply(c,shared.psubscribebulk);
-    addReplyBulk(c,pattern);
-    addReplyLongLong(c,clientSubscriptionsCount(c));
+    if(srv == &crdtServer) {
+        addReply(c,shared.mbulkhdr[3]);
+        addReply(c,shared.crdtpsubscribebulk);
+        addReplyBulk(c,pattern);
+        addReplyLongLong(c,clientCrdtSubscriptionsCount(c));
+    } else {
+        addReply(c,shared.mbulkhdr[3]);
+        addReply(c,shared.psubscribebulk);
+        addReplyBulk(c,pattern);
+        addReplyLongLong(c,clientSubscriptionsCount(c));
+    }
+    
     return retval;
 }
 
 /* Unsubscribe a client from a channel. Returns 1 if the operation succeeded, or
  * 0 if the client was not subscribed to the specified channel. */
-int pubsubUnsubscribePattern(client *c, robj *pattern, int notify) {
+int pubsubUnsubscribePattern(struct redisServer *srv, client *c, robj *pattern, int notify) {
     listNode *ln;
     pubsubPattern pat;
     int retval = 0;
-
+    list* pubsub_patterns;
+    if(srv == &crdtServer) {
+        pubsub_patterns = c->crdt_pubsub_patterns;
+    } else {
+        pubsub_patterns = c->pubsub_patterns;
+    }
     incrRefCount(pattern); /* Protect the object. May be the same we remove */
-    if ((ln = listSearchKey(c->pubsub_patterns,pattern)) != NULL) {
+    if ((ln = listSearchKey(pubsub_patterns,pattern)) != NULL) {
         retval = 1;
-        listDelNode(c->pubsub_patterns,ln);
+        listDelNode(pubsub_patterns,ln);
         pat.client = c;
         pat.pattern = pattern;
-        ln = listSearchKey(server.pubsub_patterns,&pat);
-        listDelNode(server.pubsub_patterns,ln);
+        ln = listSearchKey(srv->pubsub_patterns,&pat);
+        listDelNode(srv->pubsub_patterns,ln);
     }
     /* Notify the client */
     if (notify) {
-        addReply(c,shared.mbulkhdr[3]);
-        addReply(c,shared.punsubscribebulk);
-        addReplyBulk(c,pattern);
-        addReplyLongLong(c,dictSize(c->pubsub_channels)+
-                       listLength(c->pubsub_patterns));
+        if(srv == &crdtServer) {
+            addReply(c,shared.mbulkhdr[3]);
+            addReply(c,shared.crdtpunsubscribebulk);
+            addReplyBulk(c,pattern);
+            addReplyLongLong(c,clientCrdtSubscriptionsCount(c));
+        } else {
+            addReply(c,shared.mbulkhdr[3]);
+            addReply(c,shared.punsubscribebulk);
+            addReplyBulk(c,pattern);
+            addReplyLongLong(c,clientSubscriptionsCount(c));
+        }
+        
     }
     decrRefCount(pattern);
     return retval;
@@ -175,23 +227,31 @@ int pubsubUnsubscribePattern(client *c, robj *pattern, int notify) {
 
 /* Unsubscribe from all the channels. Return the number of channels the
  * client was subscribed to. */
-int pubsubUnsubscribeAllChannels(client *c, int notify) {
-    dictIterator *di = dictGetSafeIterator(c->pubsub_channels);
+int pubsubUnsubscribeAllChannels(struct redisServer *srv, client *c, int notify) {
+    dict* pubsub_channels = srv == &crdtServer ? c->crdt_pubsub_channels: c->pubsub_channels;
+    dictIterator *di = dictGetSafeIterator(pubsub_channels);
     dictEntry *de;
     int count = 0;
 
     while((de = dictNext(di)) != NULL) {
         robj *channel = dictGetKey(de);
 
-        count += pubsubUnsubscribeChannel(c,channel,notify);
+        count += pubsubUnsubscribeChannel(srv, c,channel,notify);
     }
     /* We were subscribed to nothing? Still reply to the client. */
     if (notify && count == 0) {
-        addReply(c,shared.mbulkhdr[3]);
-        addReply(c,shared.unsubscribebulk);
-        addReply(c,shared.nullbulk);
-        addReplyLongLong(c,dictSize(c->pubsub_channels)+
-                       listLength(c->pubsub_patterns));
+        if(srv == &crdtServer) {
+            addReply(c,shared.mbulkhdr[3]);
+            addReply(c,shared.uncrdtsubscribebulk);
+            addReply(c,shared.nullbulk);
+            addReplyLongLong(c,clientCrdtSubscriptionsCount(c));
+        }else{
+            addReply(c,shared.mbulkhdr[3]);
+            addReply(c,shared.unsubscribebulk);
+            addReply(c,shared.nullbulk);
+            addReplyLongLong(c,clientSubscriptionsCount(c));
+        }
+        
     }
     dictReleaseIterator(di);
     return count;
@@ -199,37 +259,48 @@ int pubsubUnsubscribeAllChannels(client *c, int notify) {
 
 /* Unsubscribe from all the patterns. Return the number of patterns the
  * client was subscribed from. */
-int pubsubUnsubscribeAllPatterns(client *c, int notify) {
+int pubsubUnsubscribeAllPatterns(struct redisServer *srv,client *c, int notify) {
     listNode *ln;
     listIter li;
     int count = 0;
-
-    listRewind(c->pubsub_patterns,&li);
+    list* pubsub_patterns;
+    if(srv == &crdtServer) {
+        pubsub_patterns = c->crdt_pubsub_patterns;
+    } else {
+        pubsub_patterns = c->pubsub_patterns;
+    }
+    listRewind(pubsub_patterns,&li);
     while ((ln = listNext(&li)) != NULL) {
         robj *pattern = ln->value;
 
-        count += pubsubUnsubscribePattern(c,pattern,notify);
+        count += pubsubUnsubscribePattern(srv, c,pattern,notify);
     }
     if (notify && count == 0) {
+        if(srv == &crdtServer) {
+            addReply(c,shared.mbulkhdr[3]);
+            addReply(c,shared.crdtpunsubscribebulk);
+            addReply(c,shared.nullbulk);
+            addReplyLongLong(c,clientCrdtSubscriptionsCount(c));
+        } else {
+            addReply(c,shared.mbulkhdr[3]);
+            addReply(c,shared.punsubscribebulk);
+            addReply(c,shared.nullbulk);
+            addReplyLongLong(c,clientSubscriptionsCount(c));
+        }
         /* We were subscribed to nothing? Still reply to the client. */
-        addReply(c,shared.mbulkhdr[3]);
-        addReply(c,shared.punsubscribebulk);
-        addReply(c,shared.nullbulk);
-        addReplyLongLong(c,dictSize(c->pubsub_channels)+
-                       listLength(c->pubsub_patterns));
+        
     }
     return count;
 }
 
-/* Publish a message */
-int pubsubPublishMessage(robj *channel, robj *message) {
+int pubsubPublishMessage(struct redisServer *srv, robj *channel, robj *message) {
     int receivers = 0;
     dictEntry *de;
     listNode *ln;
     listIter li;
 
     /* Send to clients listening for that channel */
-    de = dictFind(server.pubsub_channels,channel);
+    de = dictFind(srv->pubsub_channels,channel);
     if (de) {
         list *list = dictGetVal(de);
         listNode *ln;
@@ -247,8 +318,8 @@ int pubsubPublishMessage(robj *channel, robj *message) {
         }
     }
     /* Send to clients listening to matching channels */
-    if (listLength(server.pubsub_patterns)) {
-        listRewind(server.pubsub_patterns,&li);
+    if (listLength(srv->pubsub_patterns)) {
+        listRewind(srv->pubsub_patterns,&li);
         channel = getDecodedObject(channel);
         while ((ln = listNext(&li)) != NULL) {
             pubsubPattern *pat = ln->value;
@@ -274,63 +345,98 @@ int pubsubPublishMessage(robj *channel, robj *message) {
  * Pubsub commands implementation
  *----------------------------------------------------------------------------*/
 
+void crdtSubscribeCommand(client *c) {
+    int j;
+    for (j = 1;j < c->argc; j++) 
+        pubsubSubscribeChannel(&crdtServer, c, c->argv[j]);
+    c->flags |= CLIENT_CRDT_PUBSUB;
+}
+
 void subscribeCommand(client *c) {
     int j;
 
     for (j = 1; j < c->argc; j++)
-        pubsubSubscribeChannel(c,c->argv[j]);
+        pubsubSubscribeChannel(&server, c,c->argv[j]);
     c->flags |= CLIENT_PUBSUB;
 }
-
-void unsubscribeCommand(client *c) {
+void unCrdtSubscribeCommand(client* c) {
     if (c->argc == 1) {
-        pubsubUnsubscribeAllChannels(c,1);
+        pubsubUnsubscribeAllChannels(&crdtServer,c,1);
     } else {
         int j;
 
         for (j = 1; j < c->argc; j++)
-            pubsubUnsubscribeChannel(c,c->argv[j],1);
+            pubsubUnsubscribeChannel(&crdtServer, c,c->argv[j],1);
+    }
+    if (clientCrdtSubscriptionsCount(c) == 0) c->flags &= ~CLIENT_CRDT_PUBSUB;
+}
+void unsubscribeCommand(client *c) {
+    if (c->argc == 1) {
+        pubsubUnsubscribeAllChannels(&server, c,1);
+    } else {
+        int j;
+
+        for (j = 1; j < c->argc; j++)
+            pubsubUnsubscribeChannel(&server, c,c->argv[j],1);
     }
     if (clientSubscriptionsCount(c) == 0) c->flags &= ~CLIENT_PUBSUB;
+}
+
+void crdtPsubscribeCommand(client *c) {
+    int j;
+
+    for (j = 1; j < c->argc; j++)
+        pubsubSubscribePattern(&crdtServer,c,c->argv[j]);
+    c->flags |= CLIENT_CRDT_PUBSUB;
 }
 
 void psubscribeCommand(client *c) {
     int j;
 
     for (j = 1; j < c->argc; j++)
-        pubsubSubscribePattern(c,c->argv[j]);
+        pubsubSubscribePattern(&server,c,c->argv[j]);
     c->flags |= CLIENT_PUBSUB;
 }
 
 void punsubscribeCommand(client *c) {
     if (c->argc == 1) {
-        pubsubUnsubscribeAllPatterns(c,1);
+        pubsubUnsubscribeAllPatterns(&server,c,1);
     } else {
         int j;
 
         for (j = 1; j < c->argc; j++)
-            pubsubUnsubscribePattern(c,c->argv[j],1);
+            pubsubUnsubscribePattern(&server,c,c->argv[j],1);
     }
     if (clientSubscriptionsCount(c) == 0) c->flags &= ~CLIENT_PUBSUB;
 }
 
-void publishCommand(client *c) {
-    int receivers = pubsubPublishMessage(c->argv[1],c->argv[2]);
-    if (server.cluster_enabled)
-        clusterPropagatePublish(c->argv[1],c->argv[2]);
-    else
-        forceCommandPropagation(c,PROPAGATE_REPL);
-    addReplyLongLong(c,receivers);
+void crdtPunsubscribeCommand(client *c) {
+    if (c->argc == 1) {
+        pubsubUnsubscribeAllPatterns(&crdtServer,c,1);
+    } else {
+        int j;
+
+        for (j = 1; j < c->argc; j++)
+            pubsubUnsubscribePattern(&crdtServer,c,c->argv[j],1);
+    }
+    if (clientCrdtSubscriptionsCount(c) == 0) c->flags &= ~CLIENT_CRDT_PUBSUB;
 }
 
-/* PUBSUB command for Pub/Sub introspection. */
-void pubsubCommand(client *c) {
+void publishCommand(client *c) {
+    int receivers = pubsubPublishMessage(&server,c->argv[1], c->argv[2]);
+    if(server.cluster_enabled) 
+        clusterPropagatePublish(c->argv[1], c->argv[2]);
+    else
+        forceCommandPropagation(c, PROPAGATE_REPL);
+    addReplyLongLong(c, receivers);
+}
+void pubsub(struct redisServer *srv, client *c) {
     if (!strcasecmp(c->argv[1]->ptr,"channels") &&
         (c->argc == 2 || c->argc ==3))
     {
         /* PUBSUB CHANNELS [<pattern>] */
         sds pat = (c->argc == 2) ? NULL : c->argv[2]->ptr;
-        dictIterator *di = dictGetIterator(server.pubsub_channels);
+        dictIterator *di = dictGetIterator(srv->pubsub_channels);
         dictEntry *de;
         long mblen = 0;
         void *replylen;
@@ -355,17 +461,25 @@ void pubsubCommand(client *c) {
 
         addReplyMultiBulkLen(c,(c->argc-2)*2);
         for (j = 2; j < c->argc; j++) {
-            list *l = dictFetchValue(server.pubsub_channels,c->argv[j]);
+            list *l = dictFetchValue(srv->pubsub_channels,c->argv[j]);
 
             addReplyBulk(c,c->argv[j]);
             addReplyLongLong(c,l ? listLength(l) : 0);
         }
     } else if (!strcasecmp(c->argv[1]->ptr,"numpat") && c->argc == 2) {
         /* PUBSUB NUMPAT */
-        addReplyLongLong(c,listLength(server.pubsub_patterns));
+        addReplyLongLong(c,listLength(srv->pubsub_patterns));
     } else {
         addReplyErrorFormat(c,
             "Unknown PUBSUB subcommand or wrong number of arguments for '%s'",
             (char*)c->argv[1]->ptr);
     }
 }
+/* PUBSUB command for Pub/Sub introspection. */
+void pubsubCommand(client *c) {
+    pubsub(&server, c);
+}
+void crdtPubsubCommand(client *c) {
+    pubsub(&crdtServer, c);
+}
+

@@ -484,5 +484,13 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
             # assert_equal {pmessage * __keyspace@9__:myhash hincrby} [$rd1 read]
             punsubscribe [lindex $rd 1] *
         }
+        # test "after peerof subscribe" {
+        #     assert_equal {1} [subscribe [lindex $rd 1] subscribe1] 
+        #     [lindex $peers 0] crdt.publish subscribe1 test1
+        #     # r hincrby myhash yes 10
+        #     assert_equal {message subscribe1 test1} [[lindex $rd 1] read]
+        #     # assert_equal {pmessage * __keyspace@9__:myhash hincrby} [$rd1 read]
+        #     unsubscribe [lindex $rd 1] *
+        # }
     }
 }

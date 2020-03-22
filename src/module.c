@@ -2497,6 +2497,9 @@ int RM_HashGet(RedisModuleKey *key, int flags, ...) {
     return REDISMODULE_OK;
 }
 
+
+
+
 /* --------------------------------------------------------------------------
  * Redis <-> Modules generic Call() API
  * -------------------------------------------------------------------------- */
@@ -3197,6 +3200,10 @@ void *RM_ModuleTypeGetTombstone(RedisModuleKey *key) {
  * 'dbid' is the database ID where the key lives.  */
 void RM_NotifyKeyspaceEvent(RedisModuleCtx *ctx,int type, char *event, robj *key) {
     notifyKeyspaceEvent(type, event, key, ctx->client->db->id);
+}
+
+int RM_CrdtPubsubPublishMessage(robj* channel, robj *message) {
+    return pubsubPublishMessage(&crdtServer, channel, message);
 }
 /* --------------------------------------------------------------------------
  * RDB loading and saving functions
@@ -4290,4 +4297,5 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(ModuleTombstoneSetValue);
     REGISTER_API(ModuleTypeGetTombstone);
     REGISTER_API(NotifyKeyspaceEvent);
+    REGISTER_API(CrdtPubsubPublishMessage);
 }
