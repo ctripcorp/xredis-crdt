@@ -322,6 +322,7 @@ struct redisCommand redisCommandTable[] = {
     {"debugCancelCrdt",debugCancelCrdt,3,"ast",0,NULL,0,0,0,0,0},
     {"tombstoneSize",tombstoneSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
     {"crdt.ovc",crdtOvcCommand,3,"rF",0,NULL,0,0,0,0,0},
+    {"crdt.authGid", crdtAuthGidCommand,2,"rF", 0, NULL,0,0,0,0,0}
 };
 
 /*============================ CRDT functions ============================ */
