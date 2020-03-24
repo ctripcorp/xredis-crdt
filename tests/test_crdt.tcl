@@ -14,15 +14,18 @@ source tests/support/util.tcl
 
 
 set ::all_tests {
+
+    ctrip/integration/composite/master-slave-failover
+    ctrip/unit/crdt_publish
+
     ctrip/integration/master-slave/auth-gid
+
     ctrip/integration/bug/hash-miss-send-when-full-sync
     ctrip/integration/bug/full-sync-timeout
     
     ctrip/basic/basic_crdt_type
     ctrip/basic/basic_type
-
-    ctrip/unit/crdt_register
-    ctrip/unit/crdt_del 
+    ctrip/basic/basic_crdt_type_del
 
     ctrip/integration/master-slave/replication-psync
     ctrip/unit/crdt_hash

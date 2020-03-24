@@ -258,6 +258,7 @@ typedef long long mstime_t; /* millisecond time type. */
 #define CLIENT_CRDT_SLAVE (1<<28) /*Client is acting as a CRDT Slave to sync data from me*/
 #define CLIENT_CRDT_MASTER (1<<29) /*Client is acting as a CRDT Master that I receive data from it*/
 #define CLIENT_FORCE_REPL_CRDT (1<<30)  /* Force replication of current cmd. */
+//todo Client.flags of type is int , it used up
 
 /* Client block type (btype field in client structure)
  * if CLIENT_BLOCKED flag is set. */
@@ -741,6 +742,8 @@ typedef struct client {
     list *watched_keys;     /* Keys WATCHED for MULTI/EXEC CAS */
     dict *pubsub_channels;  /* channels a client is interested in (SUBSCRIBE) */
     list *pubsub_patterns;  /* patterns a client is interested in (SUBSCRIBE) */
+    dict *crdt_pubsub_channels;
+    list *crdt_pubsub_patterns;
     sds peerid;             /* Cached peer ID. */
 
     /* Response buffer */
@@ -769,8 +772,8 @@ struct sharedObjectsStruct {
     *emptymultibulk, *wrongtypeerr, *nokeyerr, *syntaxerr, *sameobjecterr,
     *outofrangeerr, *noscripterr, *loadingerr, *slowscripterr, *bgsaveerr,
     *masterdownerr, *roslaveerr, *execaborterr, *noautherr, *noreplicaserr,
-    *busykeyerr, *oomerr, *plus, *messagebulk, *pmessagebulk, *subscribebulk,
-    *unsubscribebulk, *psubscribebulk, *punsubscribebulk, *del, *unlink, *crdtdel,
+    *busykeyerr, *oomerr, *plus, *messagebulk, *pmessagebulk, *subscribebulk, *crdtsubscribebulk,
+    *unsubscribebulk, *uncrdtsubscribebulk, *psubscribebulk, *crdtpsubscribebulk, *punsubscribebulk, *crdtpunsubscribebulk, *del, *unlink, *crdtdel,
     *rpop, *lpop, *lpush, *emptyscan,
     *crdtmergeerr,
     *select[PROTO_SHARED_SELECT_CMDS],
@@ -1781,11 +1784,11 @@ robj *hashTypeGetValueObject(robj *o, sds field);
 int hashTypeSet(robj *o, sds field, sds value, int flags);
 
 /* Pub / Sub */
-int pubsubUnsubscribeAllChannels(client *c, int notify);
-int pubsubUnsubscribeAllPatterns(client *c, int notify);
+int pubsubUnsubscribeAllChannels(struct redisServer *srv, client *c, int notify);
+int pubsubUnsubscribeAllPatterns(struct redisServer *srv, client *c, int notify);
 void freePubsubPattern(void *p);
 int listMatchPubsubPattern(void *a, void *b);
-int pubsubPublishMessage(robj *channel, robj *message);
+int pubsubPublishMessage(struct redisServer* srv,robj *channel, robj *message);
 
 /* Keyspace events notification */
 void notifyKeyspaceEvent(int type, char *event, robj *key, int dbid);
@@ -2062,11 +2065,16 @@ void configCommand(client *c);
 void hincrbyCommand(client *c);
 void hincrbyfloatCommand(client *c);
 void subscribeCommand(client *c);
+void crdtSubscribeCommand(client *c);
 void unsubscribeCommand(client *c);
+void unCrdtSubscribeCommand(client *c);
 void psubscribeCommand(client *c);
+void crdtPsubscribeCommand(client *c);
 void punsubscribeCommand(client *c);
+void crdtPunsubscribeCommand(client *c);
 void publishCommand(client *c);
 void pubsubCommand(client *c);
+void crdtPubsubCommand(client *c);
 void watchCommand(client *c);
 void unwatchCommand(client *c);
 void clusterCommand(client *c);
