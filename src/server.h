@@ -291,22 +291,24 @@ typedef long long mstime_t; /* millisecond time type. */
 #define REPL_STATE_CONNECTING 2 /* Connecting to master */
 /* --- Handshake states, must be ordered --- */
 #define REPL_STATE_RECEIVE_PONG 3 /* Wait for PING reply */
-#define REPL_STATE_SEND_AUTH 4 /* Send AUTH to master */
-#define REPL_STATE_RECEIVE_AUTH 5 /* Wait for AUTH reply */
-#define REPL_STATE_SEND_PORT 6 /* Send REPLCONF listening-port */
-#define REPL_STATE_RECEIVE_PORT 7 /* Wait for REPLCONF reply */
-#define REPL_STATE_SEND_IP 8 /* Send REPLCONF ip-address */
-#define REPL_STATE_RECEIVE_IP 9 /* Wait for REPLCONF reply */
-#define REPL_STATE_SEND_CAPA 10 /* Send REPLCONF capa */
-#define REPL_STATE_RECEIVE_CAPA 11 /* Wait for REPLCONF reply */
-#define REPL_STATE_SEND_VC 12 /* Send Vector Clock */
-#define REPL_STATE_RECEIVE_VC 13 /* Wait for Vector Clock reply */
-#define REPL_STATE_SEND_PSYNC 14 /* Send PSYNC */
-#define REPL_STATE_RECEIVE_PSYNC 15 /* Wait for PSYNC reply */
+#define REPL_STATE_SEND_GID 4 /* Send Gid to master */
+#define REPL_STATE_RECEIVE_GID 5 /* Wait for Gid reply */
+#define REPL_STATE_SEND_AUTH 6 /* Send AUTH to master */
+#define REPL_STATE_RECEIVE_AUTH 7 /* Wait for AUTH reply */
+#define REPL_STATE_SEND_PORT 8 /* Send REPLCONF listening-port */
+#define REPL_STATE_RECEIVE_PORT 9 /* Wait for REPLCONF reply */
+#define REPL_STATE_SEND_IP 10 /* Send REPLCONF ip-address */
+#define REPL_STATE_RECEIVE_IP 11 /* Wait for REPLCONF reply */
+#define REPL_STATE_SEND_CAPA 12 /* Send REPLCONF capa */
+#define REPL_STATE_RECEIVE_CAPA 13 /* Wait for REPLCONF reply */
+#define REPL_STATE_SEND_VC 14 /* Send Vector Clock */
+#define REPL_STATE_RECEIVE_VC 15 /* Wait for Vector Clock reply */
+#define REPL_STATE_SEND_PSYNC 16 /* Send PSYNC */
+#define REPL_STATE_RECEIVE_PSYNC 17 /* Wait for PSYNC reply */
 
 /* --- End of handshake states --- */
-#define REPL_STATE_TRANSFER 16 /* Receiving .rdb from master */
-#define REPL_STATE_CONNECTED 17 /* Connected to master */
+#define REPL_STATE_TRANSFER 18 /* Receiving .rdb from master */
+#define REPL_STATE_CONNECTED 19 /* Connected to master */
 
 /* State of slaves from the POV of the master. Used in client->replstate.
  * In SEND_BULK and ONLINE state the slave receives new updates
@@ -1596,6 +1598,7 @@ void debugCancelCrdt(client *c);
 void crdtRoleCommand(client *c);
 CRDT_Master_Instance *createPeerMaster(client *c, long long gid);
 void crdtOvcCommand(client *c);
+void crdtAuthGidCommand(client *c);
 void feedCrdtBacklog(robj **argv, int argc);
 void replicationFeedAllSlaves(int dictid, robj **argv, int argc);
 void crdtCancelReplicationHandshake(long long gid);
