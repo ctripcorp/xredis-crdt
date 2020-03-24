@@ -819,8 +819,7 @@ int clientsCronHandleTimeout(client *c, mstime_t now_ms) {
         !(c->flags & CLIENT_SLAVE) &&    /* no timeout for slaves */
         !(c->flags & CLIENT_MASTER) &&   /* no timeout for masters */
         !(c->flags & CLIENT_BLOCKED) &&  /* no timeout for BLPOP */
-        !(c->flags & CLIENT_PUBSUB) &&   /* no timeout for Pub/Sub clients */
-        !(c->flags & CLIENT_CRDT_PUBSUB) && /* no timeout for crdt Pub/Sub clients */
+        !(c->flags & CLIENT_PUBSUB) &&  /* no timeout for Pub/Sub clients */
         (now - c->lastinteraction > server.maxidletime))
     {
         serverLog(LL_VERBOSE,"Closing idle client");
@@ -2600,17 +2599,12 @@ int processCommand(client *c) {
         c->cmd->proc != subscribeCommand &&
         c->cmd->proc != unsubscribeCommand &&
         c->cmd->proc != psubscribeCommand &&
-        c->cmd->proc != punsubscribeCommand ) {
-        addReplyError(c,"only (P)SUBSCRIBE / (P)UNSUBSCRIBE / PING / QUIT allowed in this context");
-        return C_OK;
-    }
-    if (c->flags & CLIENT_CRDT_PUBSUB &&
-        c->cmd->proc != pingCommand &&
+        c->cmd->proc != punsubscribeCommand &&
         c->cmd->proc != crdtSubscribeCommand &&
         c->cmd->proc != unCrdtSubscribeCommand && 
         c->cmd->proc != crdtPsubscribeCommand &&
         c->cmd->proc != crdtPunsubscribeCommand) {
-        addReplyError(c,"only crdt (P)SUBSCRIBE / (P)UNSUBSCRIBE / PING / QUIT allowed in this context");
+        addReplyError(c,"only (P)SUBSCRIBE / (P)UNSUBSCRIBE / PING / QUIT allowed in this context");
         return C_OK;
     }
 
@@ -2826,14 +2820,7 @@ void pingCommand(client *c) {
             addReplyBulkCBuffer(c,"",0);
         else
             addReplyBulk(c,c->argv[1]);
-    } else if (c->flags & CLIENT_CRDT_PUBSUB) {
-        addReply(c,shared.mbulkhdr[2]);
-        addReplyBulkCBuffer(c,"pong",4);
-        if (c->argc == 1)
-            addReplyBulkCBuffer(c,"",0);
-        else
-            addReplyBulk(c,c->argv[1]);
-    } else {
+    }  else {
         if (c->argc == 1)
             addReply(c,shared.pong);
         else

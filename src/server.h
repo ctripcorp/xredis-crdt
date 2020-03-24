@@ -258,7 +258,8 @@ typedef long long mstime_t; /* millisecond time type. */
 #define CLIENT_CRDT_SLAVE (1<<28) /*Client is acting as a CRDT Slave to sync data from me*/
 #define CLIENT_CRDT_MASTER (1<<29) /*Client is acting as a CRDT Master that I receive data from it*/
 #define CLIENT_FORCE_REPL_CRDT (1<<30)  /* Force replication of current cmd. */
-#define CLIENT_CRDT_PUBSUB (1<<31)
+//todo Client.flags of type is int , it used up
+
 /* Client block type (btype field in client structure)
  * if CLIENT_BLOCKED flag is set. */
 #define BLOCKED_NONE 0    /* Not blocked, no CLIENT_BLOCKED flag set. */

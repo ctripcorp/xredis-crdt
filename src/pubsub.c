@@ -349,7 +349,7 @@ void crdtSubscribeCommand(client *c) {
     int j;
     for (j = 1;j < c->argc; j++) 
         pubsubSubscribeChannel(&crdtServer, c, c->argv[j]);
-    c->flags |= CLIENT_CRDT_PUBSUB;
+    c->flags |= CLIENT_PUBSUB;
 }
 
 void subscribeCommand(client *c) {
@@ -368,7 +368,7 @@ void unCrdtSubscribeCommand(client* c) {
         for (j = 1; j < c->argc; j++)
             pubsubUnsubscribeChannel(&crdtServer, c,c->argv[j],1);
     }
-    if (clientCrdtSubscriptionsCount(c) == 0) c->flags &= ~CLIENT_CRDT_PUBSUB;
+    if (clientCrdtSubscriptionsCount(c) == 0) c->flags &= ~CLIENT_PUBSUB;
 }
 void unsubscribeCommand(client *c) {
     if (c->argc == 1) {
@@ -387,7 +387,7 @@ void crdtPsubscribeCommand(client *c) {
 
     for (j = 1; j < c->argc; j++)
         pubsubSubscribePattern(&crdtServer,c,c->argv[j]);
-    c->flags |= CLIENT_CRDT_PUBSUB;
+    c->flags |= CLIENT_PUBSUB;
 }
 
 void psubscribeCommand(client *c) {
@@ -419,7 +419,7 @@ void crdtPunsubscribeCommand(client *c) {
         for (j = 1; j < c->argc; j++)
             pubsubUnsubscribePattern(&crdtServer,c,c->argv[j],1);
     }
-    if (clientCrdtSubscriptionsCount(c) == 0) c->flags &= ~CLIENT_CRDT_PUBSUB;
+    if (clientCrdtSubscriptionsCount(c) == 0) c->flags &= ~CLIENT_PUBSUB;
 }
 
 void publishCommand(client *c) {
