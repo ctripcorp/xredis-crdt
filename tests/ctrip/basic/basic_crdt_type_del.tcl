@@ -110,7 +110,7 @@ proc basic_test { type create check delete} {
 # key field value gid timestamp vc
 #  0   1     2    3    4        5
 basic_test "kv" {
-    catch [$redis crdt.set $0 $2 $3 $4 $5 10000] error
+    catch [$redis crdt.set $0 $2 $3 $4 $5] error
 } {
     set r [ $redis crdt.get $0 ]
     if { {$2} == {} } {

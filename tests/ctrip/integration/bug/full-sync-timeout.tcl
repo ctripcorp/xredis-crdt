@@ -1,4 +1,4 @@
-proc get_info_replication_attr_value {client type attr} {
+    proc get_info_replication_attr_value {client type attr} {
     set info [$client $type replication]
     set regstr [format "\r\n%s:(.*?)\r\n" $attr]
     regexp $regstr $info match value 
@@ -35,10 +35,11 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
         stop_write_load $load_handle
         test "timeout" {
             [lindex $peers 1] peerof [lindex $peer_gids 0] [lindex $peer_hosts 0] [lindex $peer_ports 0]
-            puts [[lindex $peers 0] dbsize]
-            wait_for_condition 500 100 {
+            wait_for_condition 500 200 {
                 [[lindex $peers 0] dbsize] == [[lindex $peers 1] dbsize]
             } else {
+                puts [[lindex $peers 0] dbsize]
+                puts [[lindex $peers 1] dbsize]
                 fail "Peers still not connected after some time"
             }
         }

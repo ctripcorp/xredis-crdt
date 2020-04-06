@@ -37,7 +37,7 @@
 
 /* Macro to initialize an IO context. Note that the 'ver' field is populated
  * inside rdb.c according to the version of the value to load. */
-static inline int isModuleCrdt(robj *obj) {
+int isModuleCrdt(robj *obj) {
     if(obj->type != OBJ_MODULE) {
         return C_ERR;
     }
@@ -62,6 +62,14 @@ CrdtObject *retrieveCrdtObject(robj *obj) {
 CrdtTombstone* retrieveCrdtTombstone(robj *obj) {
     return (CrdtTombstone*)getObjValue(obj);
 }
+
+CrdtExpire* retrieveCrdtExpire(robj *obj) {
+    return (CrdtExpire*)getObjValue(obj);
+}
+CrdtExpireTombstone* retrieveCrdtExpireTombstone(robj *obj) {
+    return (CrdtExpireTombstone*)getObjValue(obj);
+}
+
 moduleType* getModuleType(robj *obj) {
     moduleValue *mv = obj->ptr;
     moduleType *mt = mv->type;

@@ -52,12 +52,35 @@
  * The parameter 'now' is the current time in milliseconds as is passed
  * to the function to avoid too many gettimeofday() syscalls. */
 int activeExpireCycleTryExpire(redisDb *db, dictEntry *de, long long now) {
-    long long t = dictGetSignedIntegerVal(de);
+    // long long t = dictGetSignedIntegerVal(de);
+    long long t = -1;
+    robj* d = dictGetVal(de);
+    if(d != NULL) {
+        if(isModuleCrdt(d) == C_OK) {
+            CrdtExpire* e = retrieveCrdtExpire(d);
+            if(e != NULL) {
+                CrdtExpireObj* o = e->method->get(e);
+                if(o->meta->gid != crdtServer.crdt_gid) {
+                    return 0;
+                }
+                t = o->expireTime;
+            }
+            
+        }else{
+            t = dictGetSignedIntegerVal(de);
+        } 
+    } 
+    if(t == -1) {
+        return 0;
+    }
     if (now > t) {
         sds key = dictGetKey(de);
         robj *keyobj = createStringObject(key,sdslen(key));
 
-        propagateExpire(db,keyobj,server.lazyfree_lazy_expire);
+        if(crdtPropagateExpire(db,keyobj,server.lazyfree_lazy_expire, NULL) != C_OK) {
+            decrRefCount(keyobj);
+            return 0;
+        }
         if (server.lazyfree_lazy_expire)
             dbAsyncDelete(db,keyobj);
         else
@@ -65,7 +88,7 @@ int activeExpireCycleTryExpire(redisDb *db, dictEntry *de, long long now) {
         notifyKeyspaceEvent(NOTIFY_EXPIRED,
             "expired",keyobj,db->id);
         decrRefCount(keyobj);
-        server.stat_expiredkeys++;
+        // server.stat_expiredkeys++;
         return 1;
     } else {
         return 0;
@@ -185,7 +208,10 @@ void activeExpireCycle(int type) {
                 long long ttl;
 
                 if ((de = dictGetRandomKey(db->expires)) == NULL) break;
-                ttl = dictGetSignedIntegerVal(de)-now;
+                // ttl = dictGetSignedIntegerVal(de)-now;
+                robj* r = dictGetVal(de);
+                CrdtExpire* e = retrieveCrdtExpire(r);
+                ttl = e->method->get(e)->expireTime - now;
                 if (activeExpireCycleTryExpire(db,de,now)) expired++;
                 if (ttl > 0) {
                     /* We want the average TTL of keys yet not expired. */
@@ -486,7 +512,7 @@ void pttlCommand(client *c) {
 /* PERSIST key */
 void persistCommand(client *c) {
     if (lookupKeyWrite(c->db,c->argv[1])) {
-        if (removeExpire(c->db,c->argv[1])) {
+        if (delExpire(c->db,c->argv[1])) {
             addReply(c,shared.cone);
             server.dirty++;
         } else {

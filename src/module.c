@@ -33,6 +33,7 @@
 
 #define REDISMODULE_CORE 1
 #include "redismodule.h"
+#include "ctrip_crdt_common.h"
 
 /* --------------------------------------------------------------------------
  * Private data structures used by the modules system. Those are data
@@ -1363,7 +1364,7 @@ int RM_CrdtReplicateAlsoNormReplicate(RedisModuleCtx *ctx, const char *cmdname, 
     if (argv == NULL) return REDISMODULE_ERR;
 
     /* Replicate! */
-    alsoPropagate(cmd,ctx->client->db->id,argv,argc,PROPAGATE_CRDT_REPL);
+    alsoPropagate(cmd, ctx->client->db->id,argv,argc,PROPAGATE_CRDT_REPL);
 
     /* Release the argv. */
     for (j = 0; j < argc; j++) decrRefCount(argv[j]);
@@ -1371,6 +1372,26 @@ int RM_CrdtReplicateAlsoNormReplicate(RedisModuleCtx *ctx, const char *cmdname, 
     server.dirty++;
     return REDISMODULE_OK;
 }
+
+int RM_ReplicationFeedAllSlaves(int id, const char *cmdname, const char* fmt, ...) {
+        // replicationFeedAllSlaves(id, argv, argc);
+    robj **argv = NULL;
+    int argc = 0, flags = 0, j;
+    va_list ap;
+    va_start(ap, fmt);
+    argv = moduleCreateArgvFromUserFormat(cmdname,fmt,&argc,&flags,ap);
+    va_end(ap);
+    if (argv == NULL) return REDISMODULE_ERR;
+
+    replicationFeedAllSlaves(id, argv, argc);
+    
+    for (j = 0; j < argc; j++) decrRefCount(argv[j]);
+    zfree(argv);
+    server.dirty++;
+    return REDISMODULE_OK;
+
+}
+
 
 int RM_IncrCrdtConflict() {
     crdtServer.crdt_conflict++;
@@ -1557,6 +1578,34 @@ int RM_SelectDb(RedisModuleCtx *ctx, int newid) {
     return (retval == C_OK) ? REDISMODULE_OK : REDISMODULE_ERR;
 }
 
+
+void *GetModuleKey(redisDb *db, robj *keyname, int mode, int needCheck) {
+    RedisModuleKey *kp;
+    robj *value, *tombstone = NULL;
+ 
+    if (mode & REDISMODULE_WRITE) {
+        value = needCheck == C_OK? lookupKeyWrite(db,keyname): lookupKey(db,keyname,LOOKUP_NONE);
+    } else {
+        value = lookupKeyRead(db,keyname);
+        if (value == NULL) {
+            return NULL;
+        }
+    }
+    if (mode & REDISMODULE_TOMBSTONE) {
+        tombstone = lookupTombstoneKey(db,keyname);
+    }
+    kp = zmalloc(sizeof(*kp));
+    kp->db = db;
+    kp->key = keyname;
+    incrRefCount(keyname);
+    kp->value = value;
+    kp->tombstone = tombstone;
+    kp->iter = NULL;
+    kp->mode = mode;
+    kp->ctx = NULL;
+    zsetKeyReset(kp);
+    return (void*)kp;
+}
 /* Return an handle representing a Redis key, so that it is possible
  * to call other APIs with the key handle as argument to perform
  * operations on the key.
@@ -1572,45 +1621,28 @@ int RM_SelectDb(RedisModuleCtx *ctx, int newid) {
  * call RedisModule_CloseKey() and RedisModule_KeyType() on a NULL
  * value. */
 void *RM_OpenKey(RedisModuleCtx *ctx, robj *keyname, int mode) {
-    RedisModuleKey *kp;
-    robj *value, *tombstone = NULL;
-
-    if (mode & REDISMODULE_WRITE) {
-        value = lookupKeyWrite(ctx->client->db,keyname);
-    } else {
-        value = lookupKeyRead(ctx->client->db,keyname);
-        if (value == NULL) {
-            return NULL;
-        }
+    RedisModuleKey *kp = GetModuleKey(ctx->client->db, keyname, mode, 0);
+    if(kp == NULL) {
+        return NULL;
     }
-    if (mode & REDISMODULE_TOMBSTONE) {
-        tombstone = lookupTombstoneKey(ctx->client->db,keyname);
-    }
-
-    /* Setup the key handle. */
-    kp = zmalloc(sizeof(*kp));
     kp->ctx = ctx;
-    kp->db = ctx->client->db;
-    kp->key = keyname;
-    incrRefCount(keyname);
-    kp->value = value;
-    kp->tombstone = tombstone;
-    kp->iter = NULL;
-    kp->mode = mode;
-    zsetKeyReset(kp);
     autoMemoryAdd(ctx,REDISMODULE_AM_KEY,kp);
-    return (void*)kp;
+    return kp;
 }
-
-/* Close a key handle. */
-void RM_CloseKey(RedisModuleKey *key) {
+void CloseModuleKey(void* k) {
+    RedisModuleKey *key = k;
     if (key == NULL) return;
     if (key->mode & REDISMODULE_WRITE) signalModifiedKey(key->db,key->key);
     /* TODO: if (key->iter) RM_KeyIteratorStop(kp); */
     RM_ZsetRangeStop(key);
     decrRefCount(key->key);
-    autoMemoryFreed(key->ctx,REDISMODULE_AM_KEY,key);
+    if(key->ctx) autoMemoryFreed(key->ctx,REDISMODULE_AM_KEY,key);
     zfree(key);
+}
+
+/* Close a key handle. */
+void RM_CloseKey(RedisModuleKey *key) {
+    CloseModuleKey(key);
 }
 
 /* Return the type of the key. If the key pointer is NULL then
@@ -1683,7 +1715,22 @@ mstime_t RM_GetExpire(RedisModuleKey *key) {
     expire -= mstime();
     return expire >= 0 ? expire : 0;
 }
+void* RM_GetCrdtExpire(RedisModuleKey *key) {
+    CrdtExpire* r = getCrdtExpire(key->db, key->key);
+    return r;
+}
+void* GetRobj(RedisModuleKey *key, dict* db) {
+    dictEntry *de;
+    /* No expire? return ASAP */
+    if (dictSize(db) == 0 ||
+       (de = dictFind(db,key->key->ptr)) == NULL) return NULL;
+    return  dictGetVal(de);
+}
 
+void* RM_GetCrdtExpireTombstone(RedisModuleKey *key) {
+    gcIfNeeded(key->db->deleted_expires, key->key);
+    return retrieveCrdtExpireTombstone(GetRobj(key, key->db->deleted_expires));
+}
 /* Set a new expire for the key. If the special expire
  * REDISMODULE_NO_EXPIRE is set, the expire is cancelled if there was
  * one (the same as the PERSIST command).
@@ -1700,9 +1747,29 @@ int RM_SetExpire(RedisModuleKey *key, mstime_t expire) {
         expire += mstime();
         setExpire(key->ctx->client,key->db,key->key,expire);
     } else {
-        removeExpire(key->db,key->key);
+        delExpire(key->db,key->key);
     }
     return REDISMODULE_OK;
+}
+int dictSetRobj(RedisModuleKey *key, dict* db, moduleType *mt ,CrdtExpire* expire) {
+    if (expire != NULL) {
+        robj *o = createModuleObject(mt,expire);
+        dictEntry *kde, *de;
+        /* Reuse the sds from the main dict in the expire dict */
+        de = dictAddOrFind(db,sdsdup(key->key->ptr));
+        dictGetVal(de) = o;
+    } else {
+        dictDelete(db, key->key->ptr);
+    }
+    return REDISMODULE_OK;
+    
+}
+int RM_SetCrdtExpire(RedisModuleKey *key, moduleType *mt ,CrdtExpire* expire) {
+    return dictSetRobj(key, key->db->expires, mt, expire);
+}
+
+int RM_SetCrdtExpireTombstone(RedisModuleKey *key, moduleType *mt ,CrdtExpire* expire) {
+    return dictSetRobj(key, key->db->deleted_expires, mt, expire);
 }
 
 /* --------------------------------------------------------------------------
@@ -3097,12 +3164,19 @@ void moduleTypeNameByID(char *name, uint64_t moduleid) {
  */
 moduleType *RM_CreateDataType(RedisModuleCtx *ctx, const char *name, int encver, void *typemethods_ptr) {
     uint64_t id = moduleTypeEncodeId(name,encver);
-    if (id == 0) return NULL;
-    if (moduleTypeLookupModuleByName(name) != NULL) return NULL;
-
+    if (id == 0) {
+        serverLog(LL_WARNING, "a");
+        return NULL;
+    }
+    if (moduleTypeLookupModuleByName(name) != NULL) {
+        serverLog(LL_WARNING, "b");
+        return NULL;
+    }
     long typemethods_version = ((long*)typemethods_ptr)[0];
-    if (typemethods_version == 0) return NULL;
-
+    if (typemethods_version == 0) {
+        serverLog(LL_WARNING, "c");
+        return NULL;
+    }
     struct typemethods {
         uint64_t version;
         moduleTypeLoadFunc rdb_load;
@@ -3601,6 +3675,25 @@ void RM_Log(RedisModuleCtx *ctx, const char *levelstr, const char *fmt, ...) {
     va_start(ap, fmt);
     RM_LogRaw(ctx->module,levelstr,fmt,ap);
     va_end(ap);
+}
+
+void RM_Debug(const char *levelstr, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    char msg[LOG_MAX_LEN];
+    size_t name_len;
+    int level;
+    if (!strcasecmp(levelstr,"debug")) level = LL_DEBUG;
+    else if (!strcasecmp(levelstr,"verbose")) level = LL_VERBOSE;
+    else if (!strcasecmp(levelstr,"notice")) level = LL_NOTICE;
+    else if (!strcasecmp(levelstr,"warning")) level = LL_WARNING;
+    else level = LL_VERBOSE; /* Default. */
+
+    name_len = snprintf(msg, sizeof(msg),"<module-debug> ");
+    vsnprintf(msg + name_len, sizeof(msg) - name_len, fmt, ap);
+    serverLogRaw(level,msg);
+    va_end(ap);
+    
 }
 
 /* Log errors from RDB / AOF serialization callbacks.
@@ -4221,13 +4314,18 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(Replicate);
     REGISTER_API(ReplicateVerbatim);
     REGISTER_API(CrdtReplicateVerbatim);
+    REGISTER_API(ReplicationFeedAllSlaves);
     REGISTER_API(DeleteKey);
     REGISTER_API(UnlinkKey);
     REGISTER_API(StringSet);
     REGISTER_API(StringDMA);
     REGISTER_API(StringTruncate);
     REGISTER_API(SetExpire);
+    REGISTER_API(SetCrdtExpire);
+    REGISTER_API(SetCrdtExpireTombstone);
     REGISTER_API(GetExpire);
+    REGISTER_API(GetCrdtExpire);
+    REGISTER_API(GetCrdtExpireTombstone);
     REGISTER_API(ZsetAdd);
     REGISTER_API(ZsetIncrby);
     REGISTER_API(ZsetScore);
@@ -4266,6 +4364,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(LoadFloat);
     REGISTER_API(EmitAOF);
     REGISTER_API(Log);
+    REGISTER_API(Debug);
     REGISTER_API(LogIOError);
     REGISTER_API(StringAppendBuffer);
     REGISTER_API(RetainString);
