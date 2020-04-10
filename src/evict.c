@@ -489,53 +489,55 @@ int freeMemoryIfNeeded(void) {
         if (bestkey) {
             db = server.db+bestdbid;
             robj *keyobj = createStringObject(bestkey,sdslen(bestkey));
-            propagateExpire(db,keyobj,server.lazyfree_lazy_eviction);
-            /* We compute the amount of memory freed by db*Delete() alone.
-             * It is possible that actually the memory needed to propagate
-             * the DEL in AOF and replication link is greater than the one
-             * we are freeing removing the key, but we can't account for
-             * that otherwise we would never exit the loop.
-             *
-             * AOF and Output buffer memory will be freed eventually so
-             * we only care about memory used by the key space. */
-            delta = (long long) zmalloc_used_memory();
-            latencyStartMonitor(eviction_latency);
-            if (server.lazyfree_lazy_eviction)
-                dbAsyncDelete(db,keyobj);
-            else
-                dbSyncDelete(db,keyobj);
-            latencyEndMonitor(eviction_latency);
-            latencyAddSampleIfNeeded("eviction-del",eviction_latency);
-            latencyRemoveNestedEvent(latency,eviction_latency);
-            delta -= (long long) zmalloc_used_memory();
-            mem_freed += delta;
-            server.stat_evictedkeys++;
-            notifyKeyspaceEvent(NOTIFY_EVICTED, "evicted",
-                keyobj, db->id);
-            decrRefCount(keyobj);
-            keys_freed++;
+            if(crdtPropagateExpire(db,keyobj,server.lazyfree_lazy_eviction, NULL) == C_OK) {
+                /* We compute the amount of memory freed by db*Delete() alone.
+                * It is possible that actually the memory needed to propagate
+                * the DEL in AOF and replication link is greater than the one
+                * we are freeing removing the key, but we can't account for
+                * that otherwise we would never exit the loop.
+                *
+                * AOF and Output buffer memory will be freed eventually so
+                * we only care about memory used by the key space. */
+                delta = (long long) zmalloc_used_memory();
+                latencyStartMonitor(eviction_latency);
+                if (server.lazyfree_lazy_eviction)
+                    dbAsyncDelete(db,keyobj);
+                else
+                    dbSyncDelete(db,keyobj);
+                latencyEndMonitor(eviction_latency);
+                latencyAddSampleIfNeeded("eviction-del",eviction_latency);
+                latencyRemoveNestedEvent(latency,eviction_latency);
+                delta -= (long long) zmalloc_used_memory();
+                mem_freed += delta;
+                // server.stat_evictedkeys++;
+                notifyKeyspaceEvent(NOTIFY_EVICTED, "evicted",
+                    keyobj, db->id);
+                decrRefCount(keyobj);
+                keys_freed++;
 
-            /* When the memory to free starts to be big enough, we may
-             * start spending so much time here that is impossible to
-             * deliver data to the slaves fast enough, so we force the
-             * transmission here inside the loop. */
-            if (slaves) flushSlavesOutputBuffers();
+                /* When the memory to free starts to be big enough, we may
+                * start spending so much time here that is impossible to
+                * deliver data to the slaves fast enough, so we force the
+                * transmission here inside the loop. */
+                if (slaves) flushSlavesOutputBuffers();
 
-            /* Normally our stop condition is the ability to release
-             * a fixed, pre-computed amount of memory. However when we
-             * are deleting objects in another thread, it's better to
-             * check, from time to time, if we already reached our target
-             * memory, since the "mem_freed" amount is computed only
-             * across the dbAsyncDelete() call, while the thread can
-             * release the memory all the time. */
-            if (server.lazyfree_lazy_eviction && !(keys_freed % 16)) {
-                overhead = freeMemoryGetNotCountedMemory();
-                mem_used = zmalloc_used_memory();
-                mem_used = (mem_used > overhead) ? mem_used-overhead : 0;
-                if (mem_used <= server.maxmemory) {
-                    mem_freed = mem_tofree;
+                /* Normally our stop condition is the ability to release
+                * a fixed, pre-computed amount of memory. However when we
+                * are deleting objects in another thread, it's better to
+                * check, from time to time, if we already reached our target
+                * memory, since the "mem_freed" amount is computed only
+                * across the dbAsyncDelete() call, while the thread can
+                * release the memory all the time. */
+                if (server.lazyfree_lazy_eviction && !(keys_freed % 16)) {
+                    overhead = freeMemoryGetNotCountedMemory();
+                    mem_used = zmalloc_used_memory();
+                    mem_used = (mem_used > overhead) ? mem_used-overhead : 0;
+                    if (mem_used <= server.maxmemory) {
+                        mem_freed = mem_tofree;
+                    }
                 }
             }
+            
         }
 
         if (!keys_freed) {

@@ -634,6 +634,7 @@ typedef struct redisDb {
     dict *watched_keys;         /* WATCHED keys for MULTI/EXEC CAS */
     /*crdt gc stuff*/
     dict *deleted_keys;
+    dict *deleted_expires;
     int id;                     /* Database ID */
     long long avg_ttl;          /* Average TTL, just for stats */
 } redisDb;
@@ -1579,6 +1580,8 @@ void feedReplicationBacklogWithObject(struct redisServer *srv, robj *o);
 /* CRDT Replications */
 void crdtReplicationCron(void);
 void crdtMergeCommand(client *c);
+void crdtMergeExpireCommand(client *c);
+void crdtMergeDelExpireCommand(client *c);
 void crdtMergeDelCommand(client *c);
 void crdtMergeStartCommand(client *c);
 void crdtMergeEndCommand(client *c);
@@ -1607,6 +1610,9 @@ void crdtCancelReplicationHandshake(long long gid);
 void crdtDelCommand(client *c);
 CrdtObject *retrieveCrdtObject(robj *obj);
 CrdtTombstone *retrieveCrdtTombstone(robj *obj);
+CrdtExpire* retrieveCrdtExpire(robj *obj);
+CrdtExpireTombstone* retrieveCrdtExpireTombstone(robj *obj);
+int isModuleCrdt(robj *obj);
 moduleType* getModuleType(robj *obj);
 
 /* Generic persistence functions */
@@ -1636,6 +1642,11 @@ void openChildInfoPipe(struct redisServer *srv);
 void closeChildInfoPipe(struct redisServer *srv);
 void sendChildInfo(int process_type, struct redisServer *srv);
 void receiveChildInfo(struct redisServer *srv);
+
+//module 
+void *GetModuleKey(redisDb *db, robj *keyname, int mode, int needCheck);
+CrdtExpire* getCrdtExpire(redisDb *db, robj *key);
+void CloseModuleKey(void *moduleKey);
 
 /* Sorted sets data type */
 
@@ -1804,11 +1815,13 @@ void rewriteConfigRewriteLine(struct rewriteConfigState *state, const char *opti
 int rewriteConfig(char *path);
 
 /* db.c -- Keyspace access API */
-int removeExpire(redisDb *db, robj *key);
+int delExpire(redisDb *db, robj *key);
+int crdtPropagateExpire(redisDb *db, robj *key, int lazy, struct CrdtExpire* expire);
 void propagateExpire(redisDb *db, robj *key, int lazy);
 int expireIfNeeded(redisDb *db, robj *key);
 long long getExpire(redisDb *db, robj *key);
 void setExpire(client *c, redisDb *db, robj *key, long long when);
+void setCrdtExpire(client *c, redisDb *db, robj *key, robj* obj);
 robj *lookupKey(redisDb *db, robj *key, int flags);
 robj *lookupKeyRead(redisDb *db, robj *key);
 robj *lookupKeyWrite(redisDb *db, robj *key);
@@ -1833,10 +1846,14 @@ void tombstoneAdd(redisDb *db, robj *key, robj *val);
 void tombstoneOverwrite(redisDb *db, robj *key, robj *val);
 void setKeyToTombstone(redisDb *db, robj *key, robj *val);
 robj *lookupTombstoneKey(redisDb *db, robj *key);
-int gcIfNeeded(redisDb *db, robj *key);
+robj *lookupTombstone(dict *d, robj *key);
+int gcIfNeeded(dict *db, robj *key);
 void updateGcVectorClock();
 void tombstoneSizeCommand(client *c);
+void expireSizeCommand(client *c);
+void expireTombstoneSizeCommand(client *c);
 void activeGcCycle(int type);
+void activeExpireGcCycle(int type);
 
 #define EMPTYDB_NO_FLAGS 0      /* No flags. */
 #define EMPTYDB_ASYNC (1<<0)    /* Reclaim memory in another thread. */

@@ -63,11 +63,11 @@ test "tombstone kv" {
         test "tomstone kv" {
             set time [clock milliseconds]
             [lindex $peers 0] crdt.del_reg  key  2 $time "2:4;3:4"  
-            [lindex $peers 0] crdt.set key [encode_binary_str {abc} 3] 3 [expr $time - 10] "2:3;3:4" 10000
+            [lindex $peers 0] crdt.set key [encode_binary_str {abc} 3] 3 [expr $time - 10] "2:3;3:4" 
             
             assert {[[lindex $peers 0] get key ] eq {}}
 
-            [lindex $peers 0] crdt.set key val1 3 [expr $time + 10] "2:4;3:5" 10000 
+            [lindex $peers 0] crdt.set key val1 3 [expr $time + 10] "2:4;3:5"  
             assert {[[lindex $peers 0] get key] eq {val1}}
         }
     }

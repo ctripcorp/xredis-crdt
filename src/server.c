@@ -228,7 +228,7 @@ struct redisCommand redisCommandTable[] = {
 //    {"move",moveCommand,3,"wF",0,NULL,1,1,1,0,0},
     {"rename",renameCommand,3,"w",0,NULL,1,2,1,0,0},
     {"renamenx",renamenxCommand,3,"wF",0,NULL,1,2,1,0,0},
-    {"expire",expireCommand,3,"wF",0,NULL,1,1,1,0,0},
+    // {"expire",expireCommand,3,"wF",0,NULL,1,1,1,0,0},
     {"expireat",expireatCommand,3,"wF",0,NULL,1,1,1,0,0},
     {"pexpire",pexpireCommand,3,"wF",0,NULL,1,1,1,0,0},
     {"pexpireat",pexpireatCommand,3,"wF",0,NULL,1,1,1,0,0},
@@ -256,10 +256,10 @@ struct redisCommand redisCommandTable[] = {
 //    {"sort",sortCommand,-2,"wm",0,sortGetKeys,1,1,1,0,0},
     {"info",infoCommand,-1,"lt",0,NULL,0,0,0,0,0},
     {"monitor",monitorCommand,1,"as",0,NULL,0,0,0,0,0},
-    {"ttl",ttlCommand,2,"rF",0,NULL,1,1,1,0,0},
+    // {"ttl",ttlCommand,2,"rF",0,NULL,1,1,1,0,0},
 //    {"touch",touchCommand,-2,"rF",0,NULL,1,1,1,0,0},
     {"pttl",pttlCommand,2,"rF",0,NULL,1,1,1,0,0},
-    {"persist",persistCommand,2,"wF",0,NULL,1,1,1,0,0},
+    // {"persist",persistCommand,2,"wF",0,NULL,1,1,1,0,0},
     {"slaveof",slaveofCommand,3,"ast",0,NULL,0,0,0,0,0},
     {"xslaveof",xslaveofCommand,3,"ast",0,NULL,0,0,0,0,0},
     {"role",roleCommand,1,"lst",0,NULL,0,0,0,0,0},
@@ -318,7 +318,9 @@ struct redisCommand redisCommandTable[] = {
     {"crdt.psync",crdtPsyncCommand,3,"ars",0,NULL,0,0,0,0,0},
     {"crdt.merge_start", crdtMergeStartCommand,-1,"ars",0,NULL,0,0,0,0,0},
     {"crdt.merge",crdtMergeCommand,-1,"ars",0,NULL,0,0,0,0,0},
+    {"crdt.merge_expire",crdtMergeExpireCommand,-1,"ars",0,NULL,0,0,0,0,0},
     {"crdt.merge_del",crdtMergeDelCommand,-1,"ars",0,NULL,0,0,0,0,0},
+    {"crdt.merge_del_expire",crdtMergeDelExpireCommand,-1,"ars",0,NULL,0,0,0,0,0},
     {"crdt.merge_end",crdtMergeEndCommand,-1,"ars",0,NULL,0,0,0,0,0},
     {"crdt.replconf",replconfCommand,-1,"aslt",0,NULL,0,0,0,0,0},
     {"crdt.role",crdtRoleCommand,3,"lst",0,NULL,0,0,0,0,0},
@@ -326,6 +328,8 @@ struct redisCommand redisCommandTable[] = {
     {"peerof",peerofCommand,4,"ast",0,NULL,0,0,0,0,0},
     {"debugCancelCrdt",debugCancelCrdt,3,"ast",0,NULL,0,0,0,0,0},
     {"tombstoneSize",tombstoneSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
+    {"expireSize",expireSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
+    {"expireTombstoneSize",expireTombstoneSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
     {"crdt.ovc",crdtOvcCommand,3,"rF",0,NULL,0,0,0,0,0},
     {"crdt.authGid", crdtAuthGidCommand,2,"rF", 0, NULL,0,0,0,0,0}
 };
@@ -919,7 +923,7 @@ void databasesCron(void) {
     }
 
     activeGcCycle(ACTIVE_GC_CYCLE_SLOW);
-
+    activeExpireGcCycle(ACTIVE_GC_CYCLE_SLOW);
     /* Defrag keys gradually. */
     if (server.active_defrag_enabled)
         activeDefragCycle();
@@ -1278,7 +1282,7 @@ void beforeSleep(struct aeEventLoop *eventLoop) {
         activeExpireCycle(ACTIVE_EXPIRE_CYCLE_FAST);
 
     activeGcCycle(ACTIVE_GC_CYCLE_FAST);
-
+    activeExpireGcCycle(ACTIVE_GC_CYCLE_FAST);
     /* Send all the slaves an ACK request if at least one client blocked
      * during the previous event loop iteration. */
     if (server.get_ack_from_slaves) {
@@ -1977,8 +1981,9 @@ void initServer(struct redisServer *srv) {
         /* Create the Redis databases, and initialize other internal state. */
         for (j = 0; j < srv->dbnum; j++) {
             srv->db[j].dict = dictCreate(&dbDictType, NULL);
-            srv->db[j].expires = dictCreate(&keyptrDictType, NULL);
+            srv->db[j].expires = dictCreate(&dbDictType, NULL);
             srv->db[j].deleted_keys = dictCreate(&dbDictType, NULL);
+            srv->db[j].deleted_expires = dictCreate(&dbDictType, NULL);
             srv->db[j].blocking_keys = dictCreate(&keylistDictType, NULL);
             srv->db[j].ready_keys = dictCreate(&objectKeyPointerValueDictType, NULL);
             srv->db[j].watched_keys = dictCreate(&keylistDictType, NULL);

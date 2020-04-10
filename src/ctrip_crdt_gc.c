@@ -58,12 +58,12 @@ void tombstoneOverwrite(redisDb *db, robj *key, robj *val) {
     dictReplace(db->deleted_keys, key->ptr, val);
 }
 
-robj *lookupTombstone(redisDb *db, robj *key) {
+robj *lookupTombstone(dict *d, robj *key) {
     dictEntry *de;
 
     /* No deleted? return ASAP */
-    if (dictSize(db->deleted_keys) == 0 ||
-        (de = dictFind(db->deleted_keys,key->ptr)) == NULL) return NULL;
+    if (dictSize(d) == 0 ||
+        (de = dictFind(d,key->ptr)) == NULL) return NULL;
 
     return dictGetVal(de);
 }
@@ -77,7 +77,7 @@ robj *lookupTombstone(redisDb *db, robj *key) {
  * All the new keys in the database should be created via this interface. */
 void setKeyToTombstone(redisDb *db, robj *key, robj *val) {
     robj *existing;
-    if ((existing = lookupTombstone(db,key)) == NULL) {
+    if ((existing = lookupTombstone(db->deleted_keys,key)) == NULL) {
         tombstoneAdd(db,key,val);
     } else {
         // CrdtCommon *existingCrdtCommon = retrieveCrdtCommon(existing);
@@ -98,14 +98,13 @@ void setKeyToTombstone(redisDb *db, robj *key, robj *val) {
  * Returns the linked value object if the key exists or NULL if the key
  * does not exist in the specified DB. */
 robj *lookupTombstoneKey(redisDb *db, robj *key) {
-    gcIfNeeded(db,key);
-    return lookupTombstone(db,key);
+    gcIfNeeded(db->deleted_keys,key);
+    return lookupTombstone(db->deleted_keys,key);
 }
 
 
-
-int gcIfNeeded(redisDb *db, robj *key) {
-    robj *val = lookupTombstone(db,key);
+int gcIfNeeded(dict *d, robj *key) {
+    robj *val = lookupTombstone(d,key);
     if(val == NULL) {
         return 0;
     }
@@ -124,7 +123,7 @@ int gcIfNeeded(redisDb *db, robj *key) {
         return 0;
     }
 
-    if (dictDelete(db->deleted_keys,key->ptr) == DICT_OK) {
+    if (dictDelete(d,key->ptr) == DICT_OK) {
         return 1;
     } else {
         return 0;
@@ -151,6 +150,12 @@ int removeDel(redisDb *db, robj *key) {
 
 void tombstoneSizeCommand(client *c) {
     addReplyLongLong(c,dictSize(c->db->deleted_keys));
+}
+void expireSizeCommand(client *c) {
+    addReplyLongLong(c,dictSize(c->db->expires));
+}
+void expireTombstoneSizeCommand(client *c) {
+    addReplyLongLong(c,dictSize(c->db->deleted_expires));
 }
 
 
@@ -206,7 +211,7 @@ void updateGcVectorClock() {
  *
  * The parameter 'now' is the current time in milliseconds as is passed
  * to the function to avoid too many gettimeofday() syscalls. */
-int activeGcCycleTryGc(redisDb *db, dictEntry *de) {
+int activeGcCycleTryGc(dict *d, dictEntry *de) {
     robj *val = dictGetVal(de);
     CrdtTombstone *tombstone = retrieveCrdtTombstone(val);
     if (tombstone == NULL) {
@@ -220,7 +225,7 @@ int activeGcCycleTryGc(redisDb *db, dictEntry *de) {
         return 0;
     }
     sds key = dictGetKey(de);
-    if (dictDelete(db->deleted_keys,key) == DICT_OK) {
+    if (dictDelete(d,key) == DICT_OK) {
         return 1;
     } else {
         return 0;
@@ -249,13 +254,9 @@ int activeGcCycleTryGc(redisDb *db, dictEntry *de) {
  * executed, where the time limit is a percentage of the REDIS_HZ period
  * as specified by the ACTIVE_EXPIRE_CYCLE_SLOW_TIME_PERC define. */
 
-void activeGcCycle(int type) {
-    /* This function has some global state in order to continue the work
-     * incrementally across calls. */
-    static unsigned int current_db = 0; /* Last DB tested. */
-    static int timelimit_exit = 0;      /* Time limit hit in previous call? */
-    static long long last_fast_cycle = 0; /* When last fast cycle ran. */
 
+typedef dict* (*getDictFunc)(redisDb *db);
+void Gc(int type, unsigned int *current_db,int *timelimit_exit, long long *last_fast_cycle,getDictFunc getDict, const char* name) {
     int j, iteration = 0;
     int dbs_per_call = CRON_DBS_PER_CALL;
     long long start = ustime(), timelimit, elapsed;
@@ -271,11 +272,10 @@ void activeGcCycle(int type) {
         /* Don't start a fast cycle if the previous cycle did not exited
          * for time limt. Also don't repeat a fast cycle for the same period
          * as the fast cycle total duration itself. */
-        if (!timelimit_exit) return;
-        if (start < last_fast_cycle + ACTIVE_EXPIRE_CYCLE_FAST_DURATION*2) return;
-        last_fast_cycle = start;
+        if (!*timelimit_exit) return;
+        if (start < *last_fast_cycle + ACTIVE_EXPIRE_CYCLE_FAST_DURATION*2) return;
+        *last_fast_cycle = start;
     }
-
     /* We usually should test CRON_DBS_PER_CALL per iteration, with
      * two exceptions:
      *
@@ -283,7 +283,7 @@ void activeGcCycle(int type) {
      * 2) If last time we hit the time limit, we want to scan all DBs
      * in this iteration, as there is work to do in some DB and we don't want
      * expired keys to use memory for too much time. */
-    if (dbs_per_call > server.dbnum || timelimit_exit)
+    if (dbs_per_call > server.dbnum || *timelimit_exit)
         dbs_per_call = server.dbnum;
 
     /* We can use at max ACTIVE_EXPIRE_CYCLE_SLOW_TIME_PERC percentage of CPU time
@@ -291,20 +291,20 @@ void activeGcCycle(int type) {
      * server.hz times per second, the following is the max amount of
      * microseconds we can spend in this function. */
     timelimit = 1000000*ACTIVE_EXPIRE_CYCLE_SLOW_TIME_PERC/server.hz/100;
-    timelimit_exit = 0;
+    *timelimit_exit = 0;
     if (timelimit <= 0) timelimit = 1;
 
     if (type == ACTIVE_GC_CYCLE_FAST)
         timelimit = ACTIVE_EXPIRE_CYCLE_FAST_DURATION; /* in microseconds. */
 
-    for (j = 0; j < dbs_per_call && timelimit_exit == 0; j++) {
+    for (j = 0; j < dbs_per_call && *timelimit_exit == 0; j++) {
         int deleted;
-        redisDb *db = server.db+(current_db % server.dbnum);
-
+        redisDb *db = server.db+(*current_db % server.dbnum);
+        dict* d = getDict(db);
         /* Increment the DB now so we are sure if we run out of time
          * in the current DB we'll restart from the next. This allows to
          * distribute the time evenly across DBs. */
-        current_db++;
+        *current_db = *current_db+1;
 
         /* Continue to delete if at the end of the cycle more than 25%
          * of the keys were deleted. */
@@ -313,10 +313,10 @@ void activeGcCycle(int type) {
             iteration++;
 
             /* If there is nothing to delete try next DB ASAP. */
-            if ((num = dictSize(db->deleted_keys)) == 0) {
+            if ((num = dictSize(d)) == 0) {
                 break;
             }
-            slots = dictSlots(db->deleted_keys);
+            slots = dictSlots(d);
 
             /* When there are less than 1% filled slots getting random
              * keys is expensive, so stop here waiting for better times...
@@ -334,9 +334,9 @@ void activeGcCycle(int type) {
             while (num--) {
                 dictEntry *de;
 
-                if ((de = dictGetRandomKey(db->deleted_keys)) == NULL) break;
+                if ((de = dictGetRandomKey(d)) == NULL) break;
 
-                if (activeGcCycleTryGc(db,de)) deleted++;
+                if (activeGcCycleTryGc(d,de)) deleted++;
 
             }
 
@@ -346,7 +346,7 @@ void activeGcCycle(int type) {
             if ((iteration & 0xf) == 0) { /* check once every 16 iterations. */
                 elapsed = ustime()-start;
                 if (elapsed > timelimit) {
-                    timelimit_exit = 1;
+                    *timelimit_exit = 1;
                     break;
                 }
             }
@@ -354,7 +354,29 @@ void activeGcCycle(int type) {
              * found deleted in the current DB. */
         } while (deleted > ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP/4);
     }
-
     elapsed = ustime()-start;
-    latencyAddSampleIfNeeded("gc-cycle",elapsed/1000);
+    latencyAddSampleIfNeeded(name,elapsed/1000);
+}
+dict* getDeletedKeys(redisDb* db) {
+    return db->deleted_keys;
+}
+void activeGcCycle(int type) {
+    /* This function has some global state in order to continue the work
+     * incrementally across calls. */
+    static unsigned int current_db = 0; /* Last DB tested. */
+    static int timelimit_exit = 0;      /* Time limit hit in previous call? */
+    static long long last_fast_cycle = 0; /* When last fast cycle ran. */
+    Gc(type, &current_db, &timelimit_exit, &last_fast_cycle, getDeletedKeys, "gc-cycle");
+}
+dict* getDeletedExpires(redisDb* db) {
+    return db->deleted_expires;
+}
+
+void activeExpireGcCycle(int type) {
+    /* This function has some global state in order to continue the work
+     * incrementally across calls. */
+    static unsigned int current_db = 0; /* Last DB tested. */
+    static int timelimit_exit = 0;      /* Time limit hit in previous call? */
+    static long long last_fast_cycle = 0; /* When last fast cycle ran. */
+    Gc(type, &current_db, &timelimit_exit, &last_fast_cycle, getDeletedExpires, "gc-expire-cycle");
 }
