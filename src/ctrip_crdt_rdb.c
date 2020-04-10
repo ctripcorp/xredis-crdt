@@ -40,18 +40,6 @@
 /* Spawn an RDB child that writes the RDB to the sockets of the slaves
  * that are currently in SLAVE_STATE_WAIT_BGSAVE_START state. */
 
-/* Macro to initialize an IO context. Note that the 'ver' field is populated
- * inside rdb.c according to the version of the value to load. */
-static inline int isModuleCrdt(robj *obj) {
-    if(obj->type != OBJ_MODULE) {
-        return C_ERR;
-    }
-    moduleValue *mv = obj->ptr;
-    if(strncmp(CRDT_MODULE_OBJECT_PREFIX, mv->type->name, 4) == 0) {
-        return C_OK;
-    }
-    return C_ERR;
-}
 
 //CRDT.MERGE_START <local-gid> <vector-clock> <repl_id>
 //CRDT.Merge <src-gid> <key> <vc> <timestamp/-1> <expire> <value>
@@ -95,16 +83,14 @@ werr: /* Write error. */
     return C_ERR;
 }
 
-int crdtSendMergeRequest(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di, redisDb *db) {
+int crdtSendMergeRequest(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di, const char *cmdname) {
     dictEntry *de;
-    long long now = mstime();
     rio payload;
 
     /* Iterate this DB writing every entry */
     while((de = dictNext(di)) != NULL) {
         sds keystr = dictGetKey(de);
         robj key, *o = dictGetVal(de);
-        long long expire;
         if(o->type != OBJ_MODULE || isModuleCrdt(o) != C_OK) {
             serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveRio] NOT CRDT MODULE, SKIP");
             continue;
@@ -123,23 +109,13 @@ int crdtSendMergeRequest(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di, redis
         robj *result = createModuleObject(mv->type, filter);
         //CRDT.Merge <src-gid> <key>  <ttl> <value>
         initStaticStringObject(key,keystr);
-        expire = getExpire(db,&key);
-        // not send if expired already
-        if (expire != -1 && expire < now) {
-            continue;
-        }
 
-        long long ttl = 0;
-        if (expire != -1) {
-            ttl = expire-mstime();
-            if (ttl < 1) ttl = 1;
-        }
         serverAssertWithInfo(NULL, &key, sdsEncodedObject((&key)));
-        if(!rioWriteBulkCount(rdb, '*', 5)) return C_ERR;
-        if(!rioWriteBulkString(rdb,"CRDT.Merge",10)) return C_ERR;
+        if(!rioWriteBulkCount(rdb, '*', 4)) return C_ERR;
+        // if(!rioWriteBulkString(rdb,"CRDT.Merge",10)) return C_ERR;
+        if(!rioWriteBulkString(rdb, cmdname, strlen(cmdname))) return C_ERR;
         if(!rioWriteBulkLongLong(rdb, crdtServer.crdt_gid)) return C_ERR;
         if(!rioWriteBulkString(rdb, (&key)->ptr,sdslen((&key)->ptr))) return C_ERR;
-        if(!rioWriteBulkLongLong(rdb, ttl)) return C_ERR;
 
         /* Emit the payload argument, that is the serialized object using
          * * the DUMP format. */
@@ -155,7 +131,7 @@ int crdtSendMergeRequest(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di, redis
 }
 
 // CRDT.Merge_Del <gid> <key> <val>
-int crdtSendMergeDelRequest(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di) {
+int crdtSendMergeDelRequest(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di, const char* cmdname) {
     dictEntry *de;
     rio payload;
 
@@ -182,7 +158,7 @@ int crdtSendMergeDelRequest(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di) {
 
         serverAssertWithInfo(NULL, &key, sdsEncodedObject((&key)));
         if(!rioWriteBulkCount(rdb, '*', 4)) return C_ERR;
-        if(!rioWriteBulkString(rdb,"CRDT.Merge_Del",14))    return C_ERR;
+        if(!rioWriteBulkString(rdb,cmdname,strlen(cmdname)))    return C_ERR;
         if(!rioWriteBulkLongLong(rdb, crdtServer.crdt_gid)) return C_ERR;
         if(!rioWriteBulkString(rdb, (&key)->ptr,sdslen((&key)->ptr)))   return C_ERR;
         
@@ -210,7 +186,12 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
     for (j = 0; j < server.dbnum; j++) {
         redisDb *db = server.db+j;
         dict *d = db->dict;
-        if (dictSize(d) == 0 && dictSize(db->deleted_keys) == 0) continue;
+        if (
+            dictSize(d) == 0 && 
+            dictSize(db->deleted_keys) == 0 &&
+            dictSize(db->expires) == 0 &&
+            dictSize(db->deleted_expires) == 0
+        ) continue;
         di = dictGetSafeIterator(d);
         if (!di) return C_ERR;
 
@@ -235,7 +216,7 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
         if (needDelete == C_OK) {
             decrRefCount(selectcmd);
         }
-        if (dictSize(d) != 0 && crdtSendMergeRequest(rdb, rsi, di, db) == C_ERR) {
+        if (dictSize(d) != 0 && crdtSendMergeRequest(rdb, rsi, di, "CRDT.Merge") == C_ERR) {
             goto werr;
         }
         dictReleaseIterator(di);
@@ -243,10 +224,27 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
         d = db->deleted_keys;
         di = dictGetSafeIterator(d);
         if (!di) return C_ERR;
-        if (dictSize(d) != 0 && crdtSendMergeDelRequest(rdb, rsi, di) == C_ERR) {
+        if (dictSize(d) != 0 && crdtSendMergeDelRequest(rdb, rsi, di, "CRDT.Merge_Del") == C_ERR) {
             goto werr;
         }
         dictReleaseIterator(di);
+
+        d = db->expires;
+        di = dictGetSafeIterator(d);
+        if (!di) return C_ERR;
+        if (dictSize(d) != 0 && crdtSendMergeRequest(rdb, rsi, di, "CRDT.merge_expire") == C_ERR) {
+            goto werr;
+        }
+        dictReleaseIterator(di);
+
+        d = db->deleted_expires;
+        di = dictGetSafeIterator(d);
+        if (!di) return C_ERR;
+        if (dictSize(d) != 0 && crdtSendMergeDelRequest(rdb, rsi, di, "CRDT.merge_del_expire") == C_ERR) {
+            goto werr;
+        }
+        dictReleaseIterator(di);
+        
     }
     serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveRio] end");
     return C_OK;
@@ -266,11 +264,11 @@ static int updateReplTransferLastio(long long gid) {
     peerMasterServer->repl_transfer_lastio = server.unixtime;
     return C_OK;
 }
-
-//CRDT.Merge_Del <gid> <key> <val>
-//   0             1     2      3
-void
-crdtMergeDelCommand(client *c) {
+typedef robj* (*DictFindFunc)(redisDb* db, robj* key);
+typedef int (*DictDeleteFunc)(redisDb* db, robj* key);
+typedef void (*DictAddFunc)(redisDb* db, robj* key, robj* value);
+typedef int (*CheckTypeFunc)(void* current, void* merge, robj* key);
+int crdtMergeTomstoneCommand(client* c, DictFindFunc findtombstone, DictAddFunc addtombstone, DictFindFunc findval, DictDeleteFunc deleteval, CheckTypeFunc checktype) {
     rio payload;
     robj *obj;
     int type;
@@ -294,21 +292,19 @@ crdtMergeDelCommand(client *c) {
      * For tombstone object, if it has been deleted, we need to delete our object first
      * **/
     CrdtTombstone *tombstoneCrdtCommon = NULL;
-    dictEntry *de = dictFind(c->db->deleted_keys,key->ptr);
-    if (de) {
-        robj* tombstone= dictGetVal(de);
+    robj* tombstone = findtombstone(c->db,key);
+    if (tombstone != NULL) {
         // moduleValue *mv = obj->ptr;
         // void *moduleDataType = mv->value;
         CrdtTombstone *common = retrieveCrdtTombstone(obj);
         
         // void *oldModuleDataType = old_mv->value;
         CrdtTombstone *oldCommon = retrieveCrdtTombstone(tombstone);
-        if (common->type != oldCommon->type) {
-            serverLog(LL_WARNING, "[INCONSIS][MERGE] key: %s, tombstone type: %d, merge type %d",
-                    key->ptr, oldCommon->type, common->type);
+        if(checktype(common, oldCommon, key) != C_OK) {
             decrRefCount(obj);
-            return;
+            return C_ERR;
         }
+        
        
         void *mergedVal = common->method->merge(common, oldCommon);
         moduleValue *old_mv = tombstone->ptr;
@@ -318,46 +314,112 @@ crdtMergeDelCommand(client *c) {
         decrRefCount(obj);
     }else{
         tombstoneCrdtCommon = retrieveCrdtTombstone(obj);
-        sds copy = sdsdup(key->ptr);
-        dictAdd(c->db->deleted_keys, copy, obj);
+        addtombstone(c->db, key, obj);
     }
-    
-    robj *currentVal = lookupKeyRead(c->db, key);
-    if (currentVal) {
+    robj *currentVal = findval(c->db, key);
+    if(currentVal != NULL) {
         CrdtObject *currentCrdtCommon = retrieveCrdtObject(currentVal);
         if(tombstoneCrdtCommon->method->purage(tombstoneCrdtCommon, currentCrdtCommon)) {
-            dbDelete(c->db, key);
+            // dbDelete(c->db, key);
+            deleteval(c->db, key);
         }
     }
+    
     server.dirty++;
-    return;
+    return C_OK;
 
 error:
     crdtCancelReplicationHandshake(sourceGid);
-    return;
-
+    return C_ERR;
+}
+robj* findRobj(dict* d, void* key) {
+    dictEntry *de = dictFind(d, key);
+    if(de == NULL) return NULL;
+    return dictGetVal(de);
+}
+robj* findExpireTombstone(redisDb *db, robj *key) {
+    return findRobj(db->deleted_expires, key->ptr);
+}
+int deleteExpire(redisDb *db, robj *key) {
+    return dictDelete(db->expires, key->ptr);
+}
+robj* findExpire(redisDb  *db, robj* key) {
+    return findRobj(db->expires, key->ptr);
+}
+void addExpireTombstone(redisDb *db, robj *key, robj *value) {
+    dictAdd(db->deleted_expires, sdsdup(key->ptr), value);
+}
+int checkExpireTombstoneType(void* current, void* other, robj* key) {
+    CrdtExpireTombstone* c = (CrdtExpireTombstone*)current;
+    CrdtExpireTombstone* o = (CrdtExpireTombstone*)other;
+    if(c->parent.type != o->parent.type) {
+        serverLog(LL_WARNING, "[INCONSIS][MERGE EXPIRE TOMBSTONE] key: %s, expire tombstone type: %d, merge type %d",
+                key->ptr, c->parent.type, o->parent.type);
+        return C_ERR;
+    }
+    if (c->dataType != o->dataType) {
+        serverLog(LL_WARNING, "[INCONSIS][MERGE EXPIRE TOMBSTONE DATATYPE] key: %s, expire tombstone type: %d",
+                key->ptr, c->dataType);
+        return C_ERR;  
+    }
+    return C_OK;
+}
+void crdtMergeDelExpireCommand(client *c) {
+    crdtMergeTomstoneCommand(c, 
+        findExpireTombstone,
+        addExpireTombstone,
+        findExpire,
+        deleteExpire,
+        checkExpireTombstoneType
+    );
+}
+robj* findTombstone(redisDb *db, robj *key) {
+    return findRobj(db->deleted_keys, key->ptr);
+}
+void addTombstone(redisDb *db, robj *key, robj *value) {
+    dictAdd(db->deleted_keys, sdsdup(key->ptr), value);
+}
+int checkTombstoneType(void* current, void* other, robj* key) {
+    CrdtTombstone* c = (CrdtTombstone*)current;
+    CrdtTombstone* o = (CrdtTombstone*)other;
+    if(c->type != o->type) {
+        serverLog(LL_WARNING, "[INCONSIS][MERGE TOMBSTONE] key: %s, tombstone type: %d, merge type %d",
+                key->ptr, c->type, o->type);
+        return C_ERR;
+    }
+    if(c->type != CRDT_DATA) {
+        serverLog(LL_WARNING, "[INCONSIS][MERGE TOMBSTONE TYPE] key: %s, tombstone type: %d",
+                key->ptr, c->type);
+        return C_ERR;
+    }
+    return C_OK;
+}
+void
+crdtMergeDelCommand(client *c) {
+    crdtMergeTomstoneCommand(c, 
+        findTombstone, 
+        addTombstone,
+        lookupKeyRead,
+        dbDelete,
+        checkTombstoneType
+    );
 }
 
-//CRDT.Merge <gid> <key> <expire> <value>
-// 0           1    2     3      4      
-void
-crdtMergeCommand(client *c) {
+int mergeCrdtObjectCommand(client *c, DictFindFunc find, DictAddFunc add, DictDeleteFunc delete, DictFindFunc findtombstone, CheckTypeFunc checktype) {
     rio payload;
     robj *obj;
     int type;
-    long long sourceGid, expire, ttl;
+    long long sourceGid;
     if (getLongLongFromObjectOrReply(c, c->argv[1], &sourceGid, NULL) != C_OK) goto error;
     if (updateReplTransferLastio(sourceGid) != C_OK) goto error;
     robj *key = c->argv[2];
 
-    // if (getLongLongFromObjectOrReply(c, c->argv[4], &timestamp, NULL) != C_OK) goto error;
-    if (getLongLongFromObjectOrReply(c, c->argv[3], &ttl, NULL) != C_OK) goto error;
 
-    if (verifyDumpPayload(c->argv[4]->ptr,sdslen(c->argv[4]->ptr)) == C_ERR) {
+    if (verifyDumpPayload(c->argv[3]->ptr,sdslen(c->argv[3]->ptr)) == C_ERR) {
         goto error;
     }
 
-    rioInitWithBuffer(&payload,c->argv[4]->ptr);
+    rioInitWithBuffer(&payload,c->argv[3]->ptr);
     if (((type = rdbLoadObjectType(&payload)) == -1) ||
         ((obj = rdbLoadObject(type,&payload)) == NULL))
     {
@@ -369,48 +431,108 @@ crdtMergeCommand(client *c) {
 
     CrdtObject *common = retrieveCrdtObject(obj);
     
-    robj *currentVal = lookupKeyRead(c->db, key);
+    // robj *currentVal = lookupKeyRead(c->db, key);
+    robj *currentVal = find(c->db, key);
     CrdtObject *mergedVal;
     if (currentVal) {
         CrdtObject *ccm = retrieveCrdtObject(currentVal);
-        if (ccm->type != common->type) {
-            serverLog(LL_WARNING, "[INCONSIS][MERGE] key: %s, local type: %d, merge type %d",
-                    key->ptr, ccm->type, common->type);
+        if(checktype(ccm, common, key) != C_OK) {
             decrRefCount(obj);
-            return;
+            return C_ERR;
         }
         mergedVal = common->method->merge(ccm, common);
-        dbDelete(c->db, key);
+        delete(c->db, key);
     } else {
         mergedVal = common->method->merge(NULL, common);
     }
     decrRefCount(obj);
-    dictEntry *de = dictFind(c->db->deleted_keys,key->ptr);
-    if(de != NULL) {
-        robj* tombstone= dictGetVal(de);
+    robj* tombstone = findtombstone(c->db,key);
+    if(tombstone != NULL) {
         CrdtTombstone* tom = retrieveCrdtTombstone(tombstone);
         if(tom->method->purage(tom, mergedVal)) {
+            mt->free(mergedVal);
             mergedVal = NULL;
         }
     }
     /* Create the key and set the TTL if any */
-    if(mergedVal) dbAdd(c->db, key, createModuleObject(mt, mergedVal));
+    if(mergedVal) add(c->db, key, createModuleObject(mt, mergedVal));
 
-    /* Set the expire time if needed */
-    if (ttl) {
-        expire = mstime() + ttl;
-        if (getExpire(c->db, key) <= expire) {
-            setExpire(NULL, c->db, key, expire);
-        }
-    }
     signalModifiedKey(c->db,c->argv[1]);
     server.dirty++;
-    return;
+    return C_OK;
 
 error:
     crdtCancelReplicationHandshake(sourceGid);
-    return;
+    return C_ERR;
+}
 
+
+void addExpire(redisDb *db, robj *key, robj *value) {
+    dictAdd(db->expires, sdsdup(key->ptr), value);
+}
+
+int checkExpireType(void* current, void* other, robj* key) {
+    CrdtObject* c = (CrdtObject*)current;
+    CrdtObject* o = (CrdtObject*)other;
+    if (c->type != o->type) {
+        serverLog(LL_WARNING, "[INCONSIS][MERGE EXPIRE] key: %s, local type: %d, merge type %d",
+                key->ptr, c->type, o->type);
+        return C_ERR;
+    }
+    if(c->type != CRDT_EXPIRE) {
+        serverLog(LL_WARNING, "[INCONSIS][MERGE EXPIRE TYPE ERROR] key: %s, local type: %d",
+                key->ptr, c->type);
+        return C_ERR;
+    }
+    return C_OK;
+}
+
+
+//CRDT.Merge_Expire <gid> <key>  <value>
+// 0           1    2       3   
+void crdtMergeExpireCommand(client *c) {
+    mergeCrdtObjectCommand(c, 
+        findExpire,
+        addExpire,
+        deleteExpire,
+        findExpireTombstone,
+        checkExpireType
+    );
+}
+
+
+int checkDataType(void* current, void* other, robj* key) {
+    CrdtData* c = (CrdtData*)current;
+    CrdtData* o = (CrdtData*)other;
+    if (c->parent.type != o->parent.type) {
+        serverLog(LL_WARNING, "[INCONSIS][MERGE] key: %s, local type: %d, merge type %d",
+                key->ptr, c->parent.type, o->parent.type);
+        return C_ERR;
+    }
+    if(c->parent.type != CRDT_DATA) {
+        serverLog(LL_WARNING, "[INCONSIS][MERGE DATA TYPE ERROR] key: %s, local type: %d",
+                key->ptr, c->parent.type);
+        return C_ERR;
+    }
+    
+    if (c->dataType != o->dataType) {
+        serverLog(LL_WARNING, "[INCONSIS][MERGE DATA] key: %s, local type: %d, merge type %d",
+                key->ptr, c->dataType, o->dataType);
+        return C_ERR;
+    }
+    
+    return C_OK;
+}
+// CRDT.Merge <gid> <key>  <value>
+// 0           1    2       3  
+void crdtMergeCommand(client *c) {
+    mergeCrdtObjectCommand(c, 
+        lookupKeyRead,
+        dbAdd,
+        dbDelete,
+        findTombstone,
+        checkDataType
+    );
 }
 
 

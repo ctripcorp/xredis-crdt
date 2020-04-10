@@ -54,7 +54,7 @@ size_t lazyfreeGetFreeEffort(robj *obj) {
 int dbAsyncDelete(redisDb *db, robj *key) {
     /* Deleting an entry from the expires dict will not free the sds of
      * the key, because it is shared with the main dictionary. */
-    if (dictSize(db->expires) > 0) dictDelete(db->expires,key->ptr);
+    // if (dictSize(db->expires) > 0) dictDelete(db->expires,key->ptr);
 
     /* If the value is composed of a few allocations, to free in a lazy way
      * is actually just slower... So under a certain limit we just free
@@ -96,7 +96,7 @@ int dbAsyncDelete(redisDb *db, robj *key) {
 void emptyDbAsync(redisDb *db) {
     dict *oldht1 = db->dict, *oldht2 = db->expires;
     db->dict = dictCreate(&dbDictType,NULL);
-    db->expires = dictCreate(&keyptrDictType,NULL);
+    db->expires = dictCreate(&dbDictType,NULL);
     atomicIncr(lazyfree_objects,dictSize(oldht1));
     bioCreateBackgroundJob(BIO_LAZY_FREE,NULL,oldht1,oldht2);
 }

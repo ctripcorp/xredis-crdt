@@ -920,22 +920,22 @@ proc basic_test { type create check delete} {
 
 # key field value gid timestamp vc
 #  0   1     2    3    4        5
-# basic_test "kv" {
-#     catch [$redis crdt.set $0 $2 $3 $4 $5 10000] error
-# } {
-#     set r [ $redis crdt.get $0 ]
-#     if { {$2} == {} } {
-#         assert {$r == {}}
-#     } else {
-#         assert { [lindex $r 0] == {$2} }
-#         assert { [lindex $r 1] == {$3} }
-#         assert { [lindex $r 2] == {$4} }
-#         assert { [lindex $r 3] == [format "%s" $5] }
-#     }
-#     unset r
-# } {
-#     $redis crdt.del_reg $0 $3 $4 $5
-# }
+basic_test "kv" {
+    catch [$redis crdt.set $0 $2 $3 $4 $5] error
+} {
+    set r [ $redis crdt.get $0 ]
+    if { {$2} == {} } {
+        assert {$r == {}}
+    } else {
+        assert { [lindex $r 0] == {$2} }
+        assert { [lindex $r 1] == {$3} }
+        assert { [lindex $r 2] == {$4} }
+        assert { [lindex $r 3] == [format "%s" $5] }
+    }
+    unset r
+} {
+    $redis crdt.del_reg $0 $3 $4 $5
+}
 
 # key field value gid timestamp vc
 #  0   1     2    3    4        5

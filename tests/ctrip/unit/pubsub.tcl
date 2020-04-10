@@ -256,7 +256,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
         assert_equal {pmessage * __keyspace@9__:foo del}  [$rd1 read]
         assert_equal {pmessage * __keyevent@9__:del foo}  [$rd1 read]
 
-        r crdt.set foo bar 1 1000 "1:1" 1000
+        r crdt.set foo bar 1 1000 "1:1" 
         assert_equal {pmessage * __keyspace@9__:foo set} [$rd1 read]
         assert_equal {pmessage * __keyevent@9__:set foo} [$rd1 read]
 
