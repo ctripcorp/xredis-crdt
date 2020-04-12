@@ -3454,6 +3454,10 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
         info = sdscatprintf(info, 
                             "ovc:%s\r\n", vectorClockStr);
         sdsfree(vectorClockStr);
+        sds gcVectorClockStr = vectorClockToSds(crdtServer.gcVectorClock);                    
+        info = sdscatprintf(info, 
+                            "gcvc:%s\r\n", gcVectorClockStr);
+        sdsfree(gcVectorClockStr);
         if (listLength(crdtServer.crdtMasters)) {
             listNode *ln;
             listIter li;

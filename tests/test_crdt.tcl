@@ -14,6 +14,7 @@ source tests/support/util.tcl
 
 
 set ::all_tests {
+    ctrip/unit/aof
     ctrip/integration/master-slave/rdb
     ctrip/unit/expire
     ctrip/basic/basic_crdt_type_del
