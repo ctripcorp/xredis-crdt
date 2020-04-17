@@ -14,6 +14,7 @@ source tests/support/util.tcl
 
 
 set ::all_tests {
+    ctrip/integration/master-slave/rdb
     ctrip/unit/expire
     ctrip/basic/basic_crdt_type_del
     ctrip/integration/composite/master-slave-failover
@@ -64,6 +65,7 @@ set ::all_tests {
 }
 
 set ::temp_tests {
+    
     #####
     ctrip/integration/bug/redis-crash-when-full-sync-hash-merge
     ctrip/integration/bug/redis-when-full-sync-mater-timeout-vectorclock-update
