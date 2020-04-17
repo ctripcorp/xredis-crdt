@@ -1351,6 +1351,7 @@ typedef struct {
 
 extern struct redisServer server;
 extern struct redisServer crdtServer;
+extern int crdt_mode;
 extern struct sharedObjectsStruct shared;
 extern dictType objectKeyPointerValueDictType;
 extern dictType setDictType;
@@ -1623,6 +1624,13 @@ void stopLoading(void);
 /* RDB persistence */
 #include "rdb.h"
 int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi);
+ssize_t rdbSaveAuxFieldStrStr(rio *rdb, char *key, char *val);
+/* CRDT RDB */
+int rdbSaveCrdtData(rio *rdb, int dbid,redisDb* db, dict* keys, long long now, int flags, size_t* processed);
+int rdbSaveCrdtDbSize(rio* rdb, redisDb* db);
+int rdbSaveCrdtInfoAuxFields(rio* rdb);
+int rdbLoadCrdtData(rio* rdb, redisDb* db);
+int rdbLoadCrdtDbSize(rio* rdb, redisDb* db);
 
 /* AOF persistence */
 void flushAppendOnlyFile(int force);
@@ -1855,6 +1863,7 @@ void expireTombstoneSizeCommand(client *c);
 void activeGcCycle(int type);
 void activeExpireGcCycle(int type);
 
+void* getModuleFunction(char* module_name, char* function_name);
 #define EMPTYDB_NO_FLAGS 0      /* No flags. */
 #define EMPTYDB_ASYNC (1<<0)    /* Reclaim memory in another thread. */
 long long emptyDb(int dbnum, int flags, void(callback)(void*));
