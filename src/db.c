@@ -334,6 +334,7 @@ long long emptyDb(int dbnum, int flags, void(callback)(void*)) {
             dictEmpty(server.db[j].dict,callback);
             dictEmpty(server.db[j].expires,callback);
             dictEmpty(server.db[j].deleted_keys,callback);
+            dictEmpty(server.db[j].deleted_expires,callback);
         }
     }
     if (server.cluster_enabled) {

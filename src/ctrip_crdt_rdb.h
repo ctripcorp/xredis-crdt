@@ -43,7 +43,10 @@ typedef struct crdtRdbSaveInfo {
     long long logic_time;
 } crdtRdbSaveInfo;
 #define CRDT_RDB_SAVE_INFO_INIT {-1,0,"000000000000000000000000000000",-1,0}
-
+//crdt module
+#define CRDT_MODULE "xredis_crdt"
+#define SAVE_CRDT_VALUE  "RdbSaveCrdtValue"
+#define LOAD_CRDT_VALUE "RdbLoadCrdtValue"
 crdtRdbSaveInfo*
 crdtRdbPopulateSaveInfo(crdtRdbSaveInfo *rsi, long long min_logic_time);
 

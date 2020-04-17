@@ -60,7 +60,6 @@ void rdbCheckThenExit(int linenum, char *reason, ...) {
     va_end(ap);
 
     if (!rdbCheckMode) {
-        serverLog(LL_WARNING, "%s", msg);
         char *argv[2] = {"",server.rdb_filename};
         redis_check_rdb_main(2,argv,NULL);
     } else {
@@ -850,25 +849,6 @@ ssize_t rdbSaveAuxFieldStrInt(rio *rdb, char *key, long long val) {
     int vlen = ll2string(buf,sizeof(buf),val);
     return rdbSaveAuxField(rdb,key,strlen(key),buf,vlen);
 }
-
-int rdbSaveAuxFieldCrdt(rio *rdb) {
-    if(listLength(crdtServer.crdtMasters)) {
-        listIter li;
-        listNode *ln;
-
-        listRewind(crdtServer.crdtMasters, &li);
-        while((ln = listNext(&li))) {
-            CRDT_Master_Instance *masterInstance = ln->value;
-            if (rdbSaveAuxFieldStrInt(rdb, "peer-master-gid", masterInstance->gid)
-                == -1)  return -1;
-            if (rdbSaveAuxFieldStrStr(rdb, "peer-master-host", masterInstance->masterhost)
-                == -1)  return -1;
-            if (rdbSaveAuxFieldStrInt(rdb, "peer-master-port", masterInstance->masterport)
-                == -1)  return -1;
-        }
-    }
-    return 0;
-}
 /* Save a few default AUX fields with information about the RDB generated. */
 int rdbSaveInfoAuxFields(rio *rdb, int flags, rdbSaveInfo *rsi) {
     int redis_bits = (sizeof(void*) == 8) ? 64 : 32;
@@ -889,25 +869,13 @@ int rdbSaveInfoAuxFields(rio *rdb, int flags, rdbSaveInfo *rsi) {
         if (rdbSaveAuxFieldStrInt(rdb,"repl-offset",server.master_repl_offset)
             == -1) return -1;
         /**add crdt stuff*/
-        if (rdbSaveAuxFieldStrInt(rdb,"crdt-gid",crdtServer.crdt_gid)
-            == -1) return -1;
-        sds vclockSds = vectorClockToSds(crdtServer.vectorClock);
-        if (rdbSaveAuxFieldStrStr(rdb,"vclock",vclockSds)
-            == -1) return -1;
-        sdsfree(vclockSds);
-        if (rdbSaveAuxFieldStrStr(rdb,"crdt-repl-id",crdtServer.replid)
-            == -1) return -1;
-        if (rdbSaveAuxFieldStrInt(rdb,"crdt-repl-offset",crdtServer.master_repl_offset)
-            == -1) return -1;
-
-        if(rdbSaveAuxFieldCrdt(rdb) == -1) return -1;
+        rdbSaveCrdtInfoAuxFields(rdb);
     }
     if (rdbSaveAuxFieldStrInt(rdb,"aof-preamble",aof_preamble) == -1) return -1;
 
 
     return 1;
 }
-
 /* Produces a dump of the database in RDB format sending it to the specified
  * Redis I/O channel. On success C_OK is returned, otherwise C_ERR
  * is returned and part of the output, or all the output, can be
@@ -919,6 +887,7 @@ int rdbSaveInfoAuxFields(rio *rdb, int flags, rdbSaveInfo *rsi) {
 int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
     dictIterator *di = NULL;
     dictEntry *de;
+    dict* keys = NULL;
     char magic[10];
     int j;
     long long now = mstime();
@@ -930,12 +899,16 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
     snprintf(magic,sizeof(magic),"REDIS%04d", CTRIP_RDB_PREFIX + RDB_VERSION);
     if (rdbWriteRaw(rdb,magic,9) == -1) goto werr;
     if (rdbSaveInfoAuxFields(rdb,flags,rsi) == -1) goto werr;
-
     for (j = 0; j < server.dbnum; j++) {
         redisDb *db = server.db+j;
         dict *d = db->dict;
-        if (dictSize(d) == 0) continue;
+        if (dictSize(d) == 0 && !crdt_mode) continue;
+        if (dictSize(d) == 0 && 
+            dictSize(db->deleted_keys) == 0 &&
+            dictSize(db->expires) == 0 &&
+            dictSize(db->deleted_expires) == 0) continue;
         di = dictGetSafeIterator(d);
+        keys = dictCreate(&setDictType, NULL);
         if (!di) return C_ERR;
 
         /* Write the SELECT DB opcode */
@@ -956,17 +929,26 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
         if (rdbSaveType(rdb,RDB_OPCODE_RESIZEDB) == -1) goto werr;
         if (rdbSaveLen(rdb,db_size) == -1) goto werr;
         if (rdbSaveLen(rdb,expires_size) == -1) goto werr;
-
+        if(crdt_mode) {
+            if(rdbSaveCrdtDbSize(rdb, db) == C_ERR) goto werr;
+        }
         /* Iterate this DB writing every entry */
         while((de = dictNext(di)) != NULL) {
             sds keystr = dictGetKey(de);
             robj key, *o = dictGetVal(de);
-            long long expire;
-
-            initStaticStringObject(key,keystr);
-            expire = getExpire(db,&key);
-            if (rdbSaveKeyValuePair(rdb,&key,o,expire,now) == -1) goto werr;
-
+            if(!isModuleCrdt(o)) {
+                long long expire;
+                expire = getExpire(db,&key);
+                initStaticStringObject(key,keystr);
+                if (rdbSaveKeyValuePair(rdb,&key,o,expire,now) == -1) goto werr;
+            } else {
+                dictEntry *de = dictAddRaw(keys,keystr,NULL);
+                if (de) {
+                    dictSetKey(keys,de,sdsdup(keystr));
+                    dictSetVal(keys,de,NULL);
+                }
+            }
+            
             /* When this RDB is produced as part of an AOF rewrite, move
              * accumulated diff from parent to child while rewriting in
              * order to have a smaller final write. */
@@ -977,7 +959,13 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
                 aofReadDiffFromParent();
             }
         }
+        if(crdt_mode) {
+            if(rdbSaveCrdtData(rdb, j, db, keys, now, flags, &processed) == C_ERR) {
+                goto werr;
+            }
+        }
         dictReleaseIterator(di);
+        dictRelease(keys);
     }
     di = NULL; /* So that we don't release it again on error. */
 
@@ -1619,6 +1607,9 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                 goto eoferr;
             dictExpand(db->dict,db_size);
             dictExpand(db->expires,expires_size);
+            if(crdt_mode) {
+                if(rdbLoadCrdtDbSize(rdb, db) == C_ERR) goto eoferr;
+            }
             continue; /* Read type again. */
         } else if (type == RDB_OPCODE_AUX) {
             /* AUX: generic string-string fields. Use to add state to RDB
@@ -1677,7 +1668,13 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                 currentMasterInstance->masterhost = sdsdup(auxval->ptr);
             } else if (!strcasecmp(auxkey->ptr,"peer-master-port")) {
                 currentMasterInstance->masterport = atoi(auxval->ptr);
-            } else {
+            } else if (!strcasecmp(auxkey->ptr,"peer-master-repl-id")) {
+                if (sdslen(auxval->ptr) == CONFIG_RUN_ID_SIZE) {
+                    memcpy(currentMasterInstance->master_replid, auxval->ptr,CONFIG_RUN_ID_SIZE+1);
+                }
+            } else if (!strcasecmp(auxkey->ptr,"peer-master-repl-offset")) {
+                currentMasterInstance->master_initial_offset = strtoll(auxval->ptr,NULL,10); 
+            }else {
                 /* We ignore fields we don't understand, as by AUX field
                  * contract. */
                 serverLog(LL_DEBUG,"Unrecognized RDB AUX field: '%s'",
@@ -1687,6 +1684,9 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
             decrRefCount(auxkey);
             decrRefCount(auxval);
             continue; /* Read type again. */
+        }else if(type == RDB_CRDT_VALUE) {
+            if(rdbLoadCrdtData(rdb, db) == C_ERR) goto eoferr;
+            continue;
         }
 
         /* Read key */
