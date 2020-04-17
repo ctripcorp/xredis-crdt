@@ -72,6 +72,7 @@ double R_Zero, R_PosInf, R_NegInf, R_Nan;
 /* Global vars */
 struct redisServer server; /* Server global state */
 struct redisServer crdtServer;
+int crdt_mode = 1;
 volatile unsigned long lru_clock; /* Server global current LRU time. */
 
 /* Our command table.

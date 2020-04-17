@@ -94,7 +94,7 @@
 
 /* Test if a type is an object type. */
 #define rdbIsObjectType(t) ((t >= 0 && t <= 7) || (t >= 9 && t <= 14))
-
+#define RDB_CRDT_VALUE 200
 /* Special RDB opcodes (saved/loaded with rdbSaveType/rdbLoadType). */
 #define RDB_OPCODE_AUX        250
 #define RDB_OPCODE_RESIZEDB   251

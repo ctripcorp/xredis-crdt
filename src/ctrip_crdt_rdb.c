@@ -534,6 +534,125 @@ void crdtMergeCommand(client *c) {
         checkDataType
     );
 }
+//crdt save rdb
+void addKeys(dict* d, dict* keys) {
+    dictIterator* di = dictGetIterator(d);
+    dictEntry* de = NULL;
+    while((de = dictNext(di)) != NULL) {
+        sds keystr = dictGetKey(de);
+        dictEntry *de = dictAddRaw(keys,keystr,NULL);
+        if (de) {
+            dictSetKey(keys,de,sdsdup(keystr));
+            dictSetVal(keys,de,NULL);
+        }
+    }
+    dictReleaseIterator(di);
+}
+
+int rdbSaveCrdtData(rio *rdb, int dbid,redisDb* db, dict* keys, long long now, int flags, size_t* processed) {
+    addKeys(db->deleted_keys, keys);
+    addKeys(db->expires, keys);
+    addKeys(db->deleted_expires, keys);
+    dictEntry* de = NULL;
+    dictIterator* di = dictGetIterator(keys);
+    while((de = dictNext(di)) != NULL) {
+        sds keystr = dictGetKey(de);
+        if (rdbSaveType(rdb,RDB_CRDT_VALUE) == -1) return C_ERR;
+        robj key;
+        initStaticStringObject(key,keystr);
+        if (rdbSaveStringObject(rdb,&key) == -1) return C_ERR;
+        void (*save)(redisDb*, rio*, void*);
+        save = (void (*)(redisDb*, rio*, void*))(unsigned long)getModuleFunction(CRDT_MODULE, SAVE_CRDT_VALUE);
+        if(save == NULL) {
+            serverLog(LL_WARNING, "crdt module save data function is null");
+            return C_ERR;
+        }
+        save(db, rdb, &key);
+        /* When this RDB is produced as part of an AOF rewrite, move
+            * accumulated diff from parent to child while rewriting in
+            * order to have a smaller final write. */
+        if (flags & RDB_SAVE_AOF_PREAMBLE &&
+            rdb->processed_bytes > *processed+AOF_READ_DIFF_INTERVAL_BYTES)
+        {
+            *processed = rdb->processed_bytes;
+            aofReadDiffFromParent();
+        }
+    }
+    dictReleaseIterator(di);
+    return C_OK;
+}
+
+int rdbLoadCrdtData(rio* rdb, redisDb* db) {
+    robj* key = NULL;
+    int result = C_ERR;
+    if ((key = rdbLoadStringObject(rdb)) == NULL) goto eoferr;
+    int (*load)(redisDb*, void*, void*);
+    load = getModuleFunction(CRDT_MODULE, LOAD_CRDT_VALUE);
+    if(load == NULL) goto eoferr;
+    if(load(db, key, rdb) == C_ERR) goto eoferr;
+    result = C_OK;
+eoferr:
+    if(key != NULL) decrRefCount(key);
+    return result;
+}
+
+int rdbSaveCrdtDbSize(rio* rdb, redisDb* db) {
+    uint32_t tombstone_size, expire_tombstone_size;
+    tombstone_size = (dictSize(db->deleted_keys) <= UINT32_MAX) ?
+                dictSize(db->deleted_keys) :
+                UINT32_MAX;
+    expire_tombstone_size = (dictSize(db->deleted_expires) <= UINT32_MAX) ?
+                            dictSize(db->deleted_expires) :
+                            UINT32_MAX;
+    if (rdbSaveLen(rdb,tombstone_size) == -1) return C_ERR;
+    if (rdbSaveLen(rdb,expire_tombstone_size) == -1) return C_ERR;
+    return C_OK;
+}
+int rdbLoadCrdtDbSize(rio* rdb, redisDb* db) {
+    uint64_t tombstone_size, expires_tombstone_size;
+    if ((tombstone_size = rdbLoadLen(rdb,NULL)) == RDB_LENERR)
+        return C_ERR;
+    if ((expires_tombstone_size = rdbLoadLen(rdb,NULL)) == RDB_LENERR)
+        return C_ERR;
+    dictExpand(db->deleted_keys,tombstone_size);
+    dictExpand(db->deleted_expires,expires_tombstone_size); 
+    return C_OK;  
+}
+int rdbSaveAuxFieldCrdt(rio *rdb) {
+    if(listLength(crdtServer.crdtMasters)) {
+        listIter li;
+        listNode *ln;
+
+        listRewind(crdtServer.crdtMasters, &li);
+        while((ln = listNext(&li))) {
+            CRDT_Master_Instance *masterInstance = ln->value;
+            if (rdbSaveAuxFieldStrInt(rdb, "peer-master-gid", masterInstance->gid)
+                == -1)  return C_ERR;
+            if (rdbSaveAuxFieldStrStr(rdb, "peer-master-host", masterInstance->masterhost)
+                == -1)  return C_ERR;
+            if (rdbSaveAuxFieldStrInt(rdb, "peer-master-port", masterInstance->masterport)
+                == -1)  return C_ERR;
+            if (rdbSaveAuxFieldStrStr(rdb, "peer-master-repl-id", masterInstance->master_replid) 
+                == -1)  return C_ERR;
+            if (rdbSaveAuxFieldStrInt(rdb, "peer-master-repl-offset", masterInstance->master_initial_offset)
+                == -1)  return C_ERR;
+        }
+    }
+    return C_OK;
+}
+int rdbSaveCrdtInfoAuxFields(rio* rdb) {
+    if (rdbSaveAuxFieldStrInt(rdb,"crdt-gid",crdtServer.crdt_gid)
+        == -1) return -1;
+    sds vclockSds = vectorClockToSds(crdtServer.vectorClock);
+    if (rdbSaveAuxFieldStrStr(rdb,"vclock",vclockSds)
+        == -1) return -1;
+    sdsfree(vclockSds);
+    if (rdbSaveAuxFieldStrStr(rdb,"crdt-repl-id",crdtServer.replid)
+        == -1) return -1;
+    if (rdbSaveAuxFieldStrInt(rdb,"crdt-repl-offset",crdtServer.master_repl_offset)
+        == -1) return -1;
+    if(rdbSaveAuxFieldCrdt(rdb) == -1) return -1;
+}
 
 
 /**------------------------RIO Related Utility Functions--------------------*/

@@ -1629,6 +1629,38 @@ void *RM_OpenKey(RedisModuleCtx *ctx, robj *keyname, int mode) {
     autoMemoryAdd(ctx,REDISMODULE_AM_KEY,kp);
     return kp;
 }
+void *RM_GetKey(redisDb* db, robj* keyname, int mode) {
+    RedisModuleKey *kp = GetModuleKey(db, keyname, mode, 0);
+    return kp;
+} 
+uint64_t RM_GetModuleTypeId(moduleType *t) {
+    return t->id;
+}
+int RM_LoadLen(rio* io) {
+    return rdbLoadLen(io, NULL);
+}
+int RM_SaveLen(rio* io, uint64_t value) {
+    return rdbSaveLen(io, value);
+}
+moduleType* RM_GetModuleTypeById(uint64_t id) {
+    return moduleTypeLookupModuleByID(id);
+}
+
+void* RM_LoadModuleValue(rio* rio, moduleType* t) {
+    RedisModuleIO io;
+    moduleInitIOContext(io,t,rio);
+    io.ver = 2;
+    void* result = t->rdb_load(&io, t->id&1023);
+    return result;
+}
+
+int *RM_SaveModuleValue(rio* rio, moduleType *t, void* value) {
+    RedisModuleIO io;
+    moduleInitIOContext(io,t,rio);
+    io.ver = 2;
+    t->rdb_save(&io, value);
+    return io.error? C_ERR: C_OK;
+}
 void CloseModuleKey(void* k) {
     RedisModuleKey *key = k;
     if (key == NULL) return;
@@ -1719,11 +1751,11 @@ void* RM_GetCrdtExpire(RedisModuleKey *key) {
     CrdtExpire* r = getCrdtExpire(key->db, key->key);
     return r;
 }
-void* GetRobj(RedisModuleKey *key, dict* db) {
+void* GetRobj(RedisModuleKey *key, dict* d) {
     dictEntry *de;
     /* No expire? return ASAP */
-    if (dictSize(db) == 0 ||
-       (de = dictFind(db,key->key->ptr)) == NULL) return NULL;
+    if (dictSize(d) == 0 ||
+       (de = dictFind(d,key->key->ptr)) == NULL) return NULL;
     return  dictGetVal(de);
 }
 
@@ -1772,6 +1804,7 @@ int RM_SetCrdtExpireTombstone(RedisModuleKey *key, moduleType *mt ,CrdtExpire* e
     return dictSetRobj(key, key->db->deleted_expires, mt, expire);
 }
 
+
 /* --------------------------------------------------------------------------
  * Key API for String type
  * -------------------------------------------------------------------------- */
@@ -1787,7 +1820,6 @@ int RM_StringSet(RedisModuleKey *key, RedisModuleString *str) {
     key->value = str;
     return REDISMODULE_OK;
 }
-
 /* Prepare the key associated string value for DMA access, and returns
  * a pointer and size (by reference), that the user can use to read or
  * modify the string in-place accessing it directly via pointer.
@@ -4089,7 +4121,14 @@ void moduleLoadFromQueue(void) {
         }
     }
 }
-
+void* getModuleFunction(char *module_name, char *function_name) {
+    sds m = sdsnew(module_name);
+    dictEntry* de = dictFind(modules, m);
+    sdsfree(m);
+    if(de == NULL) return NULL;
+    RedisModule* module = dictGetVal(de);
+    return dlsym(module->handle, function_name);
+}
 void moduleFreeModuleStructure(struct RedisModule *module) {
     listRelease(module->types);
     sdsfree(module->name);
@@ -4197,6 +4236,9 @@ int moduleUnload(sds name) {
 
     return REDISMODULE_OK;
 }
+#define CRDT_MODULE "xredis_crdt"
+#define SAVE_CRDT_VALUE  "RdbSaveCrdtValue"
+#define LOAD_CRDT_VALUE "RdbLoadCrdtValue"
 
 /* Redis MODULE command.
  *
@@ -4287,6 +4329,13 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(GetSelectedDb);
     REGISTER_API(SelectDb);
     REGISTER_API(OpenKey);
+    REGISTER_API(GetKey);
+    REGISTER_API(GetModuleTypeId);
+    REGISTER_API(GetModuleTypeById);
+    REGISTER_API(SaveLen);
+    REGISTER_API(LoadLen);
+    REGISTER_API(LoadModuleValue);
+    REGISTER_API(SaveModuleValue);
     REGISTER_API(CloseKey);
     REGISTER_API(KeyType);
     REGISTER_API(ValueLength);
