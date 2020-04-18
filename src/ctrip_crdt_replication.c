@@ -1270,8 +1270,7 @@ void replicationFeedAllSlaves(int dictid, robj **argv, int argc) {
      * propagate *identical* replication stream. In this way this slave can
      * advertise the same replication ID as the master (since it shares the
      * master replication history and has the same backlog and offsets). */
-    if (server.masterhost != NULL && !server.repl_slave_repl_all) return;
-
+    if (server.masterhost != NULL && !server.repl_slave_repl_all && masterServerIsOK() == C_OK ) return;
     /* If there aren't slaves, and there is no backlog buffer to populate,
      * we can return ASAP. */
 //    if (server.repl_backlog == NULL && listLength(server.slaves) == 0

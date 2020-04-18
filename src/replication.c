@@ -127,7 +127,6 @@ void freeReplicationBacklog(struct redisServer *srv) {
  * the backlog without incrementing the offset. */
 void feedReplicationBacklog(struct redisServer *srv, void *ptr, size_t len) {
     unsigned char *p = ptr;
-
     srv->master_repl_offset += len;
 
     /* This is a circular buffer, so write as much data we can at every
@@ -183,7 +182,7 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
      * propagate *identical* replication stream. In this way this slave can
      * advertise the same replication ID as the master (since it shares the
      * master replication history and has the same backlog and offsets). */
-    if (server.masterhost != NULL && !server.repl_slave_repl_all) return;
+    if (server.masterhost != NULL && !server.repl_slave_repl_all && masterServerIsOK() == C_OK) return;
 
     /* If there aren't slaves, and there is no backlog buffer to populate,
      * we can return ASAP. */
@@ -720,7 +719,7 @@ void refullSyncWithSlaves(struct redisServer *srv, client *c) {
 void syncCommand(client *c) {
     /* ignore SYNC if already slave or in monitor mode */
     if (c->flags & CLIENT_SLAVE || c->flags & CLIENT_CRDT_SLAVE) return;
-
+    if (crdt_mode && !(c->slave_capa & SLAVE_CAPA_CRDT)) return;
     /* Refuse SYNC requests if we are a slave but the link with our master
      * is not ok... */
     if (server.masterhost && server.repl_state != REPL_STATE_CONNECTED) {
@@ -909,6 +908,10 @@ void replconfCommand(client *c) {
             }
             /* Note: this command does not reply anything! */
             return;
+        }
+        else if(!strcasecmp(c->argv[j]->ptr,"crdt")) {
+            c->slave_capa |= SLAVE_CAPA_CRDT;
+           
         }
         else {
             addReplyErrorFormat(c,"Unrecognized REPLCONF option: %s",
@@ -1260,7 +1263,9 @@ void readSyncBulkPayload(aeEventLoop *el, int fd, void *privdata, int mask) {
      * sync command success free ReplicationBacklog
      * sync command fail, keep ReplicationBacklog
      */
-    freeReplicationBacklog(&server);
+    if(masterServerIsOK() == C_OK) {
+        freeReplicationBacklog(&server);
+    }
 
     /* Read bulk data */
     if (usemark) {
@@ -1371,8 +1376,10 @@ void readSyncBulkPayload(aeEventLoop *el, int fd, void *privdata, int mask) {
         /* After a full resynchroniziation we use the replication ID and
          * offset of the master. The secondary ID / offset are cleared since
          * we are starting a new history. */
-        memcpy(server.replid,server.master->replid,sizeof(server.replid));
-        server.master_repl_offset = server.master->reploff;
+        if(masterServerIsOK() == C_OK) {
+            memcpy(server.replid,server.master->replid,sizeof(server.replid));
+            server.master_repl_offset = server.master->reploff;
+        }
         clearReplicationId2(&server);
         /* Let's create the replication backlog if needed. Slaves need to
          * accumulate the backlog regardless of the fact they have sub-slaves
@@ -1604,16 +1611,18 @@ int slaveTryPartialResynchronization(int fd, int read_reply) {
                 /* Master ID changed. */
                 serverLog(LL_WARNING,"Master replication ID changed to %s",new);
 
-                /* Set the old ID as our ID2, up to the current offset+1. */
-                memcpy(server.replid2,server.cached_master->replid,
-                    sizeof(server.replid2));
-                server.second_replid_offset = server.master_repl_offset+1;
-
+                
                 /* Update the cached master ID and our own primary ID to the
                  * new one. */
-                memcpy(server.replid,new,sizeof(server.replid));
-                memcpy(server.cached_master->replid,new,sizeof(server.replid));
+                if(masterServerIsOK() == C_OK) {
+                    /* Set the old ID as our ID2, up to the current offset+1. */
+                    memcpy(server.replid2,server.cached_master->replid,
+                        sizeof(server.replid2));
+                    server.second_replid_offset = server.master_repl_offset+1;
 
+                    memcpy(server.replid,new,sizeof(server.replid));
+                }
+                memcpy(server.cached_master->replid,new,sizeof(server.replid));
                 /* Disconnect all the sub-slaves: they need to be notified. */
                 disconnectSlaves();
             }
@@ -1816,7 +1825,7 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
      * The master will ignore capabilities it does not understand. */
     if (server.repl_state == REPL_STATE_SEND_CAPA) {
         err = sendSynchronousCommand(SYNC_CMD_WRITE, fd, "REPLCONF",
-                                         "capa", "eof", "capa", "psync2", NULL);
+                                    "capa", "eof", "capa", "psync2", NULL);
         if (err) goto write_error;
         sdsfree(err);
         server.repl_state = REPL_STATE_RECEIVE_CAPA;
@@ -1833,9 +1842,36 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
                                   "REPLCONF capa: %s", err);
         }
         sdsfree(err);
-        server.repl_state = REPL_STATE_SEND_PSYNC;
+        if(crdt_mode) {
+            server.repl_state = REPL_STATE_SEND_CRDT;
+        } else {
+            server.repl_state = REPL_STATE_SEND_PSYNC;
+        }
     }
 
+    if (server.repl_state == REPL_STATE_SEND_CRDT) {
+        err = sendSynchronousCommand(SYNC_CMD_WRITE, fd, "REPLCONF",
+                                    "crdt", "1", NULL);
+        if (err) goto write_error;
+        sdsfree(err);
+        server.repl_state = REPL_STATE_RECEIVE_CRDT;
+        return;
+    }
+    
+    if (server.repl_state == REPL_STATE_RECEIVE_CRDT) {
+        err = sendSynchronousCommand(SYNC_CMD_READ, fd, NULL);
+        /* Ignore the error if any, not all the Redis versions support
+         * REPLCONF capa. */
+        if (err[0] == '-') {
+            serverLog(LL_NOTICE,"(Non critical) Master does not understand "
+                                  "REPLCONF capa: %s", err);
+            server.master_is_crdt = 0;
+        } else {
+            server.master_is_crdt = 1;
+        }
+        sdsfree(err);
+        server.repl_state = REPL_STATE_SEND_PSYNC;
+    }
     /* Try a partial resynchonization. If we don't have a cached master
      * slaveTryPartialResynchronization() will at least try to use PSYNC
      * to start a full resynchronization so that we get the master run id
@@ -1875,12 +1911,17 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
         return;
     }
 
+    if(!server.master_is_crdt && initedCrdtServer() && crdt_mode && psync_result == PSYNC_FULLRESYNC) {
+        sdsfree(err);
+        goto error;
+    }
     /* PSYNC failed or is not supported: we want our slaves to resync with us
      * as well, if we have any sub-slaves. The master may transfer us an
      * entirely different data set and we have no way to incrementally feed
      * our slaves after that. */
 	disconnectSlaves(); /* Force our slaves to resync with us as well. */
-    if (psync_result == PSYNC_FULLRESYNC) {
+    if(crdt_mode) { disconnectCrdtSlaves(); } 
+    if (psync_result == PSYNC_FULLRESYNC && masterServerIsOK() == C_OK) {
         freeReplicationBacklog(&server); /* Don't allow our chained slaves to PSYNC. */
     }
 
@@ -2039,8 +2080,12 @@ void replicationSetMaster(char *ip, int port) {
 /* Cancel replication, setting the instance as a master itself. */
 void replicationUnsetMaster(void) {
     if (server.masterhost == NULL) return; /* Nothing to do. */
+    if (server.masterhost && server.repl_state == REPL_STATE_CONNECTED) {
+        jumpVectorClock();
+    }
     sdsfree(server.masterhost);
     server.masterhost = NULL;
+    server.master_is_crdt = 0;
     /* When a slave is turned into a master, the current replication ID
      * (that was inherited from the master at synchronization time) is
      * used as secondary ID up to the current offset, and a new replication

@@ -301,14 +301,16 @@ typedef long long mstime_t; /* millisecond time type. */
 #define REPL_STATE_RECEIVE_IP 11 /* Wait for REPLCONF reply */
 #define REPL_STATE_SEND_CAPA 12 /* Send REPLCONF capa */
 #define REPL_STATE_RECEIVE_CAPA 13 /* Wait for REPLCONF reply */
-#define REPL_STATE_SEND_VC 14 /* Send Vector Clock */
-#define REPL_STATE_RECEIVE_VC 15 /* Wait for Vector Clock reply */
-#define REPL_STATE_SEND_PSYNC 16 /* Send PSYNC */
-#define REPL_STATE_RECEIVE_PSYNC 17 /* Wait for PSYNC reply */
+#define REPL_STATE_SEND_CRDT 14
+#define REPL_STATE_RECEIVE_CRDT 15
+#define REPL_STATE_SEND_VC 16 /* Send Vector Clock */
+#define REPL_STATE_RECEIVE_VC 17 /* Wait for Vector Clock reply */
+#define REPL_STATE_SEND_PSYNC 18 /* Send PSYNC */
+#define REPL_STATE_RECEIVE_PSYNC 19 /* Wait for PSYNC reply */
 
 /* --- End of handshake states --- */
-#define REPL_STATE_TRANSFER 18 /* Receiving .rdb from master */
-#define REPL_STATE_CONNECTED 19 /* Connected to master */
+#define REPL_STATE_TRANSFER 20 /* Receiving .rdb from master */
+#define REPL_STATE_CONNECTED 21 /* Connected to master */
 
 /* State of slaves from the POV of the master. Used in client->replstate.
  * In SEND_BULK and ONLINE state the slave receives new updates
@@ -323,7 +325,7 @@ typedef long long mstime_t; /* millisecond time type. */
 #define SLAVE_CAPA_NONE 0
 #define SLAVE_CAPA_EOF (1<<0)    /* Can parse the RDB EOF streaming format. */
 #define SLAVE_CAPA_PSYNC2 (1<<1) /* Supports PSYNC2 protocol. */
-
+#define SLAVE_CAPA_CRDT (1<<2)
 /* Synchronous read timeout - slave side */
 #define CONFIG_REPL_SYNCIO_TIMEOUT 5
 
@@ -1136,6 +1138,7 @@ struct redisServer {
     char *masterhost;               /* Hostname of master */
     int masterport;                 /* Port of master */
     int repl_timeout;               /* Timeout after N seconds of master idle */
+    int master_is_crdt;
     client *master;     /* Client that is master for this slave */
     client *cached_master; /* Cached master to be reused for PSYNC. */
     int repl_syncio_timeout; /* Timeout for synchronous I/O calls */
@@ -1263,6 +1266,7 @@ struct redisServer {
     list *crdtMasters;
     int active_crdt_ovc;      /* Can be disabled for testing purposes. */
     long long crdt_conflict;
+    long long crdt_clockunit;
 }redisServer;
 
 typedef struct pubsubPattern {
@@ -1385,7 +1389,7 @@ void moduleBlockedClientPipeReadable(aeEventLoop *el, int fd, void *privdata, in
 size_t moduleCount(void);
 void moduleAcquireGIL(void);
 void moduleReleaseGIL(void);
-
+void jumpVectorClock();
 /* Utils */
 long long ustime(void);
 long long mstime(void);
@@ -1577,6 +1581,7 @@ int masterTryPartialResynchronization(struct redisServer *srv, client *c);
 void putSlaveOnline(client *slave);
 void createReplicationBacklog(struct redisServer *srv);
 void feedReplicationBacklogWithObject(struct redisServer *srv, robj *o);
+int masterServerIsOK();
 
 /* CRDT Replications */
 void crdtReplicationCron(void);
@@ -1631,6 +1636,7 @@ int rdbSaveCrdtDbSize(rio* rdb, redisDb* db);
 int rdbSaveCrdtInfoAuxFields(rio* rdb);
 int rdbLoadCrdtData(rio* rdb, redisDb* db);
 int rdbLoadCrdtDbSize(rio* rdb, redisDb* db);
+int data2CrdtData(client* fakeClient,redisDb* db, robj* key, robj* val);
 
 /* AOF persistence */
 void flushAppendOnlyFile(int force);
@@ -1644,7 +1650,7 @@ void backgroundRewriteDoneHandler(int exitcode, int bysignal);
 void aofRewriteBufferReset(void);
 unsigned long aofRewriteBufferSize(void);
 ssize_t aofReadDiffFromParent(void);
-
+client *createFakeClient(void);
 /* Child info */
 void openChildInfoPipe(struct redisServer *srv);
 void closeChildInfoPipe(struct redisServer *srv);

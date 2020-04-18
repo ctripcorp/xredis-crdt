@@ -137,7 +137,8 @@ proc tags {tags code} {
     set ::tags [lrange $::tags 0 end-[llength $tags]]
 }
 
-proc start_server {options {code undefined}} {
+proc start_redis_server {server options {code undefined}} {
+    
     # If we are running against an external server, we just push the
     # host/port pair in the stack the first time
     if {$::external} {
@@ -223,11 +224,11 @@ proc start_server {options {code undefined}} {
     set stderr [format "%s/%s" [dict get $config "dir"] "stderr"]
 
     if {$::valgrind} {
-        set pid [exec valgrind --track-origins=yes --suppressions=src/valgrind.sup --show-reachable=no --show-possibly-lost=no --leak-check=full src/redis-server $config_file > $stdout 2> $stderr &]
+        set pid [exec valgrind --track-origins=yes --suppressions=src/valgrind.sup --show-reachable=no --show-possibly-lost=no --leak-check=full $server $config_file > $stdout 2> $stderr &]
     } elseif ($::stack_logging) {
-        set pid [exec /usr/bin/env MallocStackLogging=1 MallocLogFile=/tmp/malloc_log.txt src/redis-server $config_file > $stdout 2> $stderr &]
+        set pid [exec /usr/bin/env MallocStackLogging=1 MallocLogFile=/tmp/malloc_log.txt $server $config_file > $stdout 2> $stderr &]
     } else {
-        set pid [exec src/redis-server $config_file > $stdout 2> $stderr &]
+        set pid [exec $server $config_file > $stdout 2> $stderr &]
     }
 
     # Tell the test server about this new instance.
@@ -303,7 +304,7 @@ proc start_server {options {code undefined}} {
 
         # execute provided block
         set num_tests $::num_tests
-        if {[catch { uplevel 1 $code } error]} {
+        if {[catch { uplevel 2 $code } error]} {
             set backtrace $::errorInfo
 
             # Kill the server without checking for leaks
@@ -337,4 +338,15 @@ proc start_server {options {code undefined}} {
         set ::tags [lrange $::tags 0 end-[llength $tags]]
         set _ $srv
     }
+}
+proc start_redis {options {code undefined}} {
+    if {[string match {*Darwin*} [exec uname -a]]} {
+        start_redis_server {./tests/assets/redis/mac/redis-server} $options $code 
+    } else {
+        start_redis_server {./tests/assets/redis/linux/redis-server} $options $code 
+    }
+}
+proc start_server {options {code undefined}} {
+    set server {src/redis-server}
+    start_redis_server $server $options $code 
 }

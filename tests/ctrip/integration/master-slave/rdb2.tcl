@@ -49,13 +49,6 @@ proc wait_save { client log}  {
         error "save fail"
     } 
 }
-set server_path [tmpdir "server.rdb2"]
-set server_path_diskless [tmpdir "server.rdb2-dl"]
-
-# Copy RDB with different encodings in server path
-# exec cp tests/assets/encodings.rdb $server_path
-exec cp tests/assets/crdt.so $server_path
-exec cp tests/assets/crdt.so $server_path_diskless
 proc run {script level} {
     catch [uplevel $level $script ] result opts
 }
@@ -73,7 +66,8 @@ proc replace { str argv } {
     return $str
 }
 proc save {add check server_path dl} {
-    start_server [list overrides [list crdt-gid 1 loadmodule crdt.so dir $server_path ]] {
+    exec cp tests/assets/crdt.so $server_path
+    start_server {tags {"master"} overrides {crdt-gid 1} module {./crdt.so} } {
         set peers {}
         set peer_hosts {}
         set peer_ports {}
@@ -88,7 +82,7 @@ proc save {add check server_path dl} {
         [lindex $peers 0] config crdt.set repl-diskless-sync-delay 1
         [lindex $peers 0] config set repl-diskless-sync-delay 1
         [lindex $peers 0] debug set-crdt-ovc 0
-        start_server {tags {"save"} overrides {crdt-gid 2} module {crdt.so} } {
+        start_server {tags {"save"} overrides {crdt-gid 2} module {./crdt.so} } {
             lappend peers [srv 0 client]
             lappend peer_hosts [srv 0 host]
             lappend peer_ports [srv 0 port]
@@ -100,18 +94,20 @@ proc save {add check server_path dl} {
             
             [lindex $peers 0] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
             [lindex $peers 1] peerof [lindex $peer_gids 0] [lindex $peer_hosts 0] [lindex $peer_ports 0]
+            
             wait [lindex $peers 0] 0 crdt.info [lindex $peer_stdouts 0]
             wait [lindex $peers 1] 0 crdt.info [lindex $peer_stdouts 1]
             [lindex $peers 1] debug set-crdt-ovc 0
             run [replace_client $add {[lindex $peers 0]}]  1
-            start_server [list overrides [list crdt-gid 1 loadmodule crdt.so dir $server_path]] {
+            start_server [list overrides [list crdt-gid 1 loadmodule ./crdt.so dir $server_path]] {
                 set slave [srv 0 client]
                 set slave_hosts [srv 0 host]
                 set slave_ports [srv 0 port]
                 set slave_stdouts [srv 0 stdout]
                 set slave_gids 1
                 $slave slaveof  [lindex $peer_hosts 0] [lindex $peer_ports 0]
-                wait [lindex $peers 0] 0 info [lindex $peer_stdouts 0]
+                # log_file_matches $slave_stdouts
+                wait [lindex $peers 0] 0 info [lindex $peer_stdouts 1]
                 # log_file_matches $slave_stdouts
                 # log_file_matches [lindex $peer_stdouts 0]
                 run [replace_client $check {$slave}]  1
@@ -120,6 +116,7 @@ proc save {add check server_path dl} {
     }
 }
 array set adds ""
+
 set adds(0) {
     $redis set key value
 }
@@ -140,10 +137,11 @@ set checks(2) {
     assert_equal [$redis tombstonesize] 1
 }
 set adds(3) {
-    $redis set key2 10000000
+    $redis set key2 v ex 10000000
 }
 set checks(3) {
     assert {[$redis ttl key2] < 10000000}
+    assert {[$redis ttl key2] > -1}
 }
 set adds(4) {
     $redis crdt.set key3 value 1 100000 "1:100"
@@ -156,8 +154,8 @@ set checks(4) {
 set len [array size adds]
 test "one" {
     for {set x 0} {$x<$len} {incr x} {
-        save $adds($x) $checks($x) $server_path_diskless yes
-        save $adds($x) $checks($x) $server_path no
+        save $adds($x) $checks($x) [tmpdir [format "rdb2.1.1.%s" $x]] yes
+        save $adds($x) $checks($x) [tmpdir [format "rdb2.1.2.%s" $x]] no
     }
 }
 
@@ -167,8 +165,8 @@ test "two" {
             if { $x == $y} {
                 continue
             }
-            save [format "%s;%s" $adds($x) $adds($y)] [format "%s;%s" $checks($x) $checks($y)] $server_path_diskless yes
-            save [format "%s;%s" $adds($x) $adds($y)] [format "%s;%s" $checks($x) $checks($y)] $server_path no
+            save [format "%s;%s" $adds($x) $adds($y)] [format "%s;%s" $checks($x) $checks($y)] [tmpdir [format "rdb2.2.1.%s" $x]] yes
+            save [format "%s;%s" $adds($x) $adds($y)] [format "%s;%s" $checks($x) $checks($y)] [tmpdir [format "rdb2.2.2.%s" $x]] no
         }
     }
 }
