@@ -49,12 +49,13 @@ proc wait_save { client log}  {
         error "save fail"
     } 
 }
-set server_path [tmpdir "server.rdb1"]
+set server_path [tmpdir "server.rdb2"]
+set server_path_diskless [tmpdir "server.rdb2-dl"]
 
 # Copy RDB with different encodings in server path
 # exec cp tests/assets/encodings.rdb $server_path
 exec cp tests/assets/crdt.so $server_path
-
+exec cp tests/assets/crdt.so $server_path_diskless
 proc run {script level} {
     catch [uplevel $level $script ] result opts
 }
@@ -71,8 +72,8 @@ proc replace { str argv } {
     }
     return $str
 }
-proc save {add check server_path dbfile} {
-    start_server [list overrides [list crdt-gid 1 loadmodule crdt.so  "dir"  $server_path "dbfilename" $dbfile]] {
+proc save {add check server_path dl} {
+    start_server [list overrides [list crdt-gid 1 loadmodule crdt.so dir $server_path ]] {
         set peers {}
         set peer_hosts {}
         set peer_ports {}
@@ -83,7 +84,7 @@ proc save {add check server_path dbfile} {
         lappend peer_ports [srv 0 port]
         lappend peer_stdouts [srv 0 stdout]
         lappend peer_gids 1
-        
+        [lindex $peers 0] config set repl-diskless-sync $dl
         [lindex $peers 0] config crdt.set repl-diskless-sync-delay 1
         [lindex $peers 0] config set repl-diskless-sync-delay 1
         [lindex $peers 0] debug set-crdt-ovc 0
@@ -102,28 +103,20 @@ proc save {add check server_path dbfile} {
             wait [lindex $peers 0] 0 crdt.info [lindex $peer_stdouts 0]
             wait [lindex $peers 1] 0 crdt.info [lindex $peer_stdouts 1]
             [lindex $peers 1] debug set-crdt-ovc 0
-            test [format "bgsave %s" $dbfile] {
-                run [replace_client $add {[lindex $peers 0]}]  1
-                [lindex $peers 0] bgsave
+            run [replace_client $add {[lindex $peers 0]}]  1
+            start_server [list overrides [list crdt-gid 1 loadmodule crdt.so dir $server_path]] {
+                set slave [srv 0 client]
+                set slave_hosts [srv 0 host]
+                set slave_ports [srv 0 port]
+                set slave_stdouts [srv 0 stdout]
+                set slave_gids 1
+                $slave slaveof  [lindex $peer_hosts 0] [lindex $peer_ports 0]
+                wait [lindex $peers 0] 0 info [lindex $peer_stdouts 0]
+                # log_file_matches $slave_stdouts
+                # log_file_matches [lindex $peer_stdouts 0]
+                run [replace_client $check {$slave}]  1
             }
         }
-    }
-    start_server [list overrides [list crdt-gid 1 loadmodule crdt.so  "dir"  $server_path "dbfilename" $dbfile]] {
-        set peers {}
-        set peer_hosts {}
-        set peer_ports {}
-        set peer_gids {}
-        set peer_stdouts {}
-        lappend peers [srv 0 client]
-        lappend peer_hosts [srv 0 host]
-        lappend peer_ports [srv 0 port]
-        lappend peer_stdouts [srv 0 stdout]
-        lappend peer_gids 1
-        
-        [lindex $peers 0] config crdt.set repl-diskless-sync-delay 1
-        [lindex $peers 0] config set repl-diskless-sync-delay 1
-        [lindex $peers 0] debug set-crdt-ovc 0
-        run [replace_client $check {[lindex $peers 0]}]  1
     }
 }
 array set adds ""
@@ -161,60 +154,21 @@ set checks(4) {
     assert_equal [$redis expiretombstonesize] 1
 }
 set len [array size adds]
-proc replace_foreach {  index  len core} {
-    set str {
-        for {set i$index [expr $i$prev + 1]} {$i$index< $len } {incr i$index} {
-            $core
-        }
+test "one" {
+    for {set x 0} {$x<$len} {incr x} {
+        save $adds($x) $checks($x) $server_path_diskless yes
+        save $adds($x) $checks($x) $server_path no
     }
-    regsub -all {\$index} $str $index str
-    regsub -all {\$prev} $str [expr $index -1] str
-    regsub -all {\$core} $str $core str
-    regsub -all {\$len} $str $len str
-    return $str
-}
-proc replace_save {  format_core  format_add_core format_check_core rdbfile_core formate_rdbfile_core} {
-    set str {
-        save [format "$format_core" $format_add_core] [format "$format_core"  $format_check_core] $server_path [format "$rdbfile_core" $formate_rdbfile_core]
-    }
-    regsub -all {\$format_core} $str $format_core str
-    regsub -all {\$format_add_core} $str $format_add_core str
-    regsub -all {\$format_check_core} $str $format_check_core str
-    regsub -all {\$rdbfile_core} $str $rdbfile_core str
-    regsub -all {\$formate_rdbfile_core} $str $formate_rdbfile_core str
-    return $str
-}
-proc run_foreach {num len} {
-    set foreach_core "\$save"
-    set format_core "%s"
-    set format_add_core  ""
-    set format_check_core ""
-    set rdbfile_core "test.%s"
-    set formate_rdbfile_core ""
-    for {set i $num} {$i > 1} {incr i -1} {
-        append format_core ";%s"
-        append format_add_core   [format " \$adds(\$i%s)" $i]
-        append format_check_core [format " \$checks(\$i%s)" $i]
-        append rdbfile_core ".%s"
-        append formate_rdbfile_core [format " \$i%s" $i]
-        set foreach_core [replace_foreach $i $len $foreach_core]
-    }
-    append format_add_core  " \$adds(\$i1)"
-    append format_check_core " \$checks(\$i1)" 
-    append formate_rdbfile_core " \$i1" 
-    set foreach_core [format {
-        for {set i1 0} {$i1<%s} {incr i1} {
-            %s
-        }
-    } $len $foreach_core]
-    regsub -all {\$save} $foreach_core [replace_save $format_core  $format_add_core $format_check_core $rdbfile_core $formate_rdbfile_core] foreach_core
-    # puts [format $foreach_core  [format ]]
-    run $foreach_core 2
-    # puts $foreach_core
 }
 
-for {set i 1} {$i <= $len} {incr i} {
-    test [format "foreach-%s" $i] {
-        run_foreach $i $len
+test "two" {
+    for {set x 0} {$x<$len} {incr x} {
+        for {set y $x} {$y<$len} {incr y} {
+            if { $x == $y} {
+                continue
+            }
+            save [format "%s;%s" $adds($x) $adds($y)] [format "%s;%s" $checks($x) $checks($y)] $server_path_diskless yes
+            save [format "%s;%s" $adds($x) $adds($y)] [format "%s;%s" $checks($x) $checks($y)] $server_path no
+        }
     }
 }

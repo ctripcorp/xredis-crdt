@@ -85,7 +85,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
         after 2000
         assert_equal [[lindex $peers 0] get key3] value
         after 2000
-        assert_equal [[lindex $peers 0] get key3] value
+        assert_equal [[lindex $peers 0] get key3] value 
     }
     test "crdt.persist" {
         set time [clock milliseconds]
@@ -452,11 +452,18 @@ start_server {tags {"full"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
         }
 
         test "peerof ex nx" {
+            set expiretombstonesize [[lindex $peers 0] expiretombstonesize]
             [lindex $peers 0] set key4 value1 ex 1000
             after 100
             [lindex $peers 1] set key4 value2 px 2000000
             after 100 
             [lindex $peers 0] set key4 value3
+            wait_for_condition 500 100 {
+                [[lindex $peers 0] expiretombstonesize] == $expiretombstonesize
+            } else {
+                assert [[lindex $peers 0] expiretombstonesize] $expiretombstonesize
+            }
+            puts [[lindex $peers 1] ttl key4]
             [lindex $peers 0] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
             [lindex $peers 1] peerof [lindex $peer_gids 0] [lindex $peer_hosts 0] [lindex $peer_ports 0]
             wait [lindex $peers 0] 0 crdt.info [lindex $peer_stdouts 0]
@@ -465,9 +472,7 @@ start_server {tags {"full"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
             assert_equal [[lindex $peers 1] get key4] value3
             assert_equal [[lindex $peers 0] ttl key4] [[lindex $peers 1] ttl key4] 
             set t [[lindex $peers 0] ttl key4]
-            if {$t < 1000} {
-                error "err"
-            }
+            assert {$t > 1000} 
             [lindex $peers 1] peerof [lindex $peer_gids 0] no one
             [lindex $peers 0] peerof [lindex $peer_gids 1] no one
         }
