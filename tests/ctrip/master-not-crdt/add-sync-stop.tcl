@@ -85,18 +85,16 @@ start_redis [list overrides [list repl-diskless-sync-delay 1 "dir"  $server_path
             wait $slave 0 info $slave_stdout
             test "master-slave" {
                 assert_equal [$crdt_slave get key] value
-                
+                assert_equal [log_file_matches $slave_stdout "*MASTER <-> SLAVE sync: Master accepted a Partial Resynchronization.*"] 0
+                set psync_count [status $master sync_partial_ok]
                 kill_slave $master
+
                 $master hset hash k v
                 wait $master 0 info $slave_stdout
+                assert_equal [status $master sync_partial_ok] [incr $psync_count 1]
+                assert_equal [log_file_matches $slave_stdout "*MASTER <-> SLAVE sync: Master accepted a Partial Resynchronization.*"] 1
                 assert_equal [$slave hget hash k] v
-                # assert_equal [$crdt_slave hget hash k] v
-                # assert_equal [log_file_matches $slave_stdout "*MASTER <-> SLAVE sync: Master accepted a Partial Resynchronization.*"] 1
-                # assert  {
-                #     [ get_info_replication_attr_value  $slave info master_replid] 
-                #     ==
-                #     [ get_info_replication_attr_value $crdt_slave info master_replid]
-                # }
+                
             } 
         }
     }

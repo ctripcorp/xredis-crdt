@@ -61,8 +61,7 @@ proc full-sync-error-data {add server_path} {
                     after 100
                 }
             }
-            assert_equal $retry  0 
-            #print_log_file $slave_stdout
+            assert_equal [$slave dbsize] 0
             assert_equal [log_file_matches $slave_stdout "*crdt load not crdt rdb datatype error*"] 1
         }
     }

@@ -97,7 +97,6 @@ proc load_redis_rdb {add check server_path dbfile} {
             $slave slaveof $master_host $master_port
             wait $master 0 info $slave_stdout
             run [replace_client $check {$slave}]  1
-            
             # puts [log_file_matches $slave_stdout] 
             is_not_slave $master $slave
 
@@ -106,7 +105,11 @@ proc load_redis_rdb {add check server_path dbfile} {
                 set crdt_slave_host [srv 0 host]
                 set crdt_slave_port [srv 0 port]
                 set crdt_slave_stdout [srv 0 stdout]
+                set crdt_slave_gid 2
+                $slave debug set-crdt-ovc 0
+                $crdt_slave debug set-crdt-ovc 0
                 $crdt_slave peerof $slave_gid $slave_host $slave_port
+                $slave peerof $crdt_slave_gid $crdt_slave_host $crdt_slave_port
                 wait $slave 0 crdt.info $slave_stdout
                 test "master-slave" {
                     run [replace_client $check {$crdt_slave}]  1

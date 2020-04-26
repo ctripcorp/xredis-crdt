@@ -1096,6 +1096,7 @@ void crdtReplicationCacheMaster(client *c) {
     CRDT_Master_Instance *crdtMaster = getPeerMaster(c->gid);
     if (crdtMaster == NULL) {
         crdtMaster = createPeerMaster(c, c->gid);
+        listAddNodeTail(crdtServer.crdtMasters, crdtMaster);
     }
     serverLog(LL_NOTICE,"Caching the disconnected master state.");
 
@@ -1182,6 +1183,7 @@ void crdtOvcCommand(client *c) {
         if (peerMaster == NULL) {
             if (server.master) {
                 peerMaster = createPeerMaster(NULL, gid);
+                listAddNodeTail(crdtServer.crdtMasters, peerMaster);
             } else {
                 serverLog(LL_WARNING, "[CRDT] CRDT.OVC client is not peer master: given gid %lld",
                           gid);
@@ -1270,7 +1272,7 @@ void replicationFeedAllSlaves(int dictid, robj **argv, int argc) {
      * propagate *identical* replication stream. In this way this slave can
      * advertise the same replication ID as the master (since it shares the
      * master replication history and has the same backlog and offsets). */
-    if (server.masterhost != NULL && !server.repl_slave_repl_all && masterServerIsOK() == C_OK ) return;
+    if (server.masterhost != NULL && !server.repl_slave_repl_all && isMasterSlaveReplVerDiff() == C_OK ) return;
     /* If there aren't slaves, and there is no backlog buffer to populate,
      * we can return ASAP. */
 //    if (server.repl_backlog == NULL && listLength(server.slaves) == 0

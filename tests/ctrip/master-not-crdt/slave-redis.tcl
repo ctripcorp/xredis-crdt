@@ -1,4 +1,10 @@
-proc log_file_matches {log} {
+proc log_file_matches {log pattern} {
+    set fp [open $log r]
+    set content [read $fp]
+    close $fp
+    string match $pattern $content
+}
+proc print_log_file {log} {
     set fp [open $log r]
     set content [read $fp]
     close $fp
@@ -26,17 +32,15 @@ start_server {tags {"master"} config {crdt.conf} overrides {crdt-gid 1 repl-disk
         $slave slaveof $master_host $master_port
         # wait $master 0 info $slave_stdout
         set retry 50
-        set match_str ""
-        append match_str "*slave" 0 ":*state=online*"
         while {$retry} {
-            set info [ $master info replication ]
-            if {[string match $match_str $info]} {
+            if {[log_file_matches $slave_stdout "*Slave is not crdt*"] == 1} {
                 break
             } else {
                 incr retry -1
                 after 100
             }
         }
-        assert_equal $retry  0 
+        # print_log_file $slave_stdout
+        assert {$retry > 0}
     }
 }

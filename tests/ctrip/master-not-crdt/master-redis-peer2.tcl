@@ -58,30 +58,28 @@ start_redis [list overrides [list repl-diskless-sync-delay 1 "dir"  $server_path
         set slave_stdout [srv 0 stdout]
         set slave_gid 1
         $slave config crdt.set repl-diskless-sync-delay 1 
-        # $slave debug set-crdt-ovc 0
         # run [replace_client $check {$slave}]  1
         
         # puts [log_file_matches $slave_stdout] 
-        assert  {
-            [ get_info_replication_attr_value  $master info master_replid] 
-            != 
-            [ get_info_replication_attr_value $slave info master_replid]
-        }
+        
 
         start_server {tags {"crdt-slave"} config {crdt.conf} overrides {crdt-gid 2 repl-diskless-sync-delay 1} module {crdt.so}} {
             set crdt_slave [srv 0 client]
             set crdt_slave_host [srv 0 host]
             set crdt_slave_port [srv 0 port]
             set crdt_slave_stdout [srv 0 stdout]
-            
+            set crdt_slave_gid 2
             
             test "master-slave" {
+                $crdt_slave debug set-crdt-ovc 0
                 $crdt_slave peerof $slave_gid $slave_host $slave_port
+                $slave debug set-crdt-ovc 0
+                $slave peerof $crdt_slave_gid $crdt_slave_host $crdt_slave_port
                 wait $slave 0 crdt.info $slave_stdout
                 $slave slaveof $master_host $master_port
                 wait $master 0 info $master_stdout
-                assert_equal [$slave get k1] v1
                 wait $slave 0 crdt.info $slave_stdout
+                assert_equal [$slave get k1] v1
                 # print_log_file $slave_stdout
                 assert_equal [$crdt_slave get k1] v1
                 $master set k2 v2

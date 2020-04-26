@@ -1266,7 +1266,7 @@ struct redisServer {
     list *crdtMasters;
     int active_crdt_ovc;      /* Can be disabled for testing purposes. */
     long long crdt_conflict;
-    long long crdt_clockunit;
+    long long local_clock;
 }redisServer;
 
 typedef struct pubsubPattern {
@@ -1581,7 +1581,7 @@ int masterTryPartialResynchronization(struct redisServer *srv, client *c);
 void putSlaveOnline(client *slave);
 void createReplicationBacklog(struct redisServer *srv);
 void feedReplicationBacklogWithObject(struct redisServer *srv, robj *o);
-int masterServerIsOK();
+int isMasterSlaveReplVerDiff();
 
 /* CRDT Replications */
 void crdtReplicationCron(void);
@@ -1620,7 +1620,7 @@ CrdtExpire* retrieveCrdtExpire(robj *obj);
 CrdtExpireTombstone* retrieveCrdtExpireTombstone(robj *obj);
 int isModuleCrdt(robj *obj);
 moduleType* getModuleType(robj *obj);
-
+long long getQps();
 /* Generic persistence functions */
 void startLoading(FILE *fp);
 void loadingProgress(off_t pos);

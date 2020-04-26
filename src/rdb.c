@@ -1561,9 +1561,17 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
     } 
 
     CRDT_Master_Instance *currentMasterInstance = NULL;
-    if (listLength(crdtServer.crdtMasters)) {
-        listRelease(crdtServer.crdtMasters);
-        crdtServer.crdtMasters = listCreate();
+    if (isCrdtRdb && crdt_mode ) {
+        if(crdtServer.crdtMasters == NULL) {
+            crdtServer.crdtMasters = listCreate();
+        }
+        if( listLength(crdtServer.crdtMasters)) {
+            while (listLength(crdtServer.crdtMasters)) {
+                listNode *ln = listFirst(crdtServer.crdtMasters);
+                freePeerMaster((CRDT_Master_Instance*)ln->value);
+            }
+        }
+
     }
     client* fakeClient = createFakeClient();
     while(1) {
@@ -1643,12 +1651,12 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
             } else if (!strcasecmp(auxkey->ptr,"repl-stream-db")) {
                 if (rsi) rsi->repl_stream_db = atoi(auxval->ptr);
             } else if (!strcasecmp(auxkey->ptr,"repl-id")) {
-                if (isCrdtRdb && rsi && sdslen(auxval->ptr) == CONFIG_RUN_ID_SIZE) {
+                if (isRdbReplVerDiff(isCrdtRdb) == C_OK && rsi && sdslen(auxval->ptr) == CONFIG_RUN_ID_SIZE) {
                     memcpy(rsi->repl_id,auxval->ptr,CONFIG_RUN_ID_SIZE+1);
                     rsi->repl_id_is_set = 1;
                 }
             } else if (!strcasecmp(auxkey->ptr,"repl-offset")) {
-                if (isCrdtRdb && rsi) rsi->repl_offset = strtoll(auxval->ptr,NULL,10);
+                if (isRdbReplVerDiff(isCrdtRdb) == C_OK && rsi) rsi->repl_offset = strtoll(auxval->ptr,NULL,10);
             } else if (!strcasecmp(auxkey->ptr,"lua")) {
                 /* Load the script back in memory. */
                 if (luaCreateFunction(NULL,server.lua,auxval) == NULL) {
@@ -1673,8 +1681,11 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                 crdtServer.master_repl_offset = strtoll(auxval->ptr,NULL,10);
             } else if (!strcasecmp(auxkey->ptr,"peer-master-gid")) {
                 int gid = atoi(auxval->ptr);
-                CRDT_Master_Instance *masterInstance = createPeerMaster(NULL, gid);
-                listAddNodeTail(crdtServer.crdtMasters, masterInstance);
+                CRDT_Master_Instance *masterInstance = getPeerMaster(gid);
+                if(masterInstance == NULL) {
+                    masterInstance = createPeerMaster(NULL, gid);
+                    listAddNodeTail(crdtServer.crdtMasters, masterInstance);
+                }
                 currentMasterInstance = masterInstance;
             } else if (!strcasecmp(auxkey->ptr,"peer-master-host")) {
                 currentMasterInstance->masterhost = sdsdup(auxval->ptr);
@@ -1717,7 +1728,7 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                 decrRefCount(key);
                 freeFakeClient(fakeClient);
                 serverLog(LL_WARNING, "crdt load not crdt rdb datatype error");
-                server.vectorClock->clocks[0].logic_time = 0;
+                crdtServer.vectorClock->clocks[0].logic_time = 0;
                 return C_ERR;
             }
         }else{

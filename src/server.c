@@ -231,8 +231,8 @@ struct redisCommand redisCommandTable[] = {
     {"renamenx",renamenxCommand,3,"wF",0,NULL,1,2,1,0,0},
     // {"expire",expireCommand,3,"wF",0,NULL,1,1,1,0,0},
     // {"expireat",expireatCommand,3,"wF",0,NULL,1,1,1,0,0},
-    {"pexpire",pexpireCommand,3,"wF",0,NULL,1,1,1,0,0},
-    {"pexpireat",pexpireatCommand,3,"wF",0,NULL,1,1,1,0,0},
+    // {"pexpire",pexpireCommand,3,"wF",0,NULL,1,1,1,0,0},
+    // {"pexpireat",pexpireatCommand,3,"wF",0,NULL,1,1,1,0,0},
     {"keys",keysCommand,2,"rS",0,NULL,0,0,0,0,0},
     {"scan",scanCommand,-2,"rR",0,NULL,0,0,0,0,0},
     {"dbsize",dbsizeCommand,1,"rF",0,NULL,0,0,0,0,0},
@@ -812,6 +812,9 @@ long long getInstantaneousMetric(int metric) {
     for (j = 0; j < STATS_METRIC_SAMPLES; j++)
         sum += server.inst_metric[metric].samples[j];
     return sum / STATS_METRIC_SAMPLES;
+}
+long long getQps() {
+    return getInstantaneousMetric(STATS_METRIC_COMMAND);
 }
 
 /* Check for timeouts. Returns non-zero if the client was terminated.
@@ -2101,7 +2104,7 @@ void initServer(struct redisServer *srv) {
     }
     VectorClock *vc = newVectorClock(1);
     vc->clocks[0].gid = crdtServer.crdt_gid;
-    vc->clocks[0].logic_time = crdtServer.crdt_clockunit;
+    vc->clocks[0].logic_time = crdtServer.local_clock;
     srv->vectorClock = vc;
     VectorClock *gcVclock = newVectorClock(1);
     gcVclock->clocks[0].gid = crdtServer.crdt_gid;
@@ -2246,7 +2249,7 @@ void propagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
     if (server.aof_state != AOF_OFF && flags & PROPAGATE_AOF)
         feedAppendOnlyFile(cmd,dbid,argv,argc);
     if (flags & PROPAGATE_CRDT_REPL) {
-        if (server.master && masterServerIsOK() == C_OK) {
+        if (server.master && isMasterSlaveReplVerDiff() == C_OK) {
             feedCrdtBacklog(argv, argc);
         } else {
             replicationFeedAllSlaves(dbid, argv, argc);
@@ -2276,7 +2279,7 @@ void alsoPropagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
     int j;
 
     if (server.loading) {
-        if(server.masterhost == NULL || masterServerIsOK() == C_OK) {
+        if(server.masterhost == NULL || isMasterSlaveReplVerDiff() == C_OK) {
             return;
         } 
     }  /* No propagation during loading. */

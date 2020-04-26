@@ -33,7 +33,7 @@ proc replace { str argv } {
     return $str
 }
 proc wait { client index type log}  {
-    set retry 50
+    set retry 100
     set match_str ""
     append match_str "*slave" $index ":*state=online*"
     while {$retry} {
@@ -67,8 +67,6 @@ proc full-sync-error-data {server_path} {
             $slave slaveof $master_host $master_port
             # wait $master 0 info $slave_stdout
             set retry 50
-            set match_str ""
-            append match_str "*slave" 0 ":*state=online*"
             while {$retry} {
                 set info [ $master info replication ]
                 if {[log_file_matches $slave_stdout "*crdt load not crdt rdb datatype error*"] == 1} {
@@ -82,7 +80,6 @@ proc full-sync-error-data {server_path} {
             #  $retry  0 
             assert {[log_file_matches $slave_stdout "*crdt load not crdt rdb datatype error*"] >=1 }
             $master del set
-            after 10000
             wait $master 0 info $slave_stdout
             assert_equal [$slave get key] value
         }

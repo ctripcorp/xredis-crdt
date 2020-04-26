@@ -1461,7 +1461,8 @@ long long RM_CurrentGid(void) {
     return crdtServer.crdt_gid;
 }
 void jumpVectorClock() {
-    incrLocalVcUnit(10000);
+    long long qps = getQps();
+    incrLocalVcUnit(max(qps * 60 * 24 , 10000));
 }
 void RM_IncrLocalVectorClock (long long delta) {
     incrLocalVcUnit(delta);

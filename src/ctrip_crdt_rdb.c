@@ -659,7 +659,7 @@ int initedCrdtServer() {
     }
     return 1;
 }
-int masterServerIsOK() {
+int isMasterSlaveReplVerDiff() {
     if(crdt_mode && server.master_is_crdt) {
         return C_OK;
     }
@@ -668,24 +668,33 @@ int masterServerIsOK() {
     }
     return C_ERR;
 }
-robj* createStringFromLongLong(long long val) {
+int isRdbReplVerDiff(int isCrdtRdb) {
+    if(crdt_mode && isCrdtRdb) {
+        return C_OK;
+    }
+    if(!crdt_mode && !isCrdtRdb) {
+        return C_OK;
+    }
+    return C_ERR;
+}
+robj* createStrRobjFromLongLong(long long val) {
     char buf[LONG_STR_SIZE];
     size_t len = ll2string(buf,sizeof(buf),val);
     return createStringObject(buf, len);
 }
-robj* readHash(hashTypeIterator* hi, int what) {
+robj* reverseHashToArgv(hashTypeIterator* hi, int type) {
     if (hi->encoding == OBJ_ENCODING_ZIPLIST) {
         unsigned char *vstr = NULL;
         unsigned int vlen = UINT_MAX;
         long long vll = LLONG_MAX;
-        hashTypeCurrentFromZiplist(hi, what, &vstr, &vlen, &vll);
+        hashTypeCurrentFromZiplist(hi, type, &vstr, &vlen, &vll);
         if (vstr) {
             return createStringObject(vstr, vlen);
         }else{
-            return createStringFromLongLong(vll);
+            return createStrRobjFromLongLong(vll);
         }
     }else if(hi->encoding == OBJ_ENCODING_HT) {
-        sds value = hashTypeCurrentFromHashTable(hi, what);
+        sds value = hashTypeCurrentFromHashTable(hi, type);
         return createObject(OBJ_STRING, value);
     }else{
         serverLog(LL_WARNING, "hash encoding error");
@@ -693,7 +702,7 @@ robj* readHash(hashTypeIterator* hi, int what) {
     }
 }
 
-int onceRunCommand(client* fakeClient) {
+int processInputRdb(client* fakeClient) {
     struct redisCommand* cmd = lookupCommand(fakeClient->argv[0]->ptr);
     if (!cmd) {
         serverLog(LL_WARNING,"Unknown command '%s' reading the append only file", fakeClient->argv[0]->ptr);
@@ -711,9 +720,9 @@ int crdtSelectDb(client* fakeClient, int dbid) {
     fakeClient->argc = 2;
     fakeClient->argv = zmalloc(sizeof(robj*)*2);
     fakeClient->argv[0] = createStringObject("select", 6);
-    fakeClient->argv[1] = createStringFromLongLong(dbid);
+    fakeClient->argv[1] = createStrRobjFromLongLong(dbid);
     struct redisCommand* cmd = NULL;
-    return onceRunCommand(fakeClient);
+    return processInputRdb(fakeClient);
 }
 int data2CrdtData(client* fakeClient, redisDb* db, robj* key, robj* val) {
     struct redisCommand* cmd = NULL;
@@ -747,8 +756,8 @@ int data2CrdtData(client* fakeClient, redisDb* db, robj* key, robj* val) {
             int i = 2;
             hashTypeIterator* hi = hashTypeInitIterator(val);
             while (hashTypeNext(hi) != C_ERR) {
-                fakeClient->argv[i++] = readHash(hi, OBJ_HASH_KEY);
-                fakeClient->argv[i++] = readHash(hi, OBJ_HASH_VALUE);
+                fakeClient->argv[i++] = reverseHashToArgv(hi, OBJ_HASH_KEY);
+                fakeClient->argv[i++] = reverseHashToArgv(hi, OBJ_HASH_VALUE);
             }
             hashTypeReleaseIterator(hi);          
         break;
@@ -756,7 +765,7 @@ int data2CrdtData(client* fakeClient, redisDb* db, robj* key, robj* val) {
         default:  goto error;
     }
     decrRefCount(val);  
-    return onceRunCommand(fakeClient);
+    return processInputRdb(fakeClient);
 error:
     if(val != NULL) {
         decrRefCount(val);
@@ -772,8 +781,8 @@ int expire2CrdtExpire(client* fakeClient, robj* key, long long expiretime) {
     fakeClient->argv[0] = createStringObject("expireAt", 8);
     fakeClient->argv[1] = key;
     incrRefCount(key);
-    fakeClient->argv[2] = createStringFromLongLong(expiretime);
-    return onceRunCommand(fakeClient);
+    fakeClient->argv[2] = createStrRobjFromLongLong(expiretime);
+    return processInputRdb(fakeClient);
 }
 /**------------------------RIO Related Utility Functions--------------------*/
 

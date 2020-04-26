@@ -73,18 +73,16 @@ start_redis [list overrides [list repl-diskless-sync-delay 1 "dir"  $server_path
                 wait $slave 0 crdt.info $slave_stdout
                 $slave slaveof $master_host $master_port
                 set retry 50
-                set match_str ""
-                append match_str "*slave" 0 ":*state=online*"
                 while {$retry} {
-                    set info [ $master info replication ]
-                    if {[string match $match_str $info]} {
+                    if {[log_file_matches $slave_stdout "*Master is not crdt and slave is inited*"] == 1} {
                         break
                     } else {
                         incr retry -1
                         after 100
                     }
                 }
-                assert_equal $retry  0 
+                # print_log_file $slave_stdout
+                assert {$retry > 0}
                 assert_equal [$slave get k2] v2
                 assert_equal [$slave get k1] {}
                 assert_equal [$crdt_slave get k2] v2
@@ -134,18 +132,16 @@ start_redis [list overrides [list repl-diskless-sync-delay 1 "dir"  $server_path
                 wait $slave 0 crdt.info $slave_stdout
                 $slave slaveof $master_host $master_port
                 set retry 50
-                set match_str ""
-                append match_str "*slave" 0 ":*state=online*"
                 while {$retry} {
-                    set info [ $master info replication ]
-                    if {[string match $match_str $info]} {
+                    if {[log_file_matches $slave_stdout "*Master is not crdt and slave is inited*"] == 1} {
                         break
                     } else {
                         incr retry -1
                         after 100
                     }
                 }
-                assert_equal $retry  0 
+                # print_log_file $slave_stdout
+                assert {$retry > 0}
                 assert_equal [$slave get k2] v2
                 assert_equal [$slave get k1] {}
                 assert_equal [$crdt_slave get k2] v2

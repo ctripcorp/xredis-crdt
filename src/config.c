@@ -743,10 +743,10 @@ void loadServerConfigFromString(char *config) {
             if (server.crdt_gid < 0) {
                 err = "Invalid value for crdt_gid."; goto loaderr;
             }
-        } else if(!strcasecmp(argv[0],"crdt-clockunit")) {
-            server.crdt_clockunit = atoll(argv[1]);
-            crdtServer.crdt_clockunit = server.crdt_clockunit;
-            if (server.crdt_clockunit < 0) {
+        } else if(!strcasecmp(argv[0],"local-clock")) {
+            server.local_clock = atoll(argv[1]);
+            crdtServer.local_clock = server.local_clock;
+            if (server.local_clock < 0) {
                 err = "Invalid value for crdt-clockunit."; goto loaderr;
             }
         } else {
@@ -1313,7 +1313,7 @@ void configGetCommand(client *c, struct redisServer *srv) {
     config_get_numerical_field("tcp-keepalive",srv->tcpkeepalive);
     // srv->crdt_gid
     config_get_numerical_field("crdt-gid", srv->crdt_gid);
-    config_get_numerical_field("crdt-clockunit", srv->crdt_clockunit);
+    config_get_numerical_field("local-clock", srv->local_clock);
     /* Bool (yes/no) values */
     config_get_bool_field("cluster-require-full-coverage",
             srv->cluster_require_full_coverage);
@@ -2081,7 +2081,7 @@ int rewriteConfig(char *path) {
     rewriteConfigYesNoOption(state,"slave-lazy-flush",server.repl_slave_lazy_flush,CONFIG_DEFAULT_SLAVE_LAZY_FLUSH);
 
     rewriteConfigNumericalOption(state,"crdt-gid", crdtServer.crdt_gid, CONFIG_DEFAULT_GID);
-    rewriteConfigNumericalOption(state, "crdt-clockunit", crdtServer.vectorClock->clocks[0].logic_time, 0);
+    rewriteConfigNumericalOption(state, "local-clock", crdtServer.vectorClock->clocks[0].logic_time, 0);
 
     /* Rewrite Sentinel config if in Sentinel mode. */
     if (server.sentinel_mode) rewriteConfigSentinelOption(state);
