@@ -1160,12 +1160,17 @@ int crdtPropagateExpire(redisDb *db, robj *key, int lazy, CrdtExpire* expire) {
             if(isModuleCrdt(val) == C_OK) {
                 struct moduleValue* rm = (struct moduleValue*)val->ptr;
                 CrdtData* obj = ((CrdtData*)(rm->value));
-                if(obj->dataType != expire->dataType) {
+                serverLog(LL_WARNING, "obj type: %lld, expire type: %lld", expire->parent.type);
+                if(getDataType(obj->parent.type) != getDataType(expire->parent.type)) {
                     goto clean;
                 }
                 mk = GetModuleKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE, 1);
                 if(mk != NULL) {
-                    obj->method->propagateDel(db->id, key, mk, obj);
+                    CrdtDataMethod* method = getCrdtDataMethod(obj);
+                    if(method == NULL) {
+                        return C_ERR;
+                    }
+                    method->propagateDel(db->id, key, mk, obj);
                     CloseModuleKey(mk);
                 }
                 crdtServer.stat_expiredkeys++;
@@ -1182,7 +1187,11 @@ int crdtPropagateExpire(redisDb *db, robj *key, int lazy, CrdtExpire* expire) {
 clean:
     mk = GetModuleKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE, 1);
     if(mk != NULL) {
-        expire->method->persist(expire, mk, db->id, key);
+        CrdtExpireMethod* expire_method = getCrdtExpireMethod(expire);
+        if(expire_method == NULL) {
+            return C_ERR;
+        }
+        expire_method->persist(expire, mk, db->id, key);
         CloseModuleKey(mk);
     }
     crdtServer.stat_expiredkeys++;
@@ -1241,7 +1250,9 @@ CrdtExpire* getCrdtExpire(redisDb *db, robj *key) {
 CrdtExpireObj* getCrdtExpireObj(redisDb *db, robj *key) {
     CrdtExpire* expire = getCrdtExpire(db, key);
     if(expire == NULL) return NULL;
-    return expire->method->get(expire);
+    CrdtExpireMethod* method = getCrdtExpireMethod(expire);
+    if(method == NULL) return NULL;
+    return method->get(expire);
 }
 
 int crdtExpireIfNeeded(redisDb *db, robj *key) {
@@ -1249,7 +1260,9 @@ int crdtExpireIfNeeded(redisDb *db, robj *key) {
     if(expire == NULL) {
         return 0;
     }
-    CrdtExpireObj* obj = expire->method->get(expire);
+    CrdtExpireMethod* method = getCrdtExpireMethod(expire);
+    if(expire == NULL) return 0;
+    CrdtExpireObj* obj = method->get(expire);
     long long when ;
     if(obj == NULL) {
         when = -1;

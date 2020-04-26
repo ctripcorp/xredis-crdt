@@ -49,6 +49,30 @@ int isModuleCrdt(robj *obj) {
 }
 
 
+void* getMethod(void* obj, const char* name) {
+    void* (*getmethod)(void*);
+    // save = (void (*)(redisDb*, rio*, void*))(unsigned long)
+    getmethod = getModuleFunction(CRDT_MODULE, name);
+    if(getmethod == NULL) {
+        return NULL;
+    }
+    return getmethod(obj);
+}
+CrdtExpireMethod* getCrdtExpireMethod(CrdtExpire* expire) {
+    return getMethod(expire, "getCrdtExpireMethod");
+}
+CrdtDataMethod* getCrdtDataMethod(CrdtExpire* expire) {
+    return getMethod(expire, "getCrdtDataMethod");
+}
+CrdtObjectMethod* getCrdtObjectMethod(CrdtObject* obj) {
+    return getMethod(obj, "getCrdtObjectMethod");
+}
+CrdtTombstoneMethod* getCrdtTombstoneMethod(CrdtTombstone* tombstone) {
+    return getMethod(tombstone, "getCrdtTombstoneMethod");
+}
+int getDataType(int type) {
+    return getMethod(type, "getDataType");
+}
 void* getObjValue(robj *obj) {
     if (obj == NULL || isModuleCrdt(obj) == C_ERR) return NULL;
     moduleValue *mv = obj->ptr;

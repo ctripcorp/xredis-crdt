@@ -37,12 +37,12 @@
 
 #include "sds.h"
 #include "ctrip_vector_clock.h"
-#define CRDT_DATA 1
-#define CRDT_EXPIRE 2
+#define CRDT_DATA (1<<28)
+#define CRDT_EXPIRE (1<<29)
 typedef void *(*crdtMergeFunc)(void *curVal, void *value);
 // RM_CrdtMultiWrappedReplicate should be called during this
 typedef int (*crdtPropagateDelFunc)(int db_id, void *keyRobj, void *key, void *crdtObj);
-typedef void* (*crdtFilterFunc)(void* obj,long long gid, long long logic_time);
+typedef void* (*crdtFilterFunc)(void* obj,int gid, long long logic_time);
 typedef int (*crdtGCFunc)(void *crdtObj, VectorClock* clock);
 typedef int (*crdtPurageFunc)(void* tombstone, void* value);
 typedef struct CrdtMeta {
@@ -58,7 +58,7 @@ typedef struct CrdtObjectMethod {
 
 typedef struct CrdtObject {
     int type;
-    CrdtObjectMethod* method;
+    // CrdtObjectMethod* method;
 } CrdtObject;
 typedef VectorClock* (*crdtGetLastVCFunc)(void* value);
 typedef void* (*crdtUpdateLastVCFunc)(void* value,VectorClock* data);
@@ -69,8 +69,8 @@ typedef struct CrdtDataMethod {
 } CrdtDataMethod;
 typedef struct CrdtData {
     CrdtObject parent;
-    int dataType;
-    CrdtDataMethod* method;
+    // int dataType;
+    // CrdtDataMethod* method;
 } CrdtData;
 typedef struct CrdtExpireObj {
     CrdtMeta* meta;
@@ -90,8 +90,8 @@ typedef struct CrdtExpireMethod {
 } CrdtExpireMethod;
 typedef struct CrdtExpire {
     CrdtObject parent;
-    int dataType;
-    CrdtExpireMethod* method;
+    // int dataType;
+    // CrdtExpireMethod* method;
 } CrdtExpire;
 typedef struct CrdtTombstoneMethod {
     crdtMergeFunc merge;
@@ -102,12 +102,12 @@ typedef struct CrdtTombstoneMethod {
 
 typedef struct CrdtTombstone {
     int type;
-    CrdtTombstoneMethod* method;
+    // CrdtTombstoneMethod* method;
 } CrdtTombstone;
 
 typedef struct CrdtDataTombstone {
     CrdtTombstone parent;
-    int dataType;
+    // int dataType;
 } CrdtDataTombstone;
 
 typedef int (*crdtIsExpireFunc)(void* target, CrdtMeta* meta);
@@ -118,8 +118,12 @@ typedef struct CrdtExpireTombstoneMethod {
 } CrdtExpireTombstoneMethod;
 typedef struct CrdtExpireTombstone {
     CrdtTombstone parent;
-    int dataType;
-    CrdtExpireTombstoneMethod* method;
+    // int dataType;
+    // CrdtExpireTombstoneMethod* method;
 } CrdtExpireTombstone;
-
+CrdtExpireMethod* getCrdtExpireMethod(CrdtExpire* expire);
+CrdtDataMethod* getCrdtDataMethod(CrdtExpire* expire);
+CrdtObjectMethod* getCrdtObjectMethod(CrdtObject* expire);
+CrdtTombstoneMethod* getCrdtTombstoneMethod(CrdtTombstone* tombstone);
+int getDataType(int type);
 #endif //REDIS_CTRIP_CRDT_COMMON_H

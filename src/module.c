@@ -1468,7 +1468,7 @@ void RM_IncrLocalVectorClock (long long delta) {
     incrLocalVcUnit(delta);
 }
 
-void RM_MergeVectorClock (long long gid, VectorClock *vclock) {
+void RM_MergeVectorClock (int gid, VectorClock *vclock) {
     refreshMinVectorClock(vclock, gid);
     refreshGcVectorClock(vclock);
 }

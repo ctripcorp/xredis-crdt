@@ -1260,7 +1260,7 @@ struct redisServer {
     pthread_mutex_t unixtime_mutex;
 
     /*crdt stuff*/
-    long long crdt_gid;
+    int crdt_gid;
     VectorClock *vectorClock;
     VectorClock *gcVectorClock;
     list *crdtMasters;
@@ -1592,25 +1592,25 @@ void crdtMergeDelCommand(client *c);
 void crdtMergeStartCommand(client *c);
 void crdtMergeEndCommand(client *c);
 void peerofCommand(client *c);
-void crdtReplicationSetMaster(long long gid, char *ip, int port);
+void crdtReplicationSetMaster(int gid, char *ip, int port);
 void crdtReplicationCacheMaster(client *c);
 void crdtReplicationHandleMasterDisconnection(client *c);
 void incrLocalVcUnit(long delta);
 void crdtPsyncCommand(client *c);
-CRDT_Master_Instance *getPeerMaster(long long gid);
+CRDT_Master_Instance *getPeerMaster(int gid);
 void refreshVectorClock(client *c, sds vcStr);
 long long getMyGidLogicTime(VectorClock *vc);
 long long getMyLogicTime();
-void crdtReplicationUnsetMaster(long long gid);
+void crdtReplicationUnsetMaster(int gid);
 void crdtReplicationCloseAllMasters();
 void debugCancelCrdt(client *c);
 void crdtRoleCommand(client *c);
-CRDT_Master_Instance *createPeerMaster(client *c, long long gid);
+CRDT_Master_Instance *createPeerMaster(client *c, int gid);
 void crdtOvcCommand(client *c);
 void crdtAuthGidCommand(client *c);
 void feedCrdtBacklog(robj **argv, int argc);
 void replicationFeedAllSlaves(int dictid, robj **argv, int argc);
-void crdtCancelReplicationHandshake(long long gid);
+void crdtCancelReplicationHandshake(int gid);
 
 /* CRDT Command */
 void crdtDelCommand(client *c);
@@ -1868,7 +1868,7 @@ void expireSizeCommand(client *c);
 void expireTombstoneSizeCommand(client *c);
 void activeGcCycle(int type);
 void activeExpireGcCycle(int type);
-
+#define CRDT_MODULE "xredis_crdt"
 void* getModuleFunction(char* module_name, char* function_name);
 #define EMPTYDB_NO_FLAGS 0      /* No flags. */
 #define EMPTYDB_ASYNC (1<<0)    /* Reclaim memory in another thread. */
