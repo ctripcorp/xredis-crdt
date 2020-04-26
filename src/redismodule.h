@@ -286,7 +286,7 @@ void REDISMODULE_API_FUNC(RedisModule_DigestEndSequence)(RedisModuleDigest *md);
 void *REDISMODULE_API_FUNC(RedisModule_CurrentVectorClock)(void);
 long long REDISMODULE_API_FUNC(RedisModule_CurrentGid)(void);
 void REDISMODULE_API_FUNC(RedisModule_IncrLocalVectorClock) (long long delta);
-void REDISMODULE_API_FUNC(RedisModule_MergeVectorClock) (long long gid, void *vclock);
+void REDISMODULE_API_FUNC(RedisModule_MergeVectorClock) (int gid, void *vclock);
 int REDISMODULE_API_FUNC(RedisModule_ModuleTombstoneSetValue) (RedisModuleKey *key, RedisModuleType *mt, void *value);
 void *REDISMODULE_API_FUNC(RedisModule_ModuleTypeGetTombstone)(RedisModuleKey *key);
 void REDISMODULE_API_FUNC(RedisModule_NotifyKeyspaceEvent)(RedisModuleCtx *ctx,int type, char *event, RedisModuleString *key);

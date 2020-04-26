@@ -47,7 +47,7 @@ void crdtReplicationCreateMasterClient(CRDT_Master_Instance *crdtMaster, int fd,
 
 /**---------------------------CRDT Master Instance Related--------------------------------*/
 
-CRDT_Master_Instance *createPeerMaster(client *c, long long gid) {
+CRDT_Master_Instance *createPeerMaster(client *c, int gid) {
     CRDT_Master_Instance *masterInstance = zmalloc(sizeof(CRDT_Master_Instance));
     masterInstance->gid = gid;
     masterInstance->master = c;
@@ -91,7 +91,7 @@ void freePeerMaster(CRDT_Master_Instance *masterInstance) {
 
 }
 
-CRDT_Master_Instance *getPeerMaster(long long gid) {
+CRDT_Master_Instance *getPeerMaster(int gid) {
     listIter li;
     listNode *ln;
     CRDT_Master_Instance *peerMaster = NULL;
@@ -194,7 +194,7 @@ void peerofCommand(client *c) {
     addReply(c,shared.ok);
 }
 
-void crdtReplicationSetMaster(long long gid, char *ip, int port) {
+void crdtReplicationSetMaster(int gid, char *ip, int port) {
 
     CRDT_Master_Instance *peerMaster = getPeerMaster(gid);
     if (!peerMaster) {
@@ -215,7 +215,7 @@ void crdtReplicationSetMaster(long long gid, char *ip, int port) {
 }
 
 /* Cancel replication, setting the instance as a master itself. */
-void crdtReplicationUnsetMaster(long long gid) {
+void crdtReplicationUnsetMaster(int gid) {
     CRDT_Master_Instance *peerMaster;
     if ((peerMaster = getPeerMaster(gid)) == NULL) return;
     if(peerMaster->masterhost) {
@@ -968,7 +968,7 @@ void crdtReplicationAbortSyncTransfer(CRDT_Master_Instance *masterInstance) {
  * the replication state (server.repl_state) set to REPL_STATE_CONNECT.
  *
  * Otherwise zero is returned and no operation is perforemd at all. */
-void crdtCancelReplicationHandshake(long long gid) {
+void crdtCancelReplicationHandshake(int gid) {
     CRDT_Master_Instance *masterInstance = getPeerMaster(gid);
     if(masterInstance == NULL) {
         return;

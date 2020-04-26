@@ -99,8 +99,14 @@ int crdtSendMergeRequest(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di, const
         /* Check if the crdt module's vector clock on local gid is avaiable for crdt merge */
         
         CrdtObject *object = retrieveCrdtObject(o);
-        CrdtObject *filter = object->method->filter((void*)object, crdtServer.crdt_gid, rsi->logic_time);
+        CrdtObjectMethod* method = getCrdtObjectMethod(object);
+        if(method == NULL) {
+            serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveRio] NOT FIND CRDT OBJECT METHOD");
+            continue;
+        }
+        CrdtObject *filter = method->filter((void*)object, crdtServer.crdt_gid, rsi->logic_time);
         if(filter == NULL) {
+            serverLog(LL_NOTICE, "[CRDT] filter null");
             continue;
         }
 
@@ -148,8 +154,14 @@ int crdtSendMergeDelRequest(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di, co
          // moduleValue *mv = o->ptr;
         // void *moduleValue = mv->value;
         CrdtTombstone *tombstone = retrieveCrdtTombstone(o);
-        CrdtTombstone *result = tombstone->method->filter(tombstone, crdtServer.crdt_gid, rsi->logic_time);
+        CrdtTombstoneMethod* method = getCrdtTombstoneMethod(tombstone);
+        if(method == NULL) {
+            serverLog(LL_WARNING, "tombstone method is null");
+            continue;
+        }
+        CrdtTombstone *result = method->filter(tombstone, crdtServer.crdt_gid, rsi->logic_time);
         if(result == NULL) {
+            serverLog(LL_NOTICE, "[CRDT] tombstone filter null");
             continue;
         }
        
@@ -256,7 +268,7 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
 }
 
 /**---------------------------CRDT Merge Command--------------------------------*/
-static int updateReplTransferLastio(long long gid) {
+static int updateReplTransferLastio(int gid) {
     CRDT_Master_Instance *peerMasterServer = getPeerMaster(gid);
     if(peerMasterServer == NULL) {
         return C_ERR;
@@ -305,8 +317,13 @@ int crdtMergeTomstoneCommand(client* c, DictFindFunc findtombstone, DictAddFunc 
             return C_ERR;
         }
         
-       
-        void *mergedVal = common->method->merge(common, oldCommon);
+       CrdtTombstoneMethod* method = getCrdtTombstoneMethod(common);
+        serverLog(LL_WARNING, "how are you");
+        if(method == NULL) {
+            serverLog(LL_WARNING, "no tombstone merge method");
+            return C_ERR;
+        }
+        void *mergedVal = method->merge(common, oldCommon);
         moduleValue *old_mv = tombstone->ptr;
         old_mv->type->free(old_mv->value);
         old_mv->value = mergedVal;
@@ -319,7 +336,13 @@ int crdtMergeTomstoneCommand(client* c, DictFindFunc findtombstone, DictAddFunc 
     robj *currentVal = findval(c->db, key);
     if(currentVal != NULL) {
         CrdtObject *currentCrdtCommon = retrieveCrdtObject(currentVal);
-        if(tombstoneCrdtCommon->method->purage(tombstoneCrdtCommon, currentCrdtCommon)) {
+        serverLog(LL_WARNING, "tombstone %lld", tombstoneCrdtCommon->type);
+        CrdtTombstoneMethod* method = getCrdtTombstoneMethod(tombstoneCrdtCommon);
+        if(method == NULL) {
+            serverLog(LL_WARNING, "no purage method");
+            return C_ERR;
+        }
+        if(method->purage(tombstoneCrdtCommon, currentCrdtCommon)) {
             // dbDelete(c->db, key);
             deleteval(c->db, key);
         }
@@ -357,9 +380,9 @@ int checkExpireTombstoneType(void* current, void* other, robj* key) {
                 key->ptr, c->parent.type, o->parent.type);
         return C_ERR;
     }
-    if (c->dataType != o->dataType) {
+    if (!(c->parent.type & CRDT_EXPIRE)) {
         serverLog(LL_WARNING, "[INCONSIS][MERGE EXPIRE TOMBSTONE DATATYPE] key: %s, expire tombstone type: %d",
-                key->ptr, c->dataType);
+                key->ptr, c->parent.type);
         return C_ERR;  
     }
     return C_OK;
@@ -387,7 +410,7 @@ int checkTombstoneType(void* current, void* other, robj* key) {
                 key->ptr, c->type, o->type);
         return C_ERR;
     }
-    if(c->type != CRDT_DATA) {
+    if(!(c->type & CRDT_DATA)) {
         serverLog(LL_WARNING, "[INCONSIS][MERGE TOMBSTONE TYPE] key: %s, tombstone type: %d",
                 key->ptr, c->type);
         return C_ERR;
@@ -434,22 +457,29 @@ int mergeCrdtObjectCommand(client *c, DictFindFunc find, DictAddFunc add, DictDe
     // robj *currentVal = lookupKeyRead(c->db, key);
     robj *currentVal = find(c->db, key);
     CrdtObject *mergedVal;
+    CrdtObjectMethod* method = getCrdtObjectMethod(common);
+    if(method == NULL) {
+        serverLog(LL_WARNING, "no find merge method");
+        return C_ERR;
+    }
     if (currentVal) {
         CrdtObject *ccm = retrieveCrdtObject(currentVal);
         if(checktype(ccm, common, key) != C_OK) {
             decrRefCount(obj);
             return C_ERR;
         }
-        mergedVal = common->method->merge(ccm, common);
+        mergedVal = method->merge(ccm, common);
         delete(c->db, key);
     } else {
-        mergedVal = common->method->merge(NULL, common);
+        mergedVal = method->merge(NULL, common);
     }
     decrRefCount(obj);
     robj* tombstone = findtombstone(c->db,key);
     if(tombstone != NULL) {
         CrdtTombstone* tom = retrieveCrdtTombstone(tombstone);
-        if(tom->method->purage(tom, mergedVal)) {
+        CrdtTombstoneMethod* method = getCrdtTombstoneMethod(tom);
+        if(method == NULL) return C_ERR;
+        if(method->purage(tom, mergedVal)) {
             mt->free(mergedVal);
             mergedVal = NULL;
         }
@@ -479,9 +509,9 @@ int checkExpireType(void* current, void* other, robj* key) {
                 key->ptr, c->type, o->type);
         return C_ERR;
     }
-    if(c->type != CRDT_EXPIRE) {
-        serverLog(LL_WARNING, "[INCONSIS][MERGE EXPIRE TYPE ERROR] key: %s, local type: %d",
-                key->ptr, c->type);
+    if(!(c->type & CRDT_EXPIRE)) {
+        serverLog(LL_WARNING, "[INCONSIS][MERGE EXPIRE TYPE ERROR] key: %s, local type: %lld, old %lld",
+                key->ptr, c->type, o->type);
         return C_ERR;
     }
     return C_OK;
@@ -504,20 +534,15 @@ void crdtMergeExpireCommand(client *c) {
 int checkDataType(void* current, void* other, robj* key) {
     CrdtData* c = (CrdtData*)current;
     CrdtData* o = (CrdtData*)other;
-    if (c->parent.type != o->parent.type) {
-        serverLog(LL_WARNING, "[INCONSIS][MERGE] key: %s, local type: %d, merge type %d",
-                key->ptr, c->parent.type, o->parent.type);
-        return C_ERR;
-    }
-    if(c->parent.type != CRDT_DATA) {
+    if(!(c->parent.type & CRDT_DATA)) {
         serverLog(LL_WARNING, "[INCONSIS][MERGE DATA TYPE ERROR] key: %s, local type: %d",
                 key->ptr, c->parent.type);
         return C_ERR;
     }
     
-    if (c->dataType != o->dataType) {
+    if (c->parent.type != o->parent.type) {
         serverLog(LL_WARNING, "[INCONSIS][MERGE DATA] key: %s, local type: %d, merge type %d",
-                key->ptr, c->dataType, o->dataType);
+                key->ptr, c->parent.type, o->parent.type);
         return C_ERR;
     }
     

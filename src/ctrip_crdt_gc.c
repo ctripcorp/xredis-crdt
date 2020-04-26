@@ -119,7 +119,9 @@ int gcIfNeeded(dict *d, robj *key) {
      * */
     //todo: update gc vector clock, each time when set operation
     updateGcVectorClock();
-    if(!tombstone->method->gc(tombstone, crdtServer.gcVectorClock)){
+    CrdtTombstoneMethod* method = getCrdtTombstoneMethod(tombstone);
+    if(method == NULL) return 0;
+    if(!method->gc(tombstone, crdtServer.gcVectorClock)){
         return 0;
     }
 
@@ -221,9 +223,16 @@ int activeGcCycleTryGc(dict *d, dictEntry *de) {
      * 1. Gc Vector Clock is collected from each peer's vector clock, and do a minimium of them
      * 2. if the vector clock of gcVectorClock is mono-increase, comparing to the deleted keys, the delete event will be triggered
      * */
-    if(!tombstone->method->gc(tombstone, crdtServer.gcVectorClock)) {
+    CrdtTombstoneMethod* method = getCrdtTombstoneMethod(tombstone);
+    if(method == NULL) {
+        serverLog(LL_WARNING, "no gc method");
         return 0;
     }
+    serverLog(LL_WARNING, "type %lld", tombstone->type);
+    if(!method->gc(tombstone, crdtServer.gcVectorClock)) {
+        return 0;
+    }
+    serverLog(LL_WARNING, "gcing");
     sds key = dictGetKey(de);
     if (dictDelete(d,key) == DICT_OK) {
         return 1;

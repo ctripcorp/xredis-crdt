@@ -617,7 +617,7 @@ start_server {tags {"full"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
             wait_for_condition 500 100 {
                 [[lindex $peers 0] expiretombstonesize] == $expiretombstonesize
             } else {
-                assert [[lindex $peers 0] expiretombstonesize] $expiretombstonesize
+                assert_equal [[lindex $peers 0] expiretombstonesize] $expiretombstonesize
             }
             puts [[lindex $peers 1] ttl key4]
             [lindex $peers 0] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
