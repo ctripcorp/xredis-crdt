@@ -230,9 +230,9 @@ struct redisCommand redisCommandTable[] = {
     {"rename",renameCommand,3,"w",0,NULL,1,2,1,0,0},
     {"renamenx",renamenxCommand,3,"wF",0,NULL,1,2,1,0,0},
     // {"expire",expireCommand,3,"wF",0,NULL,1,1,1,0,0},
-    {"expireat",expireatCommand,3,"wF",0,NULL,1,1,1,0,0},
-    {"pexpire",pexpireCommand,3,"wF",0,NULL,1,1,1,0,0},
-    {"pexpireat",pexpireatCommand,3,"wF",0,NULL,1,1,1,0,0},
+    // {"expireat",expireatCommand,3,"wF",0,NULL,1,1,1,0,0},
+    // {"pexpire",pexpireCommand,3,"wF",0,NULL,1,1,1,0,0},
+    // {"pexpireat",pexpireatCommand,3,"wF",0,NULL,1,1,1,0,0},
     {"keys",keysCommand,2,"rS",0,NULL,0,0,0,0,0},
     {"scan",scanCommand,-2,"rR",0,NULL,0,0,0,0,0},
     {"dbsize",dbsizeCommand,1,"rF",0,NULL,0,0,0,0,0},
@@ -813,6 +813,9 @@ long long getInstantaneousMetric(int metric) {
         sum += server.inst_metric[metric].samples[j];
     return sum / STATS_METRIC_SAMPLES;
 }
+long long getQps() {
+    return getInstantaneousMetric(STATS_METRIC_COMMAND);
+}
 
 /* Check for timeouts. Returns non-zero if the client was terminated.
  * The function gets the current time in milliseconds as argument since
@@ -1060,6 +1063,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
                 /* dictPrintStats(server.dict); */
             }
         }
+        rewriteConfig(server.configfile);
     }
 
     /* Show information about connected clients */
@@ -1553,6 +1557,7 @@ void initServerConfig(struct redisServer *srv) {
     srv->masterauth = NULL;
     srv->masterhost = NULL;
     srv->masterport = 6379;
+    srv->master_is_crdt = 0;
     srv->master = NULL;
     srv->cached_master = NULL;
     srv->master_initial_offset = -1;
@@ -2099,12 +2104,11 @@ void initServer(struct redisServer *srv) {
     }
     VectorClock *vc = newVectorClock(1);
     vc->clocks[0].gid = crdtServer.crdt_gid;
-    vc->clocks[0].logic_time = 0;
+    vc->clocks[0].logic_time = crdtServer.local_clock;
     srv->vectorClock = vc;
-
     VectorClock *gcVclock = newVectorClock(1);
-    vc->clocks[0].gid = crdtServer.crdt_gid;
-    vc->clocks[0].logic_time = 0;
+    gcVclock->clocks[0].gid = crdtServer.crdt_gid;
+    gcVclock->clocks[0].logic_time = 0;
     srv->gcVectorClock = gcVclock;
 }
 
@@ -2245,7 +2249,7 @@ void propagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
     if (server.aof_state != AOF_OFF && flags & PROPAGATE_AOF)
         feedAppendOnlyFile(cmd,dbid,argv,argc);
     if (flags & PROPAGATE_CRDT_REPL) {
-        if (server.master) {
+        if (server.master && isMasterSlaveReplVerDiff() == C_OK) {
             feedCrdtBacklog(argv, argc);
         } else {
             replicationFeedAllSlaves(dbid, argv, argc);
@@ -2274,7 +2278,11 @@ void alsoPropagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
     robj **argvcopy;
     int j;
 
-    if (server.loading) return; /* No propagation during loading. */
+    if (server.loading) {
+        if(server.masterhost == NULL || isMasterSlaveReplVerDiff() == C_OK) {
+            return;
+        } 
+    }  /* No propagation during loading. */
 
     argvcopy = zmalloc(sizeof(robj*)*argc);
     for (j = 0; j < argc; j++) {
@@ -2433,8 +2441,9 @@ void call(client *c, int flags) {
         /* Call propagate() only if at least one of AOF / replication
          * propagation is needed. Note that modules commands handle replication
          * in an explicit way, so we never replicate them automatically. */
-        if (propagate_flags != PROPAGATE_NONE && !(c->cmd->flags & CMD_MODULE))
+        if (propagate_flags != PROPAGATE_NONE && !(c->cmd->flags & CMD_MODULE)) 
             propagate(c->cmd,c->db->id,c->argv,c->argc,propagate_flags);
+        
     }
 
     /* Restore the old replication flags, since call() can be executed
@@ -2449,7 +2458,6 @@ void call(client *c, int flags) {
     if (server.also_propagate.numops) {
         int j;
         redisOp *rop;
-
         if (flags & CMD_CALL_PROPAGATE) {
             for (j = 0; j < server.also_propagate.numops; j++) {
                 rop = &server.also_propagate.ops[j];
@@ -3862,7 +3870,7 @@ void loadDataFromDisk(void) {
         if (rdbLoad(server.rdb_filename,&rsi) == C_OK) {
             serverLog(LL_NOTICE,"DB loaded from disk: %.3f seconds",
                 (float)(ustime()-start)/1000000);
-
+            jumpVectorClock();
             /* Restore the replication ID / offset from the RDB file. */
             if (server.masterhost &&
                 rsi.repl_id_is_set &&

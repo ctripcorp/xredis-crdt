@@ -72,7 +72,7 @@ proc replace { str argv } {
     return $str
 }
 proc save {add check server_path dbfile} {
-    start_server [list overrides [list crdt-gid 1 loadmodule crdt.so  "dir"  $server_path "dbfilename" $dbfile]] {
+    start_server [list overrides [list crdt-gid 1 loadmodule ./crdt.so  "dir"  $server_path "dbfilename" $dbfile]] {
         set peers {}
         set peer_hosts {}
         set peer_ports {}
@@ -87,7 +87,7 @@ proc save {add check server_path dbfile} {
         [lindex $peers 0] config crdt.set repl-diskless-sync-delay 1
         [lindex $peers 0] config set repl-diskless-sync-delay 1
         [lindex $peers 0] debug set-crdt-ovc 0
-        start_server {tags {"save"} overrides {crdt-gid 2} module {crdt.so} } {
+        start_server {tags {"save"} overrides {crdt-gid 2} module {./crdt.so} } {
             lappend peers [srv 0 client]
             lappend peer_hosts [srv 0 host]
             lappend peer_ports [srv 0 port]
@@ -108,7 +108,7 @@ proc save {add check server_path dbfile} {
             }
         }
     }
-    start_server [list overrides [list crdt-gid 1 loadmodule crdt.so  "dir"  $server_path "dbfilename" $dbfile]] {
+    start_server [list overrides [list crdt-gid 1 loadmodule ./crdt.so  "dir"  $server_path "dbfilename" $dbfile]] {
         set peers {}
         set peer_hosts {}
         set peer_ports {}
@@ -147,10 +147,11 @@ set checks(2) {
     assert_equal [$redis tombstonesize] 1
 }
 set adds(3) {
-    $redis set key2 10000000
+    $redis set key2 v2 ex 10000000
 }
 set checks(3) {
-    assert {[$redis ttl key2] < 10000000}
+    assert {[$redis ttl key2] <= 10000000}
+    assert {[$redis ttl key2] > -1}
 }
 set adds(4) {
     $redis crdt.set key3 value 1 100000 "1:100"

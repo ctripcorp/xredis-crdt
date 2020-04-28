@@ -72,7 +72,7 @@ proc replace { str argv } {
     return $str
 }
 proc load {check server_path dbfile} {
-    start_server [list overrides [list crdt-gid 1 loadmodule crdt.so  "dir"  $server_path "dbfilename" $dbfile]] {
+    start_server [list overrides [list crdt-gid 1 loadmodule ./crdt.so  "dir"  $server_path "dbfilename" $dbfile]] {
         set peers {}
         set peer_hosts {}
         set peer_ports {}

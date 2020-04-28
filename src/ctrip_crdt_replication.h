@@ -35,5 +35,5 @@
 
 #include "server.h"
 
-
+void freePeerMaster(CRDT_Master_Instance *masterInstance);
 #endif //REDIS_CRDT_REPLICATION_H

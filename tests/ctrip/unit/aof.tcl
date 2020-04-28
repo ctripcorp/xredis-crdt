@@ -31,7 +31,7 @@ tags {"aof"} {
         append_to_aof [formatCommand set bar world]
     }
 
-    start_server_aof [list dir $server_path aof-load-truncated yes crdt-gid 1 loadmodule crdt.so] {
+    start_server_aof [list dir $server_path aof-load-truncated yes crdt-gid 1 loadmodule ./crdt.so] {
         test "Unfinished MULTI: Server should start if load-truncated is yes" {
             assert_equal 1 [is_alive $srv]
         }
@@ -64,7 +64,7 @@ tags {"aof"} {
     # }
 
     # Now the AOF file is expected to be correct
-    start_server_aof [list dir $server_path aof-load-truncated yes crdt-gid 1 loadmodule crdt.so] {
+    start_server_aof [list dir $server_path aof-load-truncated yes crdt-gid 1 loadmodule ./crdt.so] {
         test "Short read + command: Server should start" {
             assert_equal 1 [is_alive $srv]
         }
@@ -83,7 +83,7 @@ tags {"aof"} {
         append_to_aof [formatCommand set foo hello]
     }
 
-    start_server_aof [list dir $server_path aof-load-truncated yes crdt-gid 1 loadmodule crdt.so] {
+    start_server_aof [list dir $server_path aof-load-truncated yes crdt-gid 1 loadmodule ./crdt.so] {
         test "Bad format: Server should have logged an error" {
             set pattern "*Bad file format reading the append only file*"
             set retry 10
@@ -108,7 +108,7 @@ tags {"aof"} {
         append_to_aof [formatCommand set bar world]
     }
 
-    start_server_aof [list dir $server_path aof-load-truncated no crdt-gid 1 loadmodule crdt.so] {
+    start_server_aof [list dir $server_path aof-load-truncated no crdt-gid 1 loadmodule ./crdt.so] {
         test "Unfinished MULTI: Server should have logged an error" {
             set pattern "*Unexpected end of file reading the append only file*"
             set retry 10
@@ -132,7 +132,7 @@ tags {"aof"} {
         append_to_aof [string range [formatCommand set bar world] 0 end-1]
     }
 
-    start_server_aof [list dir $server_path aof-load-truncated no crdt-gid 1 loadmodule crdt.so] {
+    start_server_aof [list dir $server_path aof-load-truncated no crdt-gid 1 loadmodule ./crdt.so] {
         test "Short read: Server should have logged an error" {
             set pattern "*Unexpected end of file reading the append only file*"
             set retry 10
@@ -164,7 +164,7 @@ tags {"aof"} {
     }
 
     ## Test that the server can be started using the truncated AOF
-    start_server_aof [list dir $server_path aof-load-truncated no crdt-gid 1 loadmodule crdt.so] {
+    start_server_aof [list dir $server_path aof-load-truncated no crdt-gid 1 loadmodule ./crdt.so] {
         test "Fixed AOF: Server should have been started" {
             assert_equal 1 [is_alive $srv]
         }
