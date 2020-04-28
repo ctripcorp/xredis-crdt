@@ -237,11 +237,29 @@ isVectorClockMonoIncr(VectorClock *current, VectorClock *future) {
     }
     return 1;
 }
-
-
+typedef long long (*MergeVectorClockUnitFunc)(long long old, long long now);
+void updateVectorClockUnit(VectorClock *vc, VectorClockUnit *vcu, MergeVectorClockUnitFunc fun) {
+    VectorClockUnit *original = getVectorClockUnit(vc, vcu->gid);
+    if (original == NULL) {
+        addVectorClockUnit(vc, vcu->gid, vcu->logic_time);
+        return;
+    }
+    original->logic_time = fun(original->logic_time, vcu->logic_time);
+}
+long long refreshValue(long long old, long long now) {
+    return now;
+}
+long long maxValue(long long old, long long now) {
+    return max(old, now);
+}
 void
 refreshMinVectorClock(VectorClock *other, int sourceGid) {
-    mergeVectorClockUnit(crdtServer.vectorClock, getVectorClockUnit(other, sourceGid));
+    if(sourceGid == server.crdt_gid) {
+        updateVectorClockUnit(crdtServer.vectorClock, getVectorClockUnit(other, sourceGid), refreshValue);
+    } else {
+        updateVectorClockUnit(crdtServer.vectorClock, getVectorClockUnit(other, sourceGid), maxValue);
+    }
+    
 }
 
 void

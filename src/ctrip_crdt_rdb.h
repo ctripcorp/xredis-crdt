@@ -55,7 +55,7 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi);
 
 int
 rdbSaveRioWithCrdtMerge(rio *rdb, int *error, void *rsi);
-
+int initedCrdtServer();
 
 
 #endif //REDIS_CRDT_RDB_H

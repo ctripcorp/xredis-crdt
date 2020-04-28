@@ -936,10 +936,11 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
         while((de = dictNext(di)) != NULL) {
             sds keystr = dictGetKey(de);
             robj key, *o = dictGetVal(de);
-            if(!isModuleCrdt(o)) {
+            if(isModuleCrdt(o) != C_OK) {
+                serverLog(LL_WARNING,"save value is not crdt key: %s", keystr);
                 long long expire;
-                expire = getExpire(db,&key);
                 initStaticStringObject(key,keystr);
+                expire = getExpire(db,&key);
                 if (rdbSaveKeyValuePair(rdb,&key,o,expire,now) == -1) goto werr;
             } else {
                 dictEntry *de = dictAddRaw(keys,keystr,NULL);
@@ -1552,11 +1553,27 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
         return C_ERR;
     }
 
+    int isCrdtRdb = rdbver > CTRIP_RDB_PREFIX;
+    if(!isCrdtRdb && crdt_mode && initedCrdtServer()) {
+        serverLog(LL_WARNING,"Can't Load Redis RDB",rdbver);
+        errno = EINVAL;
+        return C_ERR;
+    } 
+
     CRDT_Master_Instance *currentMasterInstance = NULL;
-    if (listLength(crdtServer.crdtMasters)) {
-        listRelease(crdtServer.crdtMasters);
-        crdtServer.crdtMasters = listCreate();
+    if (isCrdtRdb && crdt_mode ) {
+        if(crdtServer.crdtMasters == NULL) {
+            crdtServer.crdtMasters = listCreate();
+        }
+        if( listLength(crdtServer.crdtMasters)) {
+            while (listLength(crdtServer.crdtMasters)) {
+                listNode *ln = listFirst(crdtServer.crdtMasters);
+                freePeerMaster((CRDT_Master_Instance*)ln->value);
+            }
+        }
+
     }
+    client* fakeClient = createFakeClient();
     while(1) {
         robj *key, *val;
         expiretime = -1;
@@ -1596,6 +1613,9 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                 exit(1);
             }
             db = server.db+dbid;
+            if(!isCrdtRdb && crdt_mode) {
+                crdtSelectDb(fakeClient, dbid);
+            }
             continue; /* Read type again. */
         } else if (type == RDB_OPCODE_RESIZEDB) {
             /* RESIZEDB: Hint about the size of the keys in the currently
@@ -1607,7 +1627,7 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                 goto eoferr;
             dictExpand(db->dict,db_size);
             dictExpand(db->expires,expires_size);
-            if(crdt_mode) {
+            if(isCrdtRdb) {
                 if(rdbLoadCrdtDbSize(rdb, db) == C_ERR) goto eoferr;
             }
             continue; /* Read type again. */
@@ -1631,12 +1651,12 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
             } else if (!strcasecmp(auxkey->ptr,"repl-stream-db")) {
                 if (rsi) rsi->repl_stream_db = atoi(auxval->ptr);
             } else if (!strcasecmp(auxkey->ptr,"repl-id")) {
-                if (rsi && sdslen(auxval->ptr) == CONFIG_RUN_ID_SIZE) {
+                if (isRdbReplVerDiff(isCrdtRdb) == C_OK && rsi && sdslen(auxval->ptr) == CONFIG_RUN_ID_SIZE) {
                     memcpy(rsi->repl_id,auxval->ptr,CONFIG_RUN_ID_SIZE+1);
                     rsi->repl_id_is_set = 1;
                 }
             } else if (!strcasecmp(auxkey->ptr,"repl-offset")) {
-                if (rsi) rsi->repl_offset = strtoll(auxval->ptr,NULL,10);
+                if (isRdbReplVerDiff(isCrdtRdb) == C_OK && rsi) rsi->repl_offset = strtoll(auxval->ptr,NULL,10);
             } else if (!strcasecmp(auxkey->ptr,"lua")) {
                 /* Load the script back in memory. */
                 if (luaCreateFunction(NULL,server.lua,auxval) == NULL) {
@@ -1661,8 +1681,11 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                 crdtServer.master_repl_offset = strtoll(auxval->ptr,NULL,10);
             } else if (!strcasecmp(auxkey->ptr,"peer-master-gid")) {
                 int gid = atoi(auxval->ptr);
-                CRDT_Master_Instance *masterInstance = createPeerMaster(NULL, gid);
-                listAddNodeTail(crdtServer.crdtMasters, masterInstance);
+                CRDT_Master_Instance *masterInstance = getPeerMaster(gid);
+                if(masterInstance == NULL) {
+                    masterInstance = createPeerMaster(NULL, gid);
+                    listAddNodeTail(crdtServer.crdtMasters, masterInstance);
+                }
                 currentMasterInstance = masterInstance;
             } else if (!strcasecmp(auxkey->ptr,"peer-master-host")) {
                 currentMasterInstance->masterhost = sdsdup(auxval->ptr);
@@ -1698,19 +1721,37 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
          * received from the master. In the latter case, the master is
          * responsible for key expiry. If we would expire keys here, the
          * snapshot taken by the master may not be reflected on the slave. */
-        if (server.masterhost == NULL && expiretime != -1 && expiretime < now) {
-            decrRefCount(key);
-            decrRefCount(val);
-            continue;
-        }
+        
         /* Add the new object in the hash table */
-        dbAdd(db,key,val);
-
+        if(!isCrdtRdb && crdt_mode) {
+            if(data2CrdtData(fakeClient, db, key, val) == C_ERR) {
+                decrRefCount(key);
+                freeFakeClient(fakeClient);
+                serverLog(LL_WARNING, "crdt load not crdt rdb datatype error");
+                crdtServer.vectorClock->clocks[0].logic_time = 0;
+                return C_ERR;
+            }
+        }else{
+            if (server.masterhost == NULL && expiretime != -1 && expiretime < now) {
+                decrRefCount(key);
+                decrRefCount(val);
+                continue;
+            }
+            dbAdd(db,key,val);
+        }
         /* Set the expire time if needed */
-        if (expiretime != -1) setExpire(NULL,db,key,expiretime);
+        if (expiretime != -1) {
+            if(!isCrdtRdb && crdt_mode) {
+                expire2CrdtExpire(fakeClient, key, expiretime);
+            }else{
+                setExpire(NULL,db,key,expiretime);
+            }
+            
+        }
 
         decrRefCount(key);
     }
+    freeFakeClient(fakeClient);
     /* Verify the checksum if RDB version is >= 5 */
     if (rdbver >= 5 && server.rdb_checksum) {
         uint64_t cksum, expected = rdb->cksum;

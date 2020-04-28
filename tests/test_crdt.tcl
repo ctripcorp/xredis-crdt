@@ -13,14 +13,24 @@ source tests/support/util.tcl
 
 
 
-set ::all_tests {
+set ::all_tests { 
+    ctrip/master-not-crdt/master-redis-peer2
+    ctrip/master-not-crdt/master-redis-peer
+    ctrip/master-not-crdt/jump-vectorclock
+    ctrip/master-not-crdt/crdt-redis-when-inited-not-full-sync-from-redis
+    ctrip/master-not-crdt/full-sync-error-datatype
+    ctrip/master-not-crdt/load-redis-rdb
+    ctrip/master-not-crdt/master-redis-slave-crdt
+    ctrip/master-not-crdt/add-sync-stop 
+    ctrip/master-not-crdt/full-sync-error-datatype2
+    ctrip/master-not-crdt/full-sync-stop 
+    ctrip/master-not-crdt/slave-redis
     ctrip/unit/aof
-    ctrip/integration/master-slave/rdb
     ctrip/unit/expire
     ctrip/basic/basic_crdt_type_del
     ctrip/integration/composite/master-slave-failover
     ctrip/unit/crdt_publish
-
+    ctrip/integration/master-slave/rdb3
     ctrip/integration/master-slave/auth-gid
 
     ctrip/integration/bug/redis-unfree-client-when-master-to-slave
@@ -31,7 +41,7 @@ set ::all_tests {
     ctrip/basic/basic_type
     ctrip/basic/basic_crdt_type_del
 
-    ctrip/integration/master-slave/replication-psync
+ 
     ctrip/unit/crdt_hash
     ctrip/unit/crdt_del 
     ctrip/unit/crdt_register
@@ -40,7 +50,6 @@ set ::all_tests {
     ctrip/unit/crdt_hdel_mem_leak
     ctrip/unit/gc
     ctrip/unit/pubsub
-
     ctrip/integration/bug/redis-crash-when-full-sync-hash-merge
     ctrip/integration/bug/redis-when-full-sync-mater-timeout-vectorclock-update
     ctrip/integration/master-slave/replication
@@ -48,7 +57,6 @@ set ::all_tests {
     ctrip/integration/master-slave/replication-2
     ctrip/integration/master-slave/replication-3
     ctrip/integration/master-slave/replication-4
-    ctrip/integration/master-slave/psync2
     ctrip/integration/master-slave/psync2-reg
 
     ctrip/integration/master-master/replication
@@ -62,11 +70,14 @@ set ::all_tests {
     ctrip/integration/composite/concurrent-conflict-full
     ctrip/integration/composite/master-slave-failover
     ctrip/unit/crdt_conflict
-    ctrip/unit/crdt_del_conflict   
+    ctrip/unit/crdt_del_conflict
+    ctrip/integration/master-slave/rdb
+    ctrip/integration/master-slave/rdb2
+    ctrip/integration/master-slave/psync2
+    ctrip/integration/master-slave/replication-psync
 }
 
 set ::temp_tests {
-    
     #####
     ctrip/integration/bug/redis-crash-when-full-sync-hash-merge
     ctrip/integration/bug/redis-when-full-sync-mater-timeout-vectorclock-update

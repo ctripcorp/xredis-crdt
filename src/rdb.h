@@ -35,7 +35,7 @@
 
 /* TBD: include only necessary headers. */
 #include "server.h"
-
+#include "ctrip_crdt_replication.h"
 /* The current RDB version. When the format changes in a way that is no longer
  * backward compatible this number gets incremented. */
 #define CTRIP_RDB_PREFIX 1000
