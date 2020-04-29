@@ -34,7 +34,6 @@
 #include "sds.h"
 #include "util.h"
 #include "zmalloc.h"
-//#include "server.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -302,7 +301,7 @@ void merge(VectorClock *dst, VectorClock *src) {
     sortVectorClock(dst);
 }
 
-void mergeLogicClock(VectorClock *dst, VectorClock *src, int gid) {
+static void commonMergeFunction(VectorClock *dst, VectorClock *src, int gid, int flag) {
     clk *dst_logic_clock = getVectorClockUnit(dst, gid);
     clk *src_logic_clock = getVectorClockUnit(src, gid);
     if(src_logic_clock == NULL) {
@@ -322,10 +321,19 @@ void mergeLogicClock(VectorClock *dst, VectorClock *src, int gid) {
         dst->clocks.multi = new_clocks;
         sortVectorClock(dst);
     } else {
-        long long logic_clock = max((long long)(get_logic_clock(*src_logic_clock)), (long long)(get_logic_clock(*dst_logic_clock)));
+        long long logic_clock = 0;
+        if(flag == CLOCK_UNIT_MAX) {
+            logic_clock = max((long long) (get_logic_clock(*src_logic_clock)), (long long) (get_logic_clock(*dst_logic_clock)));
+        } else if(flag == CLOCK_UNIT_ALIGN) {
+            logic_clock = (long long) (get_logic_clock(*src_logic_clock));
+        }
         clk tar_clock = init_clock((clk)gid, (clk)logic_clock);
         *dst_logic_clock = tar_clock;
     }
+}
+
+void mergeLogicClock(VectorClock *dst, VectorClock *src, int gid) {
+    commonMergeFunction(dst, src, gid, CLOCK_UNIT_MAX);
 }
 
 VectorClock*
@@ -426,11 +434,13 @@ sdsCpToVectorClock(sds src, VectorClock *dst) {
         clockNum = numVcUnits - 1;
     }
 
+    dst->length = (char) clockNum;
     if (clockNum == 1) {
         dst->clocks.single = sdsToVectorClockUnit(vcUnits[0]);
     } else {
+        dst->clocks.multi = malloc(sizeof(clk) * clockNum);
         for (int i = 0; i < clockNum; i++) {
-            set_clock_unit_by_index(dst, i, sdsToVectorClockUnit(vcUnits[i]));
+            dst->clocks.multi[i] = sdsToVectorClockUnit(vcUnits[i]);
         }
     }
     //clean up
@@ -510,6 +520,16 @@ isVectorClockMonoIncr(VectorClock *current, VectorClock *future) {
     }
     return 1;
 }
+
+void
+updateProcessVectorClock(VectorClock *dst, VectorClock *src, int gid, int currentGid) {
+    if(gid == currentGid) {
+        commonMergeFunction(dst, src, gid, CLOCK_UNIT_ALIGN);
+    } else {
+        commonMergeFunction(dst, src, gid, CLOCK_UNIT_MAX);
+    }
+}
+
 //typedef long long (*MergeVectorClockUnitFunc)(long long old, long long now);
 //void updateVectorClockUnit(VectorClock *vc, clk *vcu, MergeVectorClockUnitFunc fun) {
 //    clk *original = getVectorClockUnit(vc, vcu->gid);
@@ -798,6 +818,44 @@ int testInit(void) {
 
 }
 
+int testSdsCp2VectorClock(void) {
+    printf("========[testSdsCp2VectorClock]==========\r\n");
+    sds vcStr = sdsnew("1:123;2:234;3:345");
+    VectorClock *vc = zmalloc(sizeof(VectorClock));
+    printf("[test-1]\n");
+    sdsCpToVectorClock(vcStr, vc);
+    int i = 0;
+    printf("%s\n", vectorClockToSds(vc));
+    clk *clock = get_clock_unit_by_index(vc, i);
+    test_cond("[first vc]gid equals", 1 == get_gid(*clock));
+    test_cond("[first vc]logic_time equals", 123 == (long long)get_logic_clock(*clock));
+
+    i = 1;
+    clock = get_clock_unit_by_index(vc, i);
+    test_cond("[second vc]gid equals", 2 == get_gid(*clock));
+    test_cond("[second vc]logic_time equals", 234 == (long long)get_logic_clock(*clock));
+
+    i = 2;
+    clock = get_clock_unit_by_index(vc, i);
+    test_cond("[third vc]gid equals", 3 == get_gid(*clock));
+    test_cond("[third vc]logic_time equals", 345 == (long long)get_logic_clock(*clock));
+
+    vcStr = sdsnew("1:123");
+    vc = zmalloc(sizeof(VectorClock));
+    sdsCpToVectorClock(vcStr, vc);
+    test_cond("[one clock unit]length", 1 == vc->length);
+    test_cond("[one clock unit]", 1 == get_gid(vc->clocks.single));
+    test_cond("[one clock unit]", 123 == (long long)get_logic_clock(vc->clocks.single));
+
+    vcStr = sdsnew("1:123;");
+    vc = zmalloc(sizeof(VectorClock));
+    sdsCpToVectorClock(vcStr, vc);
+    test_cond("[one clock unit;]length", 1 == vc->length);
+    test_cond("[one clock unit;]gid equals", 1 == get_gid(vc->clocks.single));
+    test_cond("[one clock unit;]logic_time equals", 123 == (long long)get_logic_clock(vc->clocks.single));
+    return 0;
+}
+
 int vectorClockTest(void) {
     int result = 0;
     {
@@ -812,6 +870,7 @@ int vectorClockTest(void) {
         result |= testMergeLogicClock();
         result |= testMerge();
         result |= testInit();
+        result |= testSdsCp2VectorClock();
     }
     test_report();
     return result;

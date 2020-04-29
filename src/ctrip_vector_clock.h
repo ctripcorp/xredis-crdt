@@ -61,6 +61,8 @@ typedef struct VectorClock {
 #define APPEND(x, y) x ## y
 #define ULL(x) APPEND(x, ull)
 //#define null NULL
+#define CLOCK_UNIT_MAX 0
+#define CLOCK_UNIT_ALIGN 1
 
 #define LOGIC_CLOCK_UNDEFINE ULL(0xFFFFFFFFFFFFFFFF)
 
@@ -119,6 +121,7 @@ init(VectorClock *vc, int num, ...);
 void
 merge(VectorClock *dst, VectorClock *src);
 
+// for key's vector clock update
 void
 mergeLogicClock(VectorClock *dst, VectorClock *src, int gid);
 
@@ -130,5 +133,9 @@ isVectorClockMonoIncr(VectorClock *current, VectorClock *future);
 
 VectorClock*
 vectorClockMerge(VectorClock *vclock1, VectorClock *vclock2);
+
+/**------------------------Replication Usage--------------------------------------*/
+void
+updateProcessVectorClock(VectorClock *dst, VectorClock *src, int gid, int currentGid);
 
 #endif //REDIS_VECTOR_CLOCK_H
