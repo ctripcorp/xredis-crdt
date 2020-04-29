@@ -1460,7 +1460,10 @@ void * RM_CurrentVectorClock() {
 long long RM_CurrentGid(void) {
     return crdtServer.crdt_gid;
 }
-
+void jumpVectorClock() {
+    long long qps = getQps();
+    incrLocalVcUnit(max(qps * 60 * 24 , 10000));
+}
 void RM_IncrLocalVectorClock (long long delta) {
     incrLocalVcUnit(delta);
 }
@@ -1800,7 +1803,7 @@ int RM_SetCrdtExpire(RedisModuleKey *key, moduleType *mt ,CrdtExpire* expire) {
     return dictSetRobj(key, key->db->expires, mt, expire);
 }
 
-int RM_SetCrdtExpireTombstone(RedisModuleKey *key, moduleType *mt ,CrdtExpire* expire) {
+int RM_SetCrdtExpireTombstone(RedisModuleKey *key, moduleType *mt ,CrdtExpireTombstone* expire) {
     return dictSetRobj(key, key->db->deleted_expires, mt, expire);
 }
 

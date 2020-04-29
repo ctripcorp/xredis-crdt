@@ -166,25 +166,18 @@ void expireTombstoneSizeCommand(client *c) {
  * mechanism in order to ensure keys are eventually removed when deleted even
  * if no access is performed on them.
  *----------------------------------------------------------------------------*/
-
-void updateGcVectorClock() {
+VectorClock* getGcVectorClock() {
     listIter li;
     listNode *ln;
-
-    if (crdtServer.gcVectorClock) {
-        freeVectorClock(crdtServer.gcVectorClock);
-    }
-    crdtServer.gcVectorClock = dupVectorClock(crdtServer.vectorClock);
+    VectorClock* gcVectorClock = dupVectorClock(crdtServer.vectorClock);
     if (crdtServer.crdtMasters == NULL || listLength(crdtServer.crdtMasters) == 0) {
-        return;
+        return gcVectorClock;
     }
 
-
-    VectorClock *gcVectorClock = crdtServer.gcVectorClock;
     listRewind(crdtServer.crdtMasters, &li);
     while ((ln = listNext(&li)) != NULL) {
         CRDT_Master_Instance *crdtMaster = ln->value;
-        if (crdtMaster == NULL || crdtMaster->vectorClock == NULL) {
+        if (crdtMaster == NULL) {
             continue;
         }
         VectorClock *other = crdtMaster->vectorClock;
@@ -198,6 +191,13 @@ void updateGcVectorClock() {
             }
         }
     }
+    return gcVectorClock;
+}
+void updateGcVectorClock() {
+    if (crdtServer.gcVectorClock) {
+        freeVectorClock(crdtServer.gcVectorClock);
+    }
+    crdtServer.gcVectorClock = getGcVectorClock();
 }
 
 /* Helper function for the activeExpireCycle() function.
