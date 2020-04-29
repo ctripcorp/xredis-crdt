@@ -653,8 +653,137 @@ int rdbSaveCrdtInfoAuxFields(rio* rdb) {
         == -1) return -1;
     if(rdbSaveAuxFieldCrdt(rdb) == -1) return -1;
 }
+int initedCrdtServer() {
+    if(crdtServer.vectorClock->length == 1 && crdtServer.vectorClock->clocks[0].logic_time == 0) {
+        return 0;
+    }
+    return 1;
+}
+int isMasterSlaveReplVerDiff() {
+    if(crdt_mode && server.master_is_crdt) {
+        return C_OK;
+    }
+    if(!crdt_mode && !server.master_is_crdt) {
+        return C_OK;
+    }
+    return C_ERR;
+}
+int isRdbReplVerDiff(int isCrdtRdb) {
+    if(crdt_mode && isCrdtRdb) {
+        return C_OK;
+    }
+    if(!crdt_mode && !isCrdtRdb) {
+        return C_OK;
+    }
+    return C_ERR;
+}
+robj* createStrRobjFromLongLong(long long val) {
+    char buf[LONG_STR_SIZE];
+    size_t len = ll2string(buf,sizeof(buf),val);
+    return createStringObject(buf, len);
+}
+robj* reverseHashToArgv(hashTypeIterator* hi, int type) {
+    if (hi->encoding == OBJ_ENCODING_ZIPLIST) {
+        unsigned char *vstr = NULL;
+        unsigned int vlen = UINT_MAX;
+        long long vll = LLONG_MAX;
+        hashTypeCurrentFromZiplist(hi, type, &vstr, &vlen, &vll);
+        if (vstr) {
+            return createStringObject(vstr, vlen);
+        }else{
+            return createStrRobjFromLongLong(vll);
+        }
+    }else if(hi->encoding == OBJ_ENCODING_HT) {
+        sds value = hashTypeCurrentFromHashTable(hi, type);
+        return createObject(OBJ_STRING, value);
+    }else{
+        serverLog(LL_WARNING, "hash encoding error");
+        return NULL;
+    }
+}
 
+int processInputRdb(client* fakeClient) {
+    struct redisCommand* cmd = lookupCommand(fakeClient->argv[0]->ptr);
+    if (!cmd) {
+        serverLog(LL_WARNING,"Unknown command '%s' reading the append only file", fakeClient->argv[0]->ptr);
+        freeFakeClientArgv(fakeClient);
+        fakeClient->cmd = NULL;
+        return C_ERR;
+    } 
+    fakeClient->cmd = fakeClient->lastcmd = cmd;
+    call(fakeClient, CMD_CALL_PROPAGATE);
+    freeFakeClientArgv(fakeClient);
+    fakeClient->cmd = NULL;
+    return C_OK;
+}
+int crdtSelectDb(client* fakeClient, int dbid) {
+    fakeClient->argc = 2;
+    fakeClient->argv = zmalloc(sizeof(robj*)*2);
+    fakeClient->argv[0] = createStringObject("select", 6);
+    fakeClient->argv[1] = createStrRobjFromLongLong(dbid);
+    struct redisCommand* cmd = NULL;
+    return processInputRdb(fakeClient);
+}
+int data2CrdtData(client* fakeClient, redisDb* db, robj* key, robj* val) {
+    struct redisCommand* cmd = NULL;
+    long long len;
+    switch(val->type) {
+        case OBJ_STRING: 
+            fakeClient->argc = 3;
+            fakeClient->argv = zmalloc(sizeof(robj*)*3);
+            fakeClient->argv[0] = createStringObject("Set", 3);
+            fakeClient->argv[1] = key;
+            incrRefCount(key);
+            long long result;
+            if(getLongLongFromObject(val, &result) == C_OK) {
+                serverLog(LL_WARNING, "data2crdtData  kv type value is int, key: %s", (sds)key->ptr);
+                goto error;
+            }
+            fakeClient->argv[2] = val;
+            incrRefCount(val);
+            
+        break;
+        // case OBJ_LIST: freeListObject(o); break;
+        // case OBJ_SET: freeSetObject(o); break;
+        // case OBJ_ZSET: freeZsetObject(o); break;
+        case OBJ_HASH: 
+            len = hashTypeLength(val);
+            fakeClient->argc = 2 + 2 * len;
+            fakeClient->argv = zmalloc(sizeof(robj*)*fakeClient->argc);
+            fakeClient->argv[0] = createStringObject("HSET", 4);
+            fakeClient->argv[1] = key;
+            incrRefCount(key);
+            int i = 2;
+            hashTypeIterator* hi = hashTypeInitIterator(val);
+            while (hashTypeNext(hi) != C_ERR) {
+                fakeClient->argv[i++] = reverseHashToArgv(hi, OBJ_HASH_KEY);
+                fakeClient->argv[i++] = reverseHashToArgv(hi, OBJ_HASH_VALUE);
+            }
+            hashTypeReleaseIterator(hi);          
+        break;
+        // case OBJ_MODULE: freeModuleObject(o); break;
+        default:  goto error;
+    }
+    decrRefCount(val);  
+    return processInputRdb(fakeClient);
+error:
+    if(val != NULL) {
+        decrRefCount(val);
+    } 
+    return C_ERR;
+}
 
+int expire2CrdtExpire(client* fakeClient, robj* key, long long expiretime) {
+    struct redisCommand* cmd = NULL;
+    long long len;
+    fakeClient->argc = 3;
+    fakeClient->argv = zmalloc(sizeof(robj*)*3);
+    fakeClient->argv[0] = createStringObject("expireAt", 8);
+    fakeClient->argv[1] = key;
+    incrRefCount(key);
+    fakeClient->argv[2] = createStrRobjFromLongLong(expiretime);
+    return processInputRdb(fakeClient);
+}
 /**------------------------RIO Related Utility Functions--------------------*/
 
 //int rioWriteBulkString(rio *rdb, const char *str, long long len) {

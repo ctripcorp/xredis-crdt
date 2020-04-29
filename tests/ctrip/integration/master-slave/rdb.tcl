@@ -49,99 +49,173 @@ proc wait_save { client log}  {
         error "save fail"
     } 
 }
-set server_path [tmpdir "server.rdb-encoding-test"]
+set server_path [tmpdir "server.rdb1"]
 
 # Copy RDB with different encodings in server path
 # exec cp tests/assets/encodings.rdb $server_path
 exec cp tests/assets/crdt.so $server_path
-start_server [list overrides [list crdt-gid 1 loadmodule crdt.so  "dir"  $server_path "dbfilename" "encodings.rdb"]] {
-    set peers {}
-    set peer_hosts {}
-    set peer_ports {}
-    set peer_gids {}
-    set peer_stdouts {}
-    lappend peers [srv 0 client]
-    lappend peer_hosts [srv 0 host]
-    lappend peer_ports [srv 0 port]
-    lappend peer_stdouts [srv 0 stdout]
-    lappend peer_gids 1
-    
-    [lindex $peers 0] config crdt.set repl-diskless-sync-delay 1
-    [lindex $peers 0] config set repl-diskless-sync-delay 1
-    [lindex $peers 0] debug set-crdt-ovc 0
-    start_server {tags {"save"} overrides {crdt-gid 2} module {crdt.so} } {
+
+proc run {script level} {
+    catch [uplevel $level $script ] result opts
+}
+proc replace_client { str client } {
+    regsub -all {\$redis} $str $client str
+    return $str
+}
+proc replace { str argv } {
+    set len [llength $argv]
+    for {set i 0} {$i < $len} {incr i} {
+        set regstr [format {\$%s} $i]
+        # puts [lindex $argv $i]
+        regsub -all $regstr $str [lindex $argv $i] str
+    }
+    return $str
+}
+proc save {add check server_path dbfile} {
+    start_server [list overrides [list crdt-gid 1 loadmodule ./crdt.so  "dir"  $server_path "dbfilename" $dbfile]] {
+        set peers {}
+        set peer_hosts {}
+        set peer_ports {}
+        set peer_gids {}
+        set peer_stdouts {}
         lappend peers [srv 0 client]
         lappend peer_hosts [srv 0 host]
         lappend peer_ports [srv 0 port]
         lappend peer_stdouts [srv 0 stdout]
-        lappend peer_gids 2
+        lappend peer_gids 1
         
-        [lindex $peers 1] config crdt.set repl-diskless-sync-delay 1
-        [lindex $peers 1] config set repl-diskless-sync-delay 1
-        
-        [lindex $peers 0] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
-        [lindex $peers 1] peerof [lindex $peer_gids 0] [lindex $peer_hosts 0] [lindex $peer_ports 0]
-        wait [lindex $peers 0] 0 crdt.info [lindex $peer_stdouts 0]
-        wait [lindex $peers 1] 0 crdt.info [lindex $peer_stdouts 1]
-        [lindex $peers 1] debug set-crdt-ovc 0
-        test "set" {
-            [lindex $peers 0] set save-kv1 value
-            [lindex $peers 0] hset save-hash1 key value
-            assert_equal [[lindex $peers 0] get save-kv1] value
-            assert_equal [[lindex $peers 0] hget save-hash1 key] value
-        }
-        set time [clock milliseconds]
-        test "expire" {
-            [lindex $peers 0] set save-kv2 10000000
-            assert {[[lindex $peers 0] ttl save-kv2] < 10000000}
-        }
-        test "del" {
-            [lindex $peers 0] crdt.set save-kv10 value 1 $time "1:100"
-            [lindex $peers 0] crdt.del_reg save-kv10 2 $time "1:100;2:100"
-        }
-        test "delexpire" {
-            [lindex $peers 0] crdt.set save-kv11 value 1 $time "1:100"
-            [lindex $peers 0] crdt.expire save-kv11 3 $time "1:100;3:100" [expr $time + 1000000] 1
-            [lindex $peers 0] crdt.persist save-kv11 3 $time "1:100;3:101" 1
-            assert_equal [[lindex $peers 0] expiretombstonesize] 1
-        }
-        
-        test "bgsave" {
-            [lindex $peers 0] bgsave
-            wait_save  [lindex $peers 0] [lindex $peer_stdouts 0]
-            assert_equal [[lindex $peers 0] tombstonesize] 1
-            assert_equal [[lindex $peers 0] expiretombstonesize] 1
-        }
-        test "reload" {
-            [lindex $peers 0] debug reload
-            assert_equal [[lindex $peers 0] get save-kv1] value
-            assert_equal [[lindex $peers 0] hget save-hash1 key] value
-            assert {[[lindex $peers 0] ttl save-kv2] < 10000000}
-            assert_equal [[lindex $peers 0] tombstonesize] 1
-            assert_equal [[lindex $peers 0] expiretombstonesize] 1
+        [lindex $peers 0] config crdt.set repl-diskless-sync-delay 1
+        [lindex $peers 0] config set repl-diskless-sync-delay 1
+        [lindex $peers 0] debug set-crdt-ovc 0
+        start_server {tags {"save"} overrides {crdt-gid 2} module {./crdt.so} } {
+            lappend peers [srv 0 client]
+            lappend peer_hosts [srv 0 host]
+            lappend peer_ports [srv 0 port]
+            lappend peer_stdouts [srv 0 stdout]
+            lappend peer_gids 2
+            
+            [lindex $peers 1] config crdt.set repl-diskless-sync-delay 1
+            [lindex $peers 1] config set repl-diskless-sync-delay 1
+            
+            [lindex $peers 0] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
+            [lindex $peers 1] peerof [lindex $peer_gids 0] [lindex $peer_hosts 0] [lindex $peer_ports 0]
+            wait [lindex $peers 0] 0 crdt.info [lindex $peer_stdouts 0]
+            wait [lindex $peers 1] 0 crdt.info [lindex $peer_stdouts 1]
+            [lindex $peers 1] debug set-crdt-ovc 0
+            test [format "bgsave %s" $dbfile] {
+                run [replace_client $add {[lindex $peers 0]}]  1
+                [lindex $peers 0] bgsave
+            }
         }
     }
+    start_server [list overrides [list crdt-gid 1 loadmodule ./crdt.so  "dir"  $server_path "dbfilename" $dbfile]] {
+        set peers {}
+        set peer_hosts {}
+        set peer_ports {}
+        set peer_gids {}
+        set peer_stdouts {}
+        lappend peers [srv 0 client]
+        lappend peer_hosts [srv 0 host]
+        lappend peer_ports [srv 0 port]
+        lappend peer_stdouts [srv 0 stdout]
+        lappend peer_gids 1
+        
+        [lindex $peers 0] config crdt.set repl-diskless-sync-delay 1
+        [lindex $peers 0] config set repl-diskless-sync-delay 1
+        [lindex $peers 0] debug set-crdt-ovc 0
+        run [replace_client $check {[lindex $peers 0]}]  1
+    }
 }
-start_server [list overrides [list crdt-gid 1 loadmodule crdt.so  "dir"  $server_path "dbfilename" "encodings.rdb"]] {
-    set peers {}
-    set peer_hosts {}
-    set peer_ports {}
-    set peer_gids {}
-    set peer_stdouts {}
-    lappend peers [srv 0 client]
-    lappend peer_hosts [srv 0 host]
-    lappend peer_ports [srv 0 port]
-    lappend peer_stdouts [srv 0 stdout]
-    lappend peer_gids 1
-    
-    [lindex $peers 0] config crdt.set repl-diskless-sync-delay 1
-    [lindex $peers 0] config set repl-diskless-sync-delay 1
-    [lindex $peers 0] debug set-crdt-ovc 0
-    test "load" {
-        assert_equal [[lindex $peers 0] get save-kv1] value
-        assert_equal [[lindex $peers 0] hget save-hash1 key] value
-        assert {[[lindex $peers 0] ttl save-kv2] < 10000000}
-        assert_equal [[lindex $peers 0] tombstonesize] 1
-        assert_equal [[lindex $peers 0] expiretombstonesize] 1
+array set adds ""
+set adds(0) {
+    $redis set key value
+}
+set checks(0) {
+    assert_equal [$redis get key] value
+}
+set adds(1) {
+    $redis hset hash key value
+}
+set checks(1) {
+    assert_equal [$redis hget hash key] value
+}
+set adds(2) {
+    $redis crdt.set kv value 1 1000000 "1:100"
+    $redis crdt.del_reg kv 2 1000000 "1:100;2:100"
+}
+set checks(2) {
+    assert_equal [$redis tombstonesize] 1
+}
+set adds(3) {
+    $redis set key2 v2 ex 10000000
+}
+set checks(3) {
+    assert {[$redis ttl key2] <= 10000000}
+    assert {[$redis ttl key2] > -1}
+}
+set adds(4) {
+    $redis crdt.set key3 value 1 100000 "1:100"
+    $redis crdt.expire key3 3 100000 "1:100;3:100" 100000 1
+    $redis crdt.persist key3 3 100000 "1:100;3:101" 1
+}
+set checks(4) {
+    assert_equal [$redis expiretombstonesize] 1
+}
+set len [array size adds]
+proc replace_foreach {  index  len core} {
+    set str {
+        for {set i$index [expr $i$prev + 1]} {$i$index< $len } {incr i$index} {
+            $core
+        }
+    }
+    regsub -all {\$index} $str $index str
+    regsub -all {\$prev} $str [expr $index -1] str
+    regsub -all {\$core} $str $core str
+    regsub -all {\$len} $str $len str
+    return $str
+}
+proc replace_save {  format_core  format_add_core format_check_core rdbfile_core formate_rdbfile_core} {
+    set str {
+        save [format "$format_core" $format_add_core] [format "$format_core"  $format_check_core] $server_path [format "$rdbfile_core" $formate_rdbfile_core]
+    }
+    regsub -all {\$format_core} $str $format_core str
+    regsub -all {\$format_add_core} $str $format_add_core str
+    regsub -all {\$format_check_core} $str $format_check_core str
+    regsub -all {\$rdbfile_core} $str $rdbfile_core str
+    regsub -all {\$formate_rdbfile_core} $str $formate_rdbfile_core str
+    return $str
+}
+proc run_foreach {num len} {
+    set foreach_core "\$save"
+    set format_core "%s"
+    set format_add_core  ""
+    set format_check_core ""
+    set rdbfile_core "test.%s"
+    set formate_rdbfile_core ""
+    for {set i $num} {$i > 1} {incr i -1} {
+        append format_core ";%s"
+        append format_add_core   [format " \$adds(\$i%s)" $i]
+        append format_check_core [format " \$checks(\$i%s)" $i]
+        append rdbfile_core ".%s"
+        append formate_rdbfile_core [format " \$i%s" $i]
+        set foreach_core [replace_foreach $i $len $foreach_core]
+    }
+    append format_add_core  " \$adds(\$i1)"
+    append format_check_core " \$checks(\$i1)" 
+    append formate_rdbfile_core " \$i1" 
+    set foreach_core [format {
+        for {set i1 0} {$i1<%s} {incr i1} {
+            %s
+        }
+    } $len $foreach_core]
+    regsub -all {\$save} $foreach_core [replace_save $format_core  $format_add_core $format_check_core $rdbfile_core $formate_rdbfile_core] foreach_core
+    # puts [format $foreach_core  [format ]]
+    run $foreach_core 2
+    # puts $foreach_core
+}
+
+for {set i 1} {$i <= $len} {incr i} {
+    test [format "foreach-%s" $i] {
+        run_foreach $i $len
     }
 }
