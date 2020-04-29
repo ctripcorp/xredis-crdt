@@ -14,4 +14,9 @@ crdt-ut:
 	cd src && $(MAKE) $(CRDT_UNIT_TESTS)
 .PHONY: crdt-ut
 
+SDS_UNIT_TESTS=test-sds
+sds-ut:
+	cd src && $(MAKE) $(SDS_UNIT_TESTS)
+.PHONY: sds-ut
+
 .PHONY: install

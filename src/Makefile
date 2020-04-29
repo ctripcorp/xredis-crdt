@@ -263,7 +263,7 @@ test-sds: sds.c sds.h
 	/tmp/sds_test
 
 test-vc: ctrip_vector_clock.c ctrip_vector_clock.h
-	$(REDIS_CC) ctrip_vector_clock.c zmalloc.c sds.c util.c sha1.c -DVECTOR_CLOCK_TEST_MAIN $(FINAL_LIBS) -o /tmp/vc_test
+	$(REDIS_CC) -Wno-nullability-completeness -Wnullability-extension ctrip_vector_clock.c zmalloc.c sds.c util.c sha1.c -DVECTOR_CLOCK_TEST_MAIN $(FINAL_LIBS) -o /tmp/vc_test
 	/tmp/vc_test
 
 test-crdt-common: ctrip_crdt_common.c ctrip_crdt_common.h

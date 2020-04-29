@@ -43,25 +43,52 @@
 
 #define max(x, y) x > y ? x : y
 
-typedef struct VectorClockUnit {
-    long long gid;
-    long long logic_time;
-}__attribute__((packed, aligned(4))) VectorClockUnit;
-
+/**
+ * To shrink down mem usage, an unsigned long long will stand for [gid, clock]
+ * where, higher 4 bits is allocated for gid (16 gid in total)
+ * and,   lower 60 bits represents the logical clk
+ * */
+typedef unsigned long long clk;
+#define VectorClockUnit clk
 typedef struct VectorClock {
-    VectorClockUnit *clocks;
-    int length;
-}__attribute__((packed, aligned(4)))VectorClock;
+    char length;
+    union clocks {
+        clk single;
+        clk *multi;
+    } clocks;
+}__attribute__((packed, aligned(1)))VectorClock;
+
+#define APPEND(x, y) x ## y
+#define ULL(x) APPEND(x, ull)
+//#define null NULL
+
+#define LOGIC_CLOCK_UNDEFINE ULL(0xFFFFFFFFFFFFFFFF)
+
+#define LOGIC_CLOCK_TEMPLATE 0xFFFFFFFFFFFFFFF
+#define LOGIC_CLOCK_BITS 60u
+#define get_logic_clock(clock) (clock & ULL(LOGIC_CLOCK_TEMPLATE))
+#define get_gid(clock) ((clock >> LOGIC_CLOCK_BITS) & 0xF)
+#define init_clock(gid, logic_clk) ((clk)gid << LOGIC_CLOCK_BITS) | (ULL(LOGIC_CLOCK_TEMPLATE) & logic_clk)
+#define clock_overlap(gid, logic_clk) (gid > 0xF || (long long)logic_clk > LOGIC_CLOCK_TEMPLATE) ? 1 : 0
+#define get_clock_unit_by_index(vclock, index) (index < vclock->length ? (vclock->length == 1 ? &(vclock->clocks.single) : ((unsigned long long *)vclock->clocks.multi + index)) : NULL)
+#define set_clock_unit_by_index(vclock, index, clock)  *((unsigned long long *)vclock->clocks.multi + index) = clock
 
 /**------------------------Vector Clock Lifecycle--------------------------------------*/
+
+VectorClock*
+vectorClockMakeRoomFor(VectorClock *vclock, unsigned char size);
+
 VectorClock*
 newVectorClock(int numVcUnits);
 
 void
 freeVectorClock(VectorClock *vc);
 
+void
+freeInnerClocks(VectorClock *vc);
+
 VectorClock*
-addVectorClockUnit(VectorClock *vc, long long gid, long long logic_time);
+addVectorClockUnit(VectorClock *vc, int gid, long long logic_time);
 
 VectorClock*
 dupVectorClock(VectorClock *vc);
@@ -73,20 +100,35 @@ sdsToVectorClock(sds vcStr);
 sds
 vectorClockToSds(VectorClock *vc);
 
+void
+sdsCpToVectorClock(sds src, VectorClock *dst);
+
+
 /**------------------------Vector Clock Util--------------------------------------*/
+
+clk*
+getVectorClockUnit(VectorClock *vc, int gid);
+
+void
+incrLogicClock(VectorClock *vc, int gid, int delta);
+
+//vector_clock, length, gid, clock, gid, clock, gid, clock
+void
+init(VectorClock *vc, int num, ...);
+
+void
+merge(VectorClock *dst, VectorClock *src);
+
+void
+mergeLogicClock(VectorClock *dst, VectorClock *src, int gid);
+
 void
 sortVectorClock(VectorClock *vc);
-
-VectorClock*
-vectorClockMerge(VectorClock *vc1, VectorClock *vc2);
-
-VectorClockUnit*
-getVectorClockUnit(VectorClock *vc, long long gid);
 
 int
 isVectorClockMonoIncr(VectorClock *current, VectorClock *future);
 
-void
-mergeVectorClockUnit(VectorClock *vc, VectorClockUnit *vcu);
+VectorClock*
+vectorClockMerge(VectorClock *vclock1, VectorClock *vclock2);
 
 #endif //REDIS_VECTOR_CLOCK_H
