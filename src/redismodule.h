@@ -228,10 +228,6 @@ void* REDISMODULE_API_FUNC(RedisModule_GetCrdtExpireByKey)(RedisModuleCtx *ctx, 
 int REDISMODULE_API_FUNC(RedisModule_SetExpire)(RedisModuleKey *key, mstime_t expire);
 int REDISMODULE_API_FUNC(RedisModule_SetCrdtExpire)(RedisModuleKey *key,RedisModuleType* type, void* expire);
 int REDISMODULE_API_FUNC(RedisModule_SetCrdtExpireTombstone)(RedisModuleKey *key,RedisModuleType* type, void* expire);
-int REDISMODULE_API_FUNC(RedisModule_SetCrdtDataRobj)(RedisModuleString *key, CrdtData* data);
-int REDISMODULE_API_FUNC(RedisModule_SetCrdtExpireRobj)(RedisModuleString *key, CrdtData* data);
-int REDISMODULE_API_FUNC(RedisModule_SetCrdtExpireTombstoneRobj)(RedisModuleString *key, CrdtData* data);
-int REDISMODULE_API_FUNC(RedisModule_SetCrdtTombstoneRobj)(RedisModuleString *key, CrdtData* data);
 void REDISMODULE_API_FUNC(RedisModule_SaveRobj)(void* rdb, void* value);
 void REDISMODULE_API_FUNC(RedisModule_SaveInt)(void* rdb, int value);
 int REDISMODULE_API_FUNC(RedisModule_ZsetAdd)(RedisModuleKey *key, double score, RedisModuleString *ele, int *flagsptr);
