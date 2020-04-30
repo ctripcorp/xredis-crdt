@@ -77,8 +77,8 @@ typedef struct VectorClock {
 
 /**------------------------Vector Clock Lifecycle--------------------------------------*/
 
-VectorClock*
-vectorClockMakeRoomFor(VectorClock *vclock, unsigned char size);
+void
+clone(VectorClock *dst, VectorClock *src);
 
 VectorClock*
 newVectorClock(int numVcUnits);
@@ -124,6 +124,9 @@ merge(VectorClock *dst, VectorClock *src);
 // for key's vector clock update
 void
 mergeLogicClock(VectorClock *dst, VectorClock *src, int gid);
+
+VectorClock*
+getMonoVectorClock(VectorClock *src, int gid);
 
 void
 sortVectorClock(VectorClock *vc);
