@@ -556,7 +556,7 @@ mergeMinVectorClock(VectorClock *vclock1, VectorClock *vclock2) {
         target->clocks.single = init_clock((clk)get_gid(vclock2->clocks.single), (clk)logic_time);
         return target;
     }
-    target->length = gid_nums;
+    target->length = (char) gid_nums;
     int index1 = 0, index2 = 0, tar_index = 0;
     sortVectorClock(vclock1);
     sortVectorClock(vclock2);
@@ -587,7 +587,7 @@ mergeMinVectorClock(VectorClock *vclock1, VectorClock *vclock2) {
         set_clock_unit_by_index(target, tar_index++, tar_clock);
         index1++;
     }
-    while(index2 < target->length) {
+    while(index2 < vclock2->length) {
         clk *dst_clock = get_clock_unit_by_index(vclock2, index2);
         clk tar_clock = init_clock((clk)get_gid(*dst_clock), (clk)0);
         set_clock_unit_by_index(target, tar_index++, tar_clock);
@@ -906,33 +906,45 @@ int testMergeMinVectorClock(void) {
     VectorClock *vc = sdsToVectorClock(sdsnew("1:100;2:200;3:300"));
     VectorClock *new_vc = mergeMinVectorClock(vc, sdsToVectorClock(sdsnew("1:200;2:500;3:100")));
     test_cond("[testvectorClockMerge][merge-only]", sdscmp(sdsnew("1:100;2:200;3:100"), vectorClockToSds(new_vc)) == 0);
+    freeVectorClock(vc);
+    freeVectorClock(new_vc);
 
     //second, dst is covering every little corner of src
     vc = sdsToVectorClock(sdsnew("1:100;2:200;3:300"));
     new_vc = mergeMinVectorClock(vc, sdsToVectorClock(sdsnew("1:200")));
     test_cond("[testvectorClockMerge][merge-only]", sdscmp(sdsnew("1:100;2:0;3:0"), vectorClockToSds(new_vc)) == 0);
+    freeVectorClock(vc);
+    freeVectorClock(new_vc);
 
     vc = sdsToVectorClock(sdsnew("1:100;2:200;3:300"));
     new_vc = mergeMinVectorClock(vc, sdsToVectorClock(sdsnew("2:500")));
     test_cond("[testvectorClockMerge][merge-only]", sdscmp(sdsnew("1:0;2:200;3:0"), vectorClockToSds(new_vc)) == 0);
+    freeVectorClock(vc);
+    freeVectorClock(new_vc);
 
     //third, dst is diff with src
     vc = sdsToVectorClock(sdsnew("1:100"));
     new_vc = mergeMinVectorClock(vc, sdsToVectorClock(sdsnew("2:500;3:100;5:100")));
     printf("[result]%s\n", vectorClockToSds(new_vc));
     test_cond("[testvectorClockMerge][new-income]", sdscmp(sdsnew("1:0;2:0;3:0;5:0"), vectorClockToSds(new_vc)) == 0);
+    freeVectorClock(vc);
+    freeVectorClock(new_vc);
 
     //forth, dst is diff with src, but they are all single
     vc = sdsToVectorClock(sdsnew("2:500"));
     new_vc = mergeMinVectorClock(vc, sdsToVectorClock(sdsnew("1:500")));
     printf("[result]%s\n", vectorClockToSds(new_vc));
     test_cond("[testvectorClockMerge][new-income]", sdscmp(sdsnew("1:0;2:0"), vectorClockToSds(new_vc)) == 0);
+    freeVectorClock(vc);
+    freeVectorClock(new_vc);
 
     //fifth, dst is inserting into src
     vc = sdsToVectorClock(sdsnew("1:100;3:300"));
     new_vc = mergeMinVectorClock(vc, sdsToVectorClock(sdsnew("2:500")));
     printf("[result]%s\n", vectorClockToSds(new_vc));
     test_cond("[testvectorClockMerge][merge-only]", sdscmp(sdsnew("1:0;2:0;3:0"), vectorClockToSds(new_vc)) == 0);
+    freeVectorClock(vc);
+    freeVectorClock(new_vc);
 
 
     //sixth, dst/src is single and same
@@ -940,6 +952,8 @@ int testMergeMinVectorClock(void) {
     new_vc = mergeMinVectorClock(vc, sdsToVectorClock(sdsnew("1:500")));
     printf("[result]%s\n", vectorClockToSds(vc));
     test_cond("[testvectorClockMerge][merge-only]", sdscmp(sdsnew("1:100"), vectorClockToSds(new_vc)) == 0);
+    freeVectorClock(vc);
+    freeVectorClock(new_vc);
 
     return 0;
 }
