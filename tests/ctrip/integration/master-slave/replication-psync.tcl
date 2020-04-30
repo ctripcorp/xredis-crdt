@@ -7,6 +7,14 @@ proc stop_bg_complex_data {handle} {
     catch {exec /bin/kill -9 $handle}
 }
 
+proc log_content {log} {
+    set fp [open $log r]
+    set content [read $fp]
+    close $fp
+    return $content
+}
+
+
 # Creates a master-slave pair and breaks the link continuously to force
 # partial resyncs attempts, all this while flooding the master with
 # write queries.
@@ -24,7 +32,9 @@ proc test_psync {descr duration backlog_size backlog_ttl delay cond diskless rec
             set master [srv -1 client]
             set master_host [srv -1 host]
             set master_port [srv -1 port]
+            set master_stdout [srv -1 stdout]
             set slave [srv 0 client]
+            set slave_stdout [srv 0 stdout]
 
             $master config set repl-backlog-size $backlog_size
             $master config set repl-backlog-ttl $backlog_ttl
@@ -36,11 +46,14 @@ proc test_psync {descr duration backlog_size backlog_ttl delay cond diskless rec
             set load_handle2 [start_bg_complex_string_data $master_host $master_port 12 100000]
 
             test {Slave should be able to synchronize with the master} {
-                $slave xslaveof $master_host $master_port
-                wait_for_condition 50 100 {
+                $slave slaveof $master_host $master_port
+                wait_for_condition 500 100 {
                     [lindex [r role] 0] eq {slave} &&
                     [lindex [r role] 3] eq {connected}
                 } else {
+                    puts [lindex [r role] 0] 
+                    puts [lindex [r role] 3]
+                    puts [log_content $slave_stdout]
                     fail "Replication not started."
                 }
             }
@@ -136,19 +149,19 @@ foreach diskless {no yes} {
     test_psync {no reconnection, just sync} 6 1000000 3600 0 {
     } $diskless 0
 
-    test_psync {ok psync} 6 100000000 3600 0 {
-        assert {[s -1 sync_partial_ok] > 0}
-    } $diskless 1
+    # test_psync {ok psync} 6 100000000 3600 0 {
+    #     assert {[s -1 sync_partial_ok] > 0}
+    # } $diskless 1
 
-    test_psync {no backlog} 6 100 3600 0.5 {
-        assert {[s -1 sync_partial_err] > 0}
-    } $diskless 1
+    # test_psync {no backlog} 6 100 3600 0.5 {
+    #     assert {[s -1 sync_partial_err] > 0}
+    # } $diskless 1
 
-    test_psync {ok after delay} 3 100000000 3600 3 {
-        assert {[s -1 sync_partial_ok] > 0}
-    } $diskless 1
+    # test_psync {ok after delay} 3 100000000 3600 3 {
+    #     assert {[s -1 sync_partial_ok] > 0}
+    # } $diskless 1
 
-    test_psync {backlog expired} 3 100000000 1 3 {
-        assert {[s -1 sync_partial_err] > 0}
-    } $diskless 1
+    # test_psync {backlog expired} 3 100000000 1 3 {
+    #     assert {[s -1 sync_partial_err] > 0}
+    # } $diskless 1
 }

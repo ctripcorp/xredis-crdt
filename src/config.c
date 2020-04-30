@@ -2081,8 +2081,13 @@ int rewriteConfig(char *path) {
     rewriteConfigYesNoOption(state,"slave-lazy-flush",server.repl_slave_lazy_flush,CONFIG_DEFAULT_SLAVE_LAZY_FLUSH);
 
     rewriteConfigNumericalOption(state,"crdt-gid", crdtServer.crdt_gid, CONFIG_DEFAULT_GID);
-    rewriteConfigNumericalOption(state, "local-clock", crdtServer.vectorClock->clocks[0].logic_time, 0);
-
+    VectorClockUnit* unit = getVectorClockUnit(crdtServer.vectorClock,crdtServer.crdt_gid);
+    
+    if(unit != NULL) {
+        long long vcu = get_logic_clock(*unit);
+        rewriteConfigNumericalOption(state, "local-clock", vcu, CONFIG_DEFAULT_VECTORCLOCK_UNIT);
+    }
+    
     /* Rewrite Sentinel config if in Sentinel mode. */
     if (server.sentinel_mode) rewriteConfigSentinelOption(state);
 

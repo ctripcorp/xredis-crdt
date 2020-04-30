@@ -76,9 +76,11 @@ typedef struct VectorClock {
 #define set_clock_unit_by_index(vclock, index, clock)  *((unsigned long long *)vclock->clocks.multi + index) = clock
 
 /**------------------------Vector Clock Lifecycle--------------------------------------*/
+VectorClock*
+mergeMinVectorClock(VectorClock *vclock1, VectorClock *vclock2);
 
 void
-clone(VectorClock *dst, VectorClock *src);
+cloneVectorClock(VectorClock *dst, VectorClock *src);
 
 VectorClock*
 newVectorClock(int numVcUnits);

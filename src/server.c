@@ -339,8 +339,8 @@ struct redisCommand redisCommandTable[] = {
 
 void
 incrLocalVcUnit(long delta) {
-    VectorClockUnit *localVcu = getVectorClockUnit(crdtServer.vectorClock, crdtServer.crdt_gid);
-    localVcu->logic_time += delta;
+    // VectorClockUnit *localVcu = getVectorClockUnit(crdtServer.vectorClock, crdtServer.crdt_gid);
+    incrLogicClock(crdtServer.vectorClock, crdtServer.crdt_gid, delta);
 }
 
 /*============================ Utility functions ============================ */
@@ -744,6 +744,8 @@ void tryResizeHashTables(int dbid) {
         dictResize(server.db[dbid].expires);
     if (htNeedsResize(server.db[dbid].deleted_keys))
         dictResize(server.db[dbid].deleted_keys);
+    if (htNeedsResize(server.db[dbid].deleted_expires))
+        dictResize(server.db[dbid].deleted_expires);
 }
 
 /* Our hash table implementation performs rehashing incrementally while
@@ -1093,7 +1095,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
 
     /* Check if a background saving or AOF rewrite in progress terminated. */
     if (server.rdb_child_pid != -1 || server.aof_child_pid != -1 ||
-        ldbPendingChildren())
+        ldbPendingChildren() || crdtServer.rdb_child_pid != -1)
     {
         int statloc;
         pid_t pid;
@@ -1110,21 +1112,34 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
                     strerror(errno),
                     (int) server.rdb_child_pid,
                     (int) server.aof_child_pid);
+                updateDictResizePolicy();
+                closeChildInfoPipe(&server);
+                closeChildInfoPipe(&crdtServer);
             } else if (pid == server.rdb_child_pid) {
                 backgroundSaveDoneHandler(&server, exitcode,bysignal);
                 if (!bysignal && exitcode == 0) receiveChildInfo(&server);
+                updateDictResizePolicy();
+                closeChildInfoPipe(&server);
             } else if (pid == server.aof_child_pid) {
                 backgroundRewriteDoneHandler(exitcode,bysignal);
                 if (!bysignal && exitcode == 0) receiveChildInfo(&server);
-            } else {
+                updateDictResizePolicy();
+                closeChildInfoPipe(&server);
+            } else if (pid == crdtServer.rdb_child_pid) {
+                backgroundSaveDoneHandler(&crdtServer, exitcode,bysignal);
+                if (!bysignal && exitcode == 0) receiveChildInfo(&crdtServer);
+                updateDictResizePolicy();
+                closeChildInfoPipe(&crdtServer);
+            }else {
                 if (!ldbRemoveChild(pid)) {
                     serverLog(LL_WARNING,
                         "Warning, detected child with unmatched pid: %ld",
                         (long)pid);
                 }
+                updateDictResizePolicy();
+                closeChildInfoPipe(&server);
             }
-            updateDictResizePolicy();
-            closeChildInfoPipe(&server);
+            
         }
     } else {
         /* If there is not a background saving/rewrite in progress check if
@@ -1169,40 +1184,40 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     }
 
     /* Check if a background saving for crdt replication in progress terminated. */
-    if (crdtServer.rdb_child_pid != -1)
-    {
-        int statloc;
-        pid_t pid;
+    // if (crdtServer.rdb_child_pid != -1)
+    // {
+    //     int statloc;
+    //     pid_t pid;
 
-        if ((pid = wait3(&statloc,WNOHANG,NULL)) != 0) {
-            int exitcode = WEXITSTATUS(statloc);
-            int bysignal = 0;
+    //     if ((pid = wait3(&statloc,WNOHANG,NULL)) != 0) {
+    //         int exitcode = WEXITSTATUS(statloc);
+    //         int bysignal = 0;
 
-            if (WIFSIGNALED(statloc)) bysignal = WTERMSIG(statloc);
+    //         if (WIFSIGNALED(statloc)) bysignal = WTERMSIG(statloc);
 
-            if (pid == -1) {
-                serverLog(LL_WARNING,"wait3() returned an error: %s. "
-                                     "rdb_child_pid = %d, aof_child_pid = %d",
-                          strerror(errno),
-                          (int) crdtServer.rdb_child_pid,
-                          (int) crdtServer.aof_child_pid);
-            } else if (pid == crdtServer.rdb_child_pid) {
-                backgroundSaveDoneHandler(&crdtServer, exitcode,bysignal);
-                if (!bysignal && exitcode == 0) receiveChildInfo(&crdtServer);
-            } else if (pid == crdtServer.aof_child_pid) {
-                backgroundRewriteDoneHandler(exitcode,bysignal);
-                if (!bysignal && exitcode == 0) receiveChildInfo(&crdtServer);
-            } else {
-                if (!ldbRemoveChild(pid)) {
-                    serverLog(LL_WARNING,
-                              "Warning, detected child with unmatched pid: %ld",
-                              (long)pid);
-                }
-            }
-            updateDictResizePolicy();
-            closeChildInfoPipe(&crdtServer);
-        }
-    }
+    //         if (pid == -1) {
+    //             serverLog(LL_WARNING,"wait3() returned an error: %s. "
+    //                                  "rdb_child_pid = %d, aof_child_pid = %d",
+    //                       strerror(errno),
+    //                       (int) crdtServer.rdb_child_pid,
+    //                       (int) crdtServer.aof_child_pid);
+    //         } else if (pid == crdtServer.rdb_child_pid) {
+    //             backgroundSaveDoneHandler(&crdtServer, exitcode,bysignal);
+    //             if (!bysignal && exitcode == 0) receiveChildInfo(&crdtServer);
+    //         } else if (pid == crdtServer.aof_child_pid) {
+    //             backgroundRewriteDoneHandler(exitcode,bysignal);
+    //             if (!bysignal && exitcode == 0) receiveChildInfo(&crdtServer);
+    //         } else {
+    //             if (!ldbRemoveChild(pid)) {
+    //                 serverLog(LL_WARNING,
+    //                           "Warning, detected child with unmatched pid: %ld",
+    //                           (long)pid);
+    //             }
+    //         }
+    //         updateDictResizePolicy();
+    //         closeChildInfoPipe(&crdtServer);
+    //     }
+    // }
 
 
     /* AOF postponed flush: Try at every cron cycle if the slow fsync
@@ -2103,12 +2118,11 @@ void initServer(struct redisServer *srv) {
         srv->crdt_gid = server.crdt_gid;
     }
     VectorClock *vc = newVectorClock(1);
-    vc->clocks[0].gid = crdtServer.crdt_gid;
-    vc->clocks[0].logic_time = crdtServer.local_clock;
+    init(vc, 1,crdtServer.crdt_gid, (long long)crdtServer.local_clock);
+    // addVectorClockUnit(vc, crdtServer.crdt_gid, (long long)crdtServer.local_clock);
     srv->vectorClock = vc;
     VectorClock *gcVclock = newVectorClock(1);
-    gcVclock->clocks[0].gid = crdtServer.crdt_gid;
-    gcVclock->clocks[0].logic_time = 0;
+    init(gcVclock, 1,crdtServer.crdt_gid, 0);
     srv->gcVectorClock = gcVclock;
 }
 
@@ -4215,6 +4229,13 @@ int main(int argc, char **argv) {
     aeMain(server.el);
     aeDeleteEventLoop(server.el);
     return 0;
+}
+
+void
+refreshGcVectorClock(VectorClock *other) {
+    VectorClock *gcVectorClock = crdtServer.gcVectorClock;
+    crdtServer.gcVectorClock = mergeMinVectorClock(crdtServer.gcVectorClock,  other); 
+    freeVectorClock(gcVectorClock);
 }
 
 /* The End */

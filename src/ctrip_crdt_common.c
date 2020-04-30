@@ -58,20 +58,32 @@ void* getMethod(void* obj, const char* name) {
     }
     return getmethod(obj);
 }
-CrdtExpireMethod* getCrdtExpireMethod(CrdtExpire* expire) {
+CrdtExpireMethod* getCrdtExpireMethod(CrdtObject* expire) {
     return getMethod(expire, "getCrdtExpireMethod");
 }
-CrdtDataMethod* getCrdtDataMethod(CrdtExpire* expire) {
+CrdtDataMethod* getCrdtDataMethod(CrdtObject* expire) {
     return getMethod(expire, "getCrdtDataMethod");
 }
 CrdtObjectMethod* getCrdtObjectMethod(CrdtObject* obj) {
     return getMethod(obj, "getCrdtObjectMethod");
 }
-CrdtTombstoneMethod* getCrdtTombstoneMethod(CrdtTombstone* tombstone) {
+CrdtTombstoneMethod* getCrdtTombstoneMethod(CrdtObject* tombstone) {
     return getMethod(tombstone, "getCrdtTombstoneMethod");
 }
 int getDataType(int type) {
-    return getMethod(type, "getDataType");
+    return (int)getMethod((void*)type, "getDataType");
+}
+int isData(int type) {
+    return (int)getMethod((void*)type, "isData");
+}
+int isExpire(int type) {
+    return (int)getMethod((void*)type, "isExpire");
+}
+int isExpireTombstone(int type) {
+    return (int)getMethod((void*)type, "isExpireTombstone");
+}
+int isTombstone(int type) {
+    return (int)getMethod((void*)type, "isTombstone");
 }
 void* getObjValue(robj *obj) {
     if (obj == NULL || isModuleCrdt(obj) == C_ERR) return NULL;
@@ -83,16 +95,6 @@ CrdtObject *retrieveCrdtObject(robj *obj) {
     return (CrdtObject*)getObjValue(obj);
 }
 
-CrdtTombstone* retrieveCrdtTombstone(robj *obj) {
-    return (CrdtTombstone*)getObjValue(obj);
-}
-
-CrdtExpire* retrieveCrdtExpire(robj *obj) {
-    return (CrdtExpire*)getObjValue(obj);
-}
-CrdtExpireTombstone* retrieveCrdtExpireTombstone(robj *obj) {
-    return (CrdtExpireTombstone*)getObjValue(obj);
-}
 
 moduleType* getModuleType(robj *obj) {
     moduleValue *mv = obj->ptr;

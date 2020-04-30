@@ -108,7 +108,7 @@ int gcIfNeeded(dict *d, robj *key) {
     if(val == NULL) {
         return 0;
     }
-    CrdtTombstone *tombstone = retrieveCrdtTombstone(val);
+    CrdtObject *tombstone = retrieveCrdtObject(val);
 
     /* Don't del anything while loading. It will be done later. */
     if (server.loading) return 0;
@@ -119,12 +119,13 @@ int gcIfNeeded(dict *d, robj *key) {
      * */
     //todo: update gc vector clock, each time when set operation
     updateGcVectorClock();
+    sds gcsds = vectorClockToSds(crdtServer.gcVectorClock);
+    sdsfree(gcsds);
     CrdtTombstoneMethod* method = getCrdtTombstoneMethod(tombstone);
     if(method == NULL) return 0;
     if(!method->gc(tombstone, crdtServer.gcVectorClock)){
         return 0;
     }
-
     if (dictDelete(d,key->ptr) == DICT_OK) {
         return 1;
     } else {
@@ -175,7 +176,6 @@ VectorClock* getGcVectorClock() {
     if (crdtServer.crdtMasters == NULL || listLength(crdtServer.crdtMasters) == 0) {
         return gcVectorClock;
     }
-
     listRewind(crdtServer.crdtMasters, &li);
     while ((ln = listNext(&li)) != NULL) {
         CRDT_Master_Instance *crdtMaster = ln->value;
@@ -183,21 +183,27 @@ VectorClock* getGcVectorClock() {
             continue;
         }
         VectorClock *other = crdtMaster->vectorClock;
-        for (int i = 0; i < gcVectorClock->length; i++) {
-            VectorClockUnit *gcVectorClockUnit = &(gcVectorClock->clocks[i]);
-            VectorClockUnit *otherVectorClockUnit = getVectorClockUnit(other, gcVectorClock->clocks[i].gid);
-            if(otherVectorClockUnit != NULL) {
-                gcVectorClockUnit->logic_time = min(gcVectorClockUnit->logic_time, otherVectorClockUnit->logic_time);
-            } else {
-                gcVectorClockUnit->logic_time = 0;
-            }
-        }
+        VectorClock *old = gcVectorClock;
+        gcVectorClock = mergeMinVectorClock(old, other);
+        
+        freeVectorClock(old);
+        // for (int i = 0; i < gcVectorClock->length; i++) {
+        //     VectorClockUnit *gcVectorClockUnit = &(gcVectorClock->clocks[i]);
+        //     VectorClockUnit *otherVectorClockUnit = getVectorClockUnit(other, gcVectorClock->clocks[i].gid);
+        //     if(otherVectorClockUnit != NULL) {
+        //         gcVectorClockUnit->logic_time = min(gcVectorClockUnit->logic_time, otherVectorClockUnit->logic_time);
+        //     } else {
+        //         gcVectorClockUnit->logic_time = 0;
+        //     }
+        // }
     }
     return gcVectorClock;
 }
 void updateGcVectorClock() {
+    
     if (crdtServer.gcVectorClock) {
         freeVectorClock(crdtServer.gcVectorClock);
+        crdtServer.gcVectorClock = NULL;
     }
     crdtServer.gcVectorClock = getGcVectorClock();
 }
@@ -215,7 +221,7 @@ void updateGcVectorClock() {
  * to the function to avoid too many gettimeofday() syscalls. */
 int activeGcCycleTryGc(dict *d, dictEntry *de) {
     robj *val = dictGetVal(de);
-    CrdtTombstone *tombstone = retrieveCrdtTombstone(val);
+    CrdtObject *tombstone = retrieveCrdtObject(val);
     if (tombstone == NULL) {
         return 0;
     }
@@ -228,11 +234,11 @@ int activeGcCycleTryGc(dict *d, dictEntry *de) {
         serverLog(LL_WARNING, "no gc method");
         return 0;
     }
-    serverLog(LL_WARNING, "type %lld", tombstone->type);
+    sds gc = vectorClockToSds(crdtServer.gcVectorClock);
+    sdsfree(gc);
     if(!method->gc(tombstone, crdtServer.gcVectorClock)) {
         return 0;
     }
-    serverLog(LL_WARNING, "gcing");
     sds key = dictGetKey(de);
     if (dictDelete(d,key) == DICT_OK) {
         return 1;

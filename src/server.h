@@ -165,6 +165,7 @@ typedef long long mstime_t; /* millisecond time type. */
 #define CONFIG_DEFAULT_DEFRAG_CYCLE_MAX 75 /* 75% CPU max (at upper threshold) */
 #define CONFIG_DEFAULT_PROTO_MAX_BULK_LEN (512ll*1024*1024) /* Bulk request max size */
 #define CONFIG_DEFAULT_GID -1
+#define CONFIG_DEFAULT_VECTORCLOCK_UNIT 0
 
 #define ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP 20 /* Loopkups per loop. */
 #define ACTIVE_EXPIRE_CYCLE_FAST_DURATION 1000 /* Microseconds */
@@ -538,7 +539,7 @@ typedef struct RedisModuleType {
  *      zfree(mt); // We need to release this in-the-middle struct as well.
  *  }
  */
-typedef struct moduleValue {
+typedef struct moduleValue { //16
     moduleType *type;
     void *value;
 } moduleValue;
@@ -602,7 +603,7 @@ typedef struct RedisModuleDigest {
 #define LRU_CLOCK_RESOLUTION 1000 /* LRU clock resolution in ms */
 
 #define OBJ_SHARED_REFCOUNT INT_MAX
-typedef struct redisObject {
+typedef struct redisObject { //16
     unsigned type:4;
     unsigned encoding:4;
     unsigned lru:LRU_BITS; /* LRU time (relative to global lru_clock) or
@@ -1614,10 +1615,7 @@ void crdtCancelReplicationHandshake(int gid);
 
 /* CRDT Command */
 void crdtDelCommand(client *c);
-CrdtObject *retrieveCrdtObject(robj *obj);
-CrdtTombstone *retrieveCrdtTombstone(robj *obj);
-CrdtExpire* retrieveCrdtExpire(robj *obj);
-CrdtExpireTombstone* retrieveCrdtExpireTombstone(robj *obj);
+struct CrdtObject *retrieveCrdtObject(robj *obj);
 int isModuleCrdt(robj *obj);
 moduleType* getModuleType(robj *obj);
 long long getQps();
@@ -1659,7 +1657,7 @@ void receiveChildInfo(struct redisServer *srv);
 
 //module 
 void *GetModuleKey(redisDb *db, robj *keyname, int mode, int needCheck);
-CrdtExpire* getCrdtExpire(redisDb *db, robj *key);
+struct CrdtObject* getCrdtExpire(redisDb *db, robj *key);
 void CloseModuleKey(void *moduleKey);
 
 /* Sorted sets data type */
@@ -1830,7 +1828,7 @@ int rewriteConfig(char *path);
 
 /* db.c -- Keyspace access API */
 int delExpire(redisDb *db, robj *key);
-int crdtPropagateExpire(redisDb *db, robj *key, int lazy, struct CrdtExpire* expire);
+int crdtPropagateExpire(redisDb *db, robj *key, int lazy,struct CrdtObject* expire);
 void propagateExpire(redisDb *db, robj *key, int lazy);
 int expireIfNeeded(redisDb *db, robj *key);
 long long getExpire(redisDb *db, robj *key);
@@ -2177,8 +2175,8 @@ void xorDigest(unsigned char *digest, void *ptr, size_t len);
 
 #include "ctrip.h"
 
-void
-refreshMinVectorClock(VectorClock *other, int sourceGid);
+// void
+// refreshMinVectorClock(VectorClock *other, int sourceGid);
 
 void
 refreshGcVectorClock(VectorClock *other);
