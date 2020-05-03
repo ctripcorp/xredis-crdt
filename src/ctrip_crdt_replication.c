@@ -47,7 +47,7 @@ void crdtReplicationCreateMasterClient(CRDT_Master_Instance *crdtMaster, int fd,
 
 /**---------------------------CRDT Master Instance Related--------------------------------*/
 
-CRDT_Master_Instance *createPeerMaster(client *c, long long gid) {
+CRDT_Master_Instance *createPeerMaster(client *c, int gid) {
     CRDT_Master_Instance *masterInstance = zmalloc(sizeof(CRDT_Master_Instance));
     masterInstance->gid = gid;
     masterInstance->master = c;
@@ -91,7 +91,7 @@ void freePeerMaster(CRDT_Master_Instance *masterInstance) {
 
 }
 
-CRDT_Master_Instance *getPeerMaster(long long gid) {
+CRDT_Master_Instance *getPeerMaster(int gid) {
     listIter li;
     listNode *ln;
     CRDT_Master_Instance *peerMaster = NULL;
@@ -194,7 +194,7 @@ void peerofCommand(client *c) {
     addReply(c,shared.ok);
 }
 
-void crdtReplicationSetMaster(long long gid, char *ip, int port) {
+void crdtReplicationSetMaster(int gid, char *ip, int port) {
 
     CRDT_Master_Instance *peerMaster = getPeerMaster(gid);
     if (!peerMaster) {
@@ -215,7 +215,7 @@ void crdtReplicationSetMaster(long long gid, char *ip, int port) {
 }
 
 /* Cancel replication, setting the instance as a master itself. */
-void crdtReplicationUnsetMaster(long long gid) {
+void crdtReplicationUnsetMaster(int gid) {
     CRDT_Master_Instance *peerMaster;
     if ((peerMaster = getPeerMaster(gid)) == NULL) return;
     if(peerMaster->masterhost) {
@@ -250,10 +250,10 @@ crdtMergeStartCommand(client *c) {
     VectorClock *vclock = sdsToVectorClock(c->argv[2]->ptr);
     VectorClock *curGcVclock = crdtServer.gcVectorClock;
     crdtServer.gcVectorClock = vectorClockMerge(crdtServer.gcVectorClock, vclock);
-    if (!getVectorClockUnit(crdtServer.vectorClock, sourceGid)) {
+    if (getVectorClockUnit(crdtServer.vectorClock, sourceGid) == NULL) {
         crdtServer.vectorClock = addVectorClockUnit(crdtServer.vectorClock, sourceGid, 0);
     }
-    freeVectorClock(vclock);
+    freeVectorClock(vclock);;
     freeVectorClock(curGcVclock);
     server.dirty ++;
     serverLog(LL_NOTICE, "[CRDT][crdtMergeStartCommand][end] master gid: %lld", sourceGid);
@@ -275,7 +275,7 @@ crdtMergeEndCommand(client *c) {
         freeVectorClock(peerMaster->vectorClock);
     }
     peerMaster->vectorClock = sdsToVectorClock(c->argv[2]->ptr);
-    mergeVectorClockUnit(crdtServer.vectorClock, getVectorClockUnit(peerMaster->vectorClock, sourceGid));
+    mergeLogicClock(crdtServer.vectorClock, peerMaster->vectorClock, sourceGid);
     refreshGcVectorClock(peerMaster->vectorClock);
     memcpy(peerMaster->master_replid, c->argv[3]->ptr, sizeof(peerMaster->master_replid));
     if (getLongLongFromObjectOrReply(c, c->argv[4], &offset, NULL) != C_OK) return;
@@ -309,7 +309,7 @@ long long getMyGidLogicTime(VectorClock *vc) {
     if (vcu == NULL) {
         return 0;
     }
-    return vcu->logic_time;
+    return get_logic_clock(*vcu);
 }
 
 long long getMyLogicTime() {
@@ -968,12 +968,11 @@ void crdtReplicationAbortSyncTransfer(CRDT_Master_Instance *masterInstance) {
  * the replication state (server.repl_state) set to REPL_STATE_CONNECT.
  *
  * Otherwise zero is returned and no operation is perforemd at all. */
-void crdtCancelReplicationHandshake(long long gid) {
+void crdtCancelReplicationHandshake(int gid) {
     CRDT_Master_Instance *masterInstance = getPeerMaster(gid);
     if(masterInstance == NULL) {
         return;
     }
-    serverLog(LL_WARNING, "[CRDT] crdtCancelReplicationHandshake: %lld", gid);
     if (masterInstance->repl_state == REPL_STATE_TRANSFER) {
         crdtReplicationAbortSyncTransfer(masterInstance);
         masterInstance->repl_state = REPL_STATE_CONNECT;
@@ -1175,7 +1174,6 @@ void crdtOvcCommand(client *c) {
     }
     int flags = PROPAGATE_REPL;
     if (gid != crdtServer.crdt_gid) {
-
         sds vclockStr = (sds) c->argv[2]->ptr;
         VectorClock *vclock = sdsToVectorClock(vclockStr);
 
@@ -1191,7 +1189,6 @@ void crdtOvcCommand(client *c) {
                 return;
             }
         }
-
         VectorClock *newVectorClock = vectorClockMerge(peerMaster->vectorClock, vclock);
         if (peerMaster->vectorClock != NULL) {
             freeVectorClock(peerMaster->vectorClock);

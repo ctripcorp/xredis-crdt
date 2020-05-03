@@ -57,13 +57,14 @@ int activeExpireCycleTryExpire(redisDb *db, dictEntry *de, long long now) {
     robj* d = dictGetVal(de);
     if(d != NULL) {
         if(isModuleCrdt(d) == C_OK) {
-            CrdtExpire* e = retrieveCrdtExpire(d);
+            CrdtObject* e = retrieveCrdtObject(d);
             if(e != NULL) {
-                CrdtExpireObj* o = e->method->get(e);
-                if(o->meta->gid != crdtServer.crdt_gid) {
+                CrdtExpireMethod* method = getCrdtExpireMethod(e);
+                if(method == NULL) return 0;
+                if(method->getLastGid(e) != crdtServer.crdt_gid) {
                     return 0;
                 }
-                t = o->expireTime;
+                t = method->getLastExpireTime(e);
             }
             
         }else{
@@ -210,8 +211,10 @@ void activeExpireCycle(int type) {
                 if ((de = dictGetRandomKey(db->expires)) == NULL) break;
                 // ttl = dictGetSignedIntegerVal(de)-now;
                 robj* r = dictGetVal(de);
-                CrdtExpire* e = retrieveCrdtExpire(r);
-                ttl = e->method->get(e)->expireTime - now;
+                CrdtObject* e = retrieveCrdtObject(r);
+                CrdtExpireMethod* method = getCrdtExpireMethod(e);
+                if(method == NULL) continue; 
+                ttl = method->getLastExpireTime(e) - now;
                 if (activeExpireCycleTryExpire(db,de,now)) expired++;
                 if (ttl > 0) {
                     /* We want the average TTL of keys yet not expired. */

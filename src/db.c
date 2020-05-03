@@ -1143,7 +1143,7 @@ void propagateExpire(redisDb *db, robj *key, int lazy) {
     decrRefCount(argv[1]);
 }
 
-int crdtPropagateExpire(redisDb *db, robj *key, int lazy, CrdtExpire* expire) {
+int crdtPropagateExpire(redisDb *db, robj *key, int lazy, CrdtObject* expire) {
     void *mk = NULL;
     if(expire == NULL) {
         dictEntry* d = dictFind(db->expires, key->ptr);
@@ -1151,7 +1151,7 @@ int crdtPropagateExpire(redisDb *db, robj *key, int lazy, CrdtExpire* expire) {
             return C_ERR;
         }
         robj* e = dictGetVal(d);
-        expire = retrieveCrdtExpire(e);
+        expire = retrieveCrdtObject(e);
     }
     dictEntry *entry = dictFind(db->dict, key->ptr);
     if(entry != NULL) {
@@ -1159,13 +1159,17 @@ int crdtPropagateExpire(redisDb *db, robj *key, int lazy, CrdtExpire* expire) {
          if(val != NULL) {
             if(isModuleCrdt(val) == C_OK) {
                 struct moduleValue* rm = (struct moduleValue*)val->ptr;
-                CrdtData* obj = ((CrdtData*)(rm->value));
-                if(obj->dataType != expire->dataType) {
+                CrdtObject* obj = ((CrdtObject*)(rm->value));
+                if(getDataType(obj->type) != getDataType(expire->type)) {
                     goto clean;
                 }
                 mk = GetModuleKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE, 1);
                 if(mk != NULL) {
-                    obj->method->propagateDel(db->id, key, mk, obj);
+                    CrdtDataMethod* method = getCrdtDataMethod(obj);
+                    if(method == NULL) {
+                        return C_ERR;
+                    }
+                    method->propagateDel(db->id, key, mk, obj);
                     CloseModuleKey(mk);
                 }
                 crdtServer.stat_expiredkeys++;
@@ -1182,7 +1186,13 @@ int crdtPropagateExpire(redisDb *db, robj *key, int lazy, CrdtExpire* expire) {
 clean:
     mk = GetModuleKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE, 1);
     if(mk != NULL) {
-        expire->method->persist(expire, mk, db->id, key);
+        CrdtExpireMethod* expire_method = getCrdtExpireMethod(expire);
+        if(expire_method == NULL) {
+            CloseModuleKey(mk);
+            serverLog(LL_WARNING, "not find expire %d", expire->type);
+            return C_ERR;
+        }
+        expire_method->persist(expire, mk, db->id, key);
         CloseModuleKey(mk);
     }
     crdtServer.stat_expiredkeys++;
@@ -1227,7 +1237,7 @@ int _expireIfNeeded(redisDb *db, robj *key) {
     return server.lazyfree_lazy_expire ? dbAsyncDelete(db,key) :
                                          dbSyncDelete(db,key);
 }
-CrdtExpire* getCrdtExpire(redisDb *db, robj *key) {
+CrdtObject* getCrdtExpire(redisDb *db, robj *key) {
     dictEntry *de;
 
     /* No expire? return ASAP */
@@ -1235,27 +1245,25 @@ CrdtExpire* getCrdtExpire(redisDb *db, robj *key) {
        (de = dictFind(db->expires,key->ptr)) == NULL) return NULL;
     robj* val = dictGetVal(de);
     if(val == NULL) return NULL;
-    return retrieveCrdtExpire(val);
+    return retrieveCrdtObject(val);
 }
 
-CrdtExpireObj* getCrdtExpireObj(redisDb *db, robj *key) {
-    CrdtExpire* expire = getCrdtExpire(db, key);
-    if(expire == NULL) return NULL;
-    return expire->method->get(expire);
-}
+// CrdtExpireObj* getCrdtExpireObj(redisDb *db, robj *key) {
+//     CrdtObject* expire = getCrdtExpire(db, key);
+//     if(expire == NULL) return NULL;
+//     CrdtExpireMethod* method = getCrdtExpireMethod(expire);
+//     if(method == NULL) return NULL;
+//     return method->get(expire);
+// }
 
 int crdtExpireIfNeeded(redisDb *db, robj *key) {
-    CrdtExpire* expire = getCrdtExpire(db, key);
+    CrdtObject* expire = getCrdtExpire(db, key);
     if(expire == NULL) {
         return 0;
     }
-    CrdtExpireObj* obj = expire->method->get(expire);
-    long long when ;
-    if(obj == NULL) {
-        when = -1;
-    } else{
-        when = obj->expireTime;
-    }
+    CrdtExpireMethod* method = getCrdtExpireMethod(expire);
+    if(expire == NULL) return 0;
+    long long when = method->getLastExpireTime(expire);
     mstime_t now;
 
     if (when < 0) return 0; /* No expire for this key */
@@ -1278,7 +1286,7 @@ int crdtExpireIfNeeded(redisDb *db, robj *key) {
      * that is, 0 if we think the key should be still valid, 1 if
      * we think the key is expired at this time. */
     if (server.masterhost != NULL) return now > when;
-    if (server.crdt_gid != obj->meta->gid) return now > when;
+    if (server.crdt_gid != method->getLastGid(expire)) return now > when;
     /* Return when this key has not expired */
     if (now <= when) return 0;
 
