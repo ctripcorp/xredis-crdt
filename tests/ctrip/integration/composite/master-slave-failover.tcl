@@ -5,7 +5,6 @@ proc log_file_matches {log pattern} {
     close $fp
     string match $pattern $content
 }
-
 proc log_content {log} {
     set fp [open $log r]
     set content [read $fp]
@@ -20,14 +19,17 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
     set peer_hosts {}
     set peer_ports {}
     set peer_gids  {}
+    set peer_stdout {}
 
     set slaves {}
     set slave_hosts {}
     set slave_ports {}
+    set slave_stdout {}
 
     lappend peers [srv 0 client]
     lappend peer_hosts [srv 0 host]
     lappend peer_ports [srv 0 port]
+    lappend peer_stdout [srv 0 stdout]
     lappend peer_gids 1
     set peer0_log [srv 0 stdout]
 
@@ -46,6 +48,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
         lappend slaves [srv 0 client]
         lappend slave_hosts [srv 0 host]
         lappend slave_ports [srv 0 port]
+        lappend slave_stdout [srv 0 stdout]
         set slave0_log [srv 0 stdout]
 
         [lindex $slaves 0] slaveof [lindex $peer_hosts 0] [lindex $peer_ports 0]
@@ -63,6 +66,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
             lappend peers [srv 0 client]
             lappend peer_hosts [srv 0 host]
             lappend peer_ports [srv 0 port]
+            lappend peer_stdout [srv 0 stdout]
             lappend peer_gids 2
             set peer1_log [srv 0 stdout]
 
@@ -82,7 +86,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                 lappend slaves [srv 0 client]
                 lappend slave_hosts [srv 0 host]
                 lappend slave_ports [srv 0 port]
-
+                lappend slave_stdout [srv 0 stdout]
                 [lindex $slaves 1] slaveof [lindex $peer_hosts 1] [lindex $peer_ports 1]
 
                 after 1000
@@ -110,6 +114,10 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                             after 100
                         }
                     }
+                    if {$retry == 0} {
+                        puts [log_content [lindex $peer_stdout 1]]
+                        error "assertion:Peers not correctly synchronized"
+                    }
                     set retry 500
                     while {$retry} {
                         set info [[lindex $peers 1] crdt.info replication]
@@ -121,6 +129,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                         }
                     }
                     if {$retry == 0} {
+                        puts [log_content [lindex $peer_stdout 0]]
                         error "assertion:Peers not correctly synchronized"
                     }
 
@@ -169,6 +178,8 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                         puts [format "peer0 offset: %d" [crdt_status [lindex $peers 0] master_repl_offset]]
                         puts [format "slave0 offset: %d" [crdt_status [lindex $slaves 0] master_repl_offset]]
                         puts [format "peer1 offset: %d" [crdt_status [lindex $peers 1] peer0_repl_offset]]
+                        puts [[lindex $peers 1] crdt.info replication]
+                        puts [log_content [lindex $peer_stdout 1]] 
                         fail "crdt repl offset not aligned."
                     }
 

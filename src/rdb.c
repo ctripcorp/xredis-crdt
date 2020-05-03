@@ -1555,7 +1555,7 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
 
     int isCrdtRdb = rdbver > CTRIP_RDB_PREFIX;
     if(!isCrdtRdb && crdt_mode && initedCrdtServer()) {
-        serverLog(LL_WARNING,"Can't Load Redis RDB",rdbver);
+        serverLog(LL_WARNING,"Can't Load Redis RDB");
         errno = EINVAL;
         return C_ERR;
     } 
@@ -1728,7 +1728,9 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                 decrRefCount(key);
                 freeFakeClient(fakeClient);
                 serverLog(LL_WARNING, "crdt load not crdt rdb datatype error");
-                crdtServer.vectorClock->clocks[0].logic_time = 0;
+                freeVectorClock(crdtServer.vectorClock);
+                crdtServer.vectorClock = newVectorClock(1);
+                init(crdtServer.vectorClock, 1,crdtServer.crdt_gid, 0);
                 return C_ERR;
             }
         }else{

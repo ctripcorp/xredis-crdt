@@ -1468,8 +1468,12 @@ void RM_IncrLocalVectorClock (long long delta) {
     incrLocalVcUnit(delta);
 }
 
-void RM_MergeVectorClock (long long gid, VectorClock *vclock) {
-    refreshMinVectorClock(vclock, gid);
+void RM_MergeVectorClock (int gid, VectorClock *vclock) {
+    
+    updateProcessVectorClock(crdtServer.vectorClock, vclock, gid, crdtServer.crdt_gid);
+    
+    
+    // refreshMinVectorClock(vclock, gid);
     refreshGcVectorClock(vclock);
 }
 
@@ -1598,6 +1602,7 @@ void *GetModuleKey(redisDb *db, robj *keyname, int mode, int needCheck) {
         tombstone = lookupTombstoneKey(db,keyname);
     }
     kp = zmalloc(sizeof(*kp));
+    
     kp->db = db;
     kp->key = keyname;
     incrRefCount(keyname);
@@ -1671,7 +1676,9 @@ void CloseModuleKey(void* k) {
     /* TODO: if (key->iter) RM_KeyIteratorStop(kp); */
     RM_ZsetRangeStop(key);
     decrRefCount(key->key);
-    if(key->ctx) autoMemoryFreed(key->ctx,REDISMODULE_AM_KEY,key);
+    if(key->ctx != NULL) {
+        autoMemoryFreed(key->ctx,REDISMODULE_AM_KEY,key);
+    }
     zfree(key);
 }
 
@@ -1751,7 +1758,7 @@ mstime_t RM_GetExpire(RedisModuleKey *key) {
     return expire >= 0 ? expire : 0;
 }
 void* RM_GetCrdtExpire(RedisModuleKey *key) {
-    CrdtExpire* r = getCrdtExpire(key->db, key->key);
+    CrdtObject* r = getCrdtExpire(key->db, key->key);
     return r;
 }
 void* GetRobj(RedisModuleKey *key, dict* d) {
@@ -1764,7 +1771,8 @@ void* GetRobj(RedisModuleKey *key, dict* d) {
 
 void* RM_GetCrdtExpireTombstone(RedisModuleKey *key) {
     gcIfNeeded(key->db->deleted_expires, key->key);
-    return retrieveCrdtExpireTombstone(GetRobj(key, key->db->deleted_expires));
+    void* result = retrieveCrdtObject(GetRobj(key, key->db->deleted_expires));
+    return result;
 }
 /* Set a new expire for the key. If the special expire
  * REDISMODULE_NO_EXPIRE is set, the expire is cancelled if there was
@@ -1786,7 +1794,7 @@ int RM_SetExpire(RedisModuleKey *key, mstime_t expire) {
     }
     return REDISMODULE_OK;
 }
-int dictSetRobj(RedisModuleKey *key, dict* db, moduleType *mt ,CrdtExpire* expire) {
+int dictSetRobj(RedisModuleKey *key, dict* db, moduleType *mt ,struct CrdtObject* expire) {
     if (expire != NULL) {
         robj *o = createModuleObject(mt,expire);
         dictEntry *kde, *de;
@@ -1799,12 +1807,14 @@ int dictSetRobj(RedisModuleKey *key, dict* db, moduleType *mt ,CrdtExpire* expir
     return REDISMODULE_OK;
     
 }
-int RM_SetCrdtExpire(RedisModuleKey *key, moduleType *mt ,CrdtExpire* expire) {
-    return dictSetRobj(key, key->db->expires, mt, expire);
+int RM_SetCrdtExpire(RedisModuleKey *key, moduleType *mt ,CrdtObject* expire) {
+    int result = dictSetRobj(key, key->db->expires, mt, expire);
+    return result;
 }
 
-int RM_SetCrdtExpireTombstone(RedisModuleKey *key, moduleType *mt ,CrdtExpireTombstone* expire) {
-    return dictSetRobj(key, key->db->deleted_expires, mt, expire);
+int RM_SetCrdtExpireTombstone(RedisModuleKey *key, moduleType *mt ,CrdtObject* expire) {
+    int r = dictSetRobj(key, key->db->deleted_expires, mt, expire);
+    return r;
 }
 
 
@@ -3200,16 +3210,13 @@ void moduleTypeNameByID(char *name, uint64_t moduleid) {
 moduleType *RM_CreateDataType(RedisModuleCtx *ctx, const char *name, int encver, void *typemethods_ptr) {
     uint64_t id = moduleTypeEncodeId(name,encver);
     if (id == 0) {
-        serverLog(LL_WARNING, "a");
         return NULL;
     }
     if (moduleTypeLookupModuleByName(name) != NULL) {
-        serverLog(LL_WARNING, "b");
         return NULL;
     }
     long typemethods_version = ((long*)typemethods_ptr)[0];
     if (typemethods_version == 0) {
-        serverLog(LL_WARNING, "c");
         return NULL;
     }
     struct typemethods {

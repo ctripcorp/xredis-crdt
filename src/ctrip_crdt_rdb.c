@@ -99,7 +99,12 @@ int crdtSendMergeRequest(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di, const
         /* Check if the crdt module's vector clock on local gid is avaiable for crdt merge */
         
         CrdtObject *object = retrieveCrdtObject(o);
-        CrdtObject *filter = object->method->filter((void*)object, crdtServer.crdt_gid, rsi->logic_time);
+        CrdtObjectMethod* method = getCrdtObjectMethod(object);
+        if(method == NULL) {
+            serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveRio] NOT FIND CRDT OBJECT METHOD");
+            continue;
+        }
+        CrdtObject *filter = method->filter((void*)object, crdtServer.crdt_gid, rsi->logic_time);
         if(filter == NULL) {
             continue;
         }
@@ -147,8 +152,13 @@ int crdtSendMergeDelRequest(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di, co
         /* Check if the crdt module's vector clock on local gid is avaiable for crdt merge */
          // moduleValue *mv = o->ptr;
         // void *moduleValue = mv->value;
-        CrdtTombstone *tombstone = retrieveCrdtTombstone(o);
-        CrdtTombstone *result = tombstone->method->filter(tombstone, crdtServer.crdt_gid, rsi->logic_time);
+        CrdtObject *tombstone = retrieveCrdtObject(o);
+        CrdtTombstoneMethod* method = getCrdtTombstoneMethod(tombstone);
+        if(method == NULL) {
+            serverLog(LL_WARNING, "tombstone method is null");
+            continue;
+        }
+        CrdtObject *result = method->filter(tombstone, crdtServer.crdt_gid, rsi->logic_time);
         if(result == NULL) {
             continue;
         }
@@ -256,7 +266,7 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
 }
 
 /**---------------------------CRDT Merge Command--------------------------------*/
-static int updateReplTransferLastio(long long gid) {
+static int updateReplTransferLastio(int gid) {
     CRDT_Master_Instance *peerMasterServer = getPeerMaster(gid);
     if(peerMasterServer == NULL) {
         return C_ERR;
@@ -291,35 +301,44 @@ int crdtMergeTomstoneCommand(client* c, DictFindFunc findtombstone, DictAddFunc 
     /**
      * For tombstone object, if it has been deleted, we need to delete our object first
      * **/
-    CrdtTombstone *tombstoneCrdtCommon = NULL;
+    CrdtObject *tombstoneCrdtCommon = NULL;
     robj* tombstone = findtombstone(c->db,key);
     if (tombstone != NULL) {
         // moduleValue *mv = obj->ptr;
         // void *moduleDataType = mv->value;
-        CrdtTombstone *common = retrieveCrdtTombstone(obj);
+        CrdtObject *common = retrieveCrdtObject(obj);
         
         // void *oldModuleDataType = old_mv->value;
-        CrdtTombstone *oldCommon = retrieveCrdtTombstone(tombstone);
+        CrdtObject *oldCommon = retrieveCrdtObject(tombstone);
         if(checktype(common, oldCommon, key) != C_OK) {
             decrRefCount(obj);
             return C_ERR;
         }
         
-       
-        void *mergedVal = common->method->merge(common, oldCommon);
+       CrdtTombstoneMethod* method = getCrdtTombstoneMethod(common);
+        if(method == NULL) {
+            serverLog(LL_WARNING, "no tombstone merge method, type: %lld", common->type);
+            return C_ERR;
+        }
+        void *mergedVal = method->merge(common, oldCommon);
         moduleValue *old_mv = tombstone->ptr;
         old_mv->type->free(old_mv->value);
         old_mv->value = mergedVal;
         tombstoneCrdtCommon = mergedVal;
         decrRefCount(obj);
     }else{
-        tombstoneCrdtCommon = retrieveCrdtTombstone(obj);
+        tombstoneCrdtCommon = retrieveCrdtObject(obj);
         addtombstone(c->db, key, obj);
     }
     robj *currentVal = findval(c->db, key);
     if(currentVal != NULL) {
         CrdtObject *currentCrdtCommon = retrieveCrdtObject(currentVal);
-        if(tombstoneCrdtCommon->method->purage(tombstoneCrdtCommon, currentCrdtCommon)) {
+        CrdtTombstoneMethod* method = getCrdtTombstoneMethod(tombstoneCrdtCommon);
+        if(method == NULL) {
+            serverLog(LL_WARNING, "no purage method type:%lld",tombstoneCrdtCommon->type);
+            return C_ERR;
+        }
+        if(method->purage(tombstoneCrdtCommon, currentCrdtCommon)) {
             // dbDelete(c->db, key);
             deleteval(c->db, key);
         }
@@ -350,16 +369,16 @@ void addExpireTombstone(redisDb *db, robj *key, robj *value) {
     dictAdd(db->deleted_expires, sdsdup(key->ptr), value);
 }
 int checkExpireTombstoneType(void* current, void* other, robj* key) {
-    CrdtExpireTombstone* c = (CrdtExpireTombstone*)current;
-    CrdtExpireTombstone* o = (CrdtExpireTombstone*)other;
-    if(c->parent.type != o->parent.type) {
+    CrdtObject* c = (CrdtObject*)current;
+    CrdtObject* o = (CrdtObject*)other;
+    if(c->type != o->type) {
         serverLog(LL_WARNING, "[INCONSIS][MERGE EXPIRE TOMBSTONE] key: %s, expire tombstone type: %d, merge type %d",
-                key->ptr, c->parent.type, o->parent.type);
+                key->ptr, c->type, o->type);
         return C_ERR;
     }
-    if (c->dataType != o->dataType) {
+    if (!isExpireTombstone(c->type)) {
         serverLog(LL_WARNING, "[INCONSIS][MERGE EXPIRE TOMBSTONE DATATYPE] key: %s, expire tombstone type: %d",
-                key->ptr, c->dataType);
+                key->ptr, c->type);
         return C_ERR;  
     }
     return C_OK;
@@ -380,14 +399,14 @@ void addTombstone(redisDb *db, robj *key, robj *value) {
     dictAdd(db->deleted_keys, sdsdup(key->ptr), value);
 }
 int checkTombstoneType(void* current, void* other, robj* key) {
-    CrdtTombstone* c = (CrdtTombstone*)current;
-    CrdtTombstone* o = (CrdtTombstone*)other;
+    CrdtObject* c = (CrdtObject*)current;
+    CrdtObject* o = (CrdtObject*)other;
     if(c->type != o->type) {
         serverLog(LL_WARNING, "[INCONSIS][MERGE TOMBSTONE] key: %s, tombstone type: %d, merge type %d",
                 key->ptr, c->type, o->type);
         return C_ERR;
     }
-    if(c->type != CRDT_DATA) {
+    if(!isTombstone(c->type)) {
         serverLog(LL_WARNING, "[INCONSIS][MERGE TOMBSTONE TYPE] key: %s, tombstone type: %d",
                 key->ptr, c->type);
         return C_ERR;
@@ -434,22 +453,29 @@ int mergeCrdtObjectCommand(client *c, DictFindFunc find, DictAddFunc add, DictDe
     // robj *currentVal = lookupKeyRead(c->db, key);
     robj *currentVal = find(c->db, key);
     CrdtObject *mergedVal;
+    CrdtObjectMethod* method = getCrdtObjectMethod(common);
+    if(method == NULL) {
+        serverLog(LL_WARNING, "no find merge method , type %lld", common->type);
+        return C_ERR;
+    }
     if (currentVal) {
         CrdtObject *ccm = retrieveCrdtObject(currentVal);
         if(checktype(ccm, common, key) != C_OK) {
             decrRefCount(obj);
             return C_ERR;
         }
-        mergedVal = common->method->merge(ccm, common);
+        mergedVal = method->merge(ccm, common);
         delete(c->db, key);
     } else {
-        mergedVal = common->method->merge(NULL, common);
+        mergedVal = method->merge(NULL, common);
     }
     decrRefCount(obj);
     robj* tombstone = findtombstone(c->db,key);
     if(tombstone != NULL) {
-        CrdtTombstone* tom = retrieveCrdtTombstone(tombstone);
-        if(tom->method->purage(tom, mergedVal)) {
+        CrdtObject* tom = retrieveCrdtObject(tombstone);
+        CrdtTombstoneMethod* method = getCrdtTombstoneMethod(tom);
+        if(method == NULL) return C_ERR;
+        if(method->purage(tom, mergedVal)) {
             mt->free(mergedVal);
             mergedVal = NULL;
         }
@@ -479,9 +505,9 @@ int checkExpireType(void* current, void* other, robj* key) {
                 key->ptr, c->type, o->type);
         return C_ERR;
     }
-    if(c->type != CRDT_EXPIRE) {
-        serverLog(LL_WARNING, "[INCONSIS][MERGE EXPIRE TYPE ERROR] key: %s, local type: %d",
-                key->ptr, c->type);
+    if(!isExpire(c->type)) {
+        serverLog(LL_WARNING, "[INCONSIS][MERGE EXPIRE TYPE ERROR] key: %s, local type: %lld, old %lld",
+                key->ptr, c->type, o->type);
         return C_ERR;
     }
     return C_OK;
@@ -502,22 +528,17 @@ void crdtMergeExpireCommand(client *c) {
 
 
 int checkDataType(void* current, void* other, robj* key) {
-    CrdtData* c = (CrdtData*)current;
-    CrdtData* o = (CrdtData*)other;
-    if (c->parent.type != o->parent.type) {
-        serverLog(LL_WARNING, "[INCONSIS][MERGE] key: %s, local type: %d, merge type %d",
-                key->ptr, c->parent.type, o->parent.type);
-        return C_ERR;
-    }
-    if(c->parent.type != CRDT_DATA) {
+    CrdtObject* c = (CrdtObject*)current;
+    CrdtObject* o = (CrdtObject*)other;
+    if(!(isData(c->type))) {
         serverLog(LL_WARNING, "[INCONSIS][MERGE DATA TYPE ERROR] key: %s, local type: %d",
-                key->ptr, c->parent.type);
+                key->ptr, c->type);
         return C_ERR;
     }
     
-    if (c->dataType != o->dataType) {
+    if (c->type != o->type) {
         serverLog(LL_WARNING, "[INCONSIS][MERGE DATA] key: %s, local type: %d, merge type %d",
-                key->ptr, c->dataType, o->dataType);
+                key->ptr, c->type, o->type);
         return C_ERR;
     }
     
@@ -654,7 +675,13 @@ int rdbSaveCrdtInfoAuxFields(rio* rdb) {
     if(rdbSaveAuxFieldCrdt(rdb) == -1) return -1;
 }
 int initedCrdtServer() {
-    if(crdtServer.vectorClock->length == 1 && crdtServer.vectorClock->clocks[0].logic_time == 0) {
+    if(crdtServer.vectorClock->length != 1) {
+        return 1;
+    }
+    VectorClockUnit* unit = getVectorClockUnit(crdtServer.vectorClock, crdtServer.crdt_gid);
+    if(unit == NULL) return 0;
+    long long vcu = get_logic_clock(*unit);
+    if(vcu == 0) {
         return 0;
     }
     return 1;

@@ -45,12 +45,14 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
         assert_equal [[lindex $peers 0] get key1] value
         after 2000;
         assert_equal [[lindex $peers 0] get key1] {}
-        assert_equal [[lindex $peers 0] expiretombstonesize] 1
-        wait_for_condition 500 150 {
-            [[lindex $peers 0] expiretombstonesize] == 0
-        } else {
-            fail "Can't gc the expire tombstone"
+        if {[[lindex $peers 0] expiretombstonesize] == 1} {
+            wait_for_condition 500 150 {
+                [[lindex $peers 0] expiretombstonesize] == 0
+            } else {
+                fail "Can't gc the expire tombstone"
+            }
         }
+        
      }
      test "kv expireAt" {
         [lindex $peers 0] set key1 value;
@@ -87,12 +89,14 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
         after 2000;
         assert_equal [[lindex $peers 0] hget hash1 key] {}
         assert_equal [[lindex $peers 0] hget hash1 key1] {}
-        assert_equal [[lindex $peers 0] expiretombstonesize] 1
-        wait_for_condition 500 150 {
-            [[lindex $peers 0] expiretombstonesize] == 0
-        } else {
-            fail "Can't gc the expire tombstone"
+        if {[[lindex $peers 0] expiretombstonesize] == 1} {
+            wait_for_condition 500 150 {
+                [[lindex $peers 0] expiretombstonesize] == 0
+            } else {
+                fail "Can't gc the expire tombstone"
+            }
         }
+        
     }
     test "reset kv" {
         [lindex $peers 0] set key2 value;
@@ -104,12 +108,14 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
         assert_equal [[lindex $peers 0] get key2] value
         after 2000
         assert_equal [[lindex $peers 0] get key2] {}
-        assert_equal [[lindex $peers 0] expiretombstonesize] 1
-        wait_for_condition 500 100 {
-            [[lindex $peers 0] expiretombstonesize] == 0
-        } else {
-            fail "Can't gc the expire tombstone"
+        if {[[lindex $peers 0] expiretombstonesize] == 1} {
+            wait_for_condition 500 100 {
+                [[lindex $peers 0] expiretombstonesize] == 0
+            } else {
+                fail "Can't gc the expire tombstone"
+            }
         }
+        
     }
     test "reset hash" {
         [lindex $peers 0] hset hash2 key value;
@@ -121,12 +127,14 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
         assert_equal [[lindex $peers 0] hget hash2 key] value
         after 2000
         assert_equal [[lindex $peers 0] hget hash2 key] {}
-        assert_equal [[lindex $peers 0] expiretombstonesize] 1
-        wait_for_condition 500 100 {
-            [[lindex $peers 0] expiretombstonesize] == 0
-        } else {
-            fail "Can't gc the expire tombstone"
+        if {[[lindex $peers 0] expiretombstonesize] == 1} {
+            wait_for_condition 500 100 {
+                [[lindex $peers 0] expiretombstonesize] == 0
+            } else {
+                fail "Can't gc the expire tombstone"
+            }
         }
+        
     }
     test "persist" {
         [lindex $peers 0] set key3 value;
@@ -195,12 +203,14 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
         assert_equal [[lindex $peers 0] expiretombstonesize] 1
         [lindex $peers 0] "CRDT.expire" "k1" "2" [incr time -1] "2:2" [incr time 100000000] "1"
         assert_equal [[lindex $peers 0] ttl k1] -1
-        assert_equal [[lindex $peers 0] expiretombstonesize] 1
-        wait_for_condition 500 100 {
-            [[lindex $peers 0] expiretombstonesize] == 0
-        } else {
-            fail "Can't gc the expire tombstone"
+        if {[[lindex $peers 0] expiretombstonesize] == 1} {
+            wait_for_condition 500 100 {
+                [[lindex $peers 0] expiretombstonesize] == 0
+            } else {
+                fail "Can't gc the expire tombstone"
+            }
         }
+        
     }
     test "crdt.set" {
         set time [clock milliseconds]
@@ -617,7 +627,7 @@ start_server {tags {"full"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
             wait_for_condition 500 100 {
                 [[lindex $peers 0] expiretombstonesize] == $expiretombstonesize
             } else {
-                assert [[lindex $peers 0] expiretombstonesize] $expiretombstonesize
+                assert_equal [[lindex $peers 0] expiretombstonesize] $expiretombstonesize
             }
             puts [[lindex $peers 1] ttl key4]
             [lindex $peers 0] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
