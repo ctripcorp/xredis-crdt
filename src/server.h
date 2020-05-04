@@ -1583,6 +1583,7 @@ void putSlaveOnline(client *slave);
 void createReplicationBacklog(struct redisServer *srv);
 void feedReplicationBacklogWithObject(struct redisServer *srv, robj *o);
 int isMasterSlaveReplVerDiff();
+int isMasterMySelf();
 
 /* CRDT Replications */
 void crdtReplicationCron(void);
