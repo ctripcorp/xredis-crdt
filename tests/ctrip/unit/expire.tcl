@@ -307,6 +307,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
         assert_equal [[lindex $peers 0] ttl ex-key] -1
         assert_equal [[lindex $peers 0] get ex-key] {}
     }
+    
     test "set ex after set" {
         [lindex $peers 0] SET ex-key2 value EX 4;
         after 2000
@@ -321,6 +322,33 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
         after 2500;
         assert_equal [[lindex $peers 0] ttl ex-key2] -1
         assert_equal [[lindex $peers 0] get ex-key2] value2
+    }
+    test "setex" {
+        [lindex $peers 0] SETex ex-key3   4 value;
+        after 2000
+        set t [[lindex $peers 0] ttl ex-key3]
+        if {$t <= 0} {
+            error "set ex function error"
+        }  
+        assert_equal [[lindex $peers 0] get ex-key3] value
+        after 2500;
+        assert_equal [[lindex $peers 0] ttl ex-key3] -1
+        assert_equal [[lindex $peers 0] get ex-key3] {}
+    }
+    test "setex after set" {
+        [lindex $peers 0] SETex ex-key4   4 value;
+        after 2000
+        assert_equal [[lindex $peers 0] get ex-key4] value
+        [lindex $peers 0] set ex-key4 value2
+        assert_equal [[lindex $peers 0] expiretombstonesize] 1
+        wait_for_condition 500 100 {
+            [[lindex $peers 0] expiretombstonesize] == 0
+        } else {
+            fail "Can't gc the expire tombstone"
+        }
+        after 2500;
+        assert_equal [[lindex $peers 0] ttl ex-key4] -1
+        assert_equal [[lindex $peers 0] get ex-key4] value2
     }
     test "set px" {
         [lindex $peers 0] SET px-key value PX 4000;
@@ -499,6 +527,24 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
             assert_equal [[lindex $peers 0] crdt.ttl pk9] [[lindex $peers 0] crdt.ttl pk9]
             assert_equal [[lindex $peers 0] get pk9] value;
         }
+        test "peer setex" {
+            [lindex $peers 0] setex pex 10 value 
+            after 1000
+            set t [[lindex $peers 1] ttl pex]
+            if {$t < 0} {
+                error "peer set ex error"
+            }
+            assert_equal [[lindex $peers 1] get pex] value;
+            [lindex $peers 0] set pex value2
+            assert_equal [[lindex $peers 0] ttl pex] -1;
+            assert_equal [[lindex $peers 0] get pex] value2;
+            after 200
+            assert_equal [[lindex $peers 1] ttl pex] -1;
+            assert_equal [[lindex $peers 1] get pex] value2;
+        }
+        
+        
+        
         test "peer del hash expire" {
             [lindex $peers 0] hset ph1 key value;
             [lindex $peers 0] expire ph1 10;

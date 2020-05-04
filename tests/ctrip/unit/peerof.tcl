@@ -40,6 +40,30 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
             if {$retry == 0} {
                 error "assertion:Peers not correctly synchronized"
             }
+            
+            [lindex $peers 1] peerof [lindex $peer_gids 0] no one
+        }
+        test "peerof no one test" {
+            [lindex $peers 1] mset k v k1 v1
+            [lindex $peers 0] mset k2 v2 k3 v3
+            [lindex $peers 1] peerof [lindex $peer_gids 0] [lindex $peer_hosts 0] [lindex $peer_ports 0]
+            set retry 50
+            while {$retry} {
+                set info [[lindex $peers 0] crdt.info replication]
+                if {[string match {*slave0:*state=online*} $info]} {
+                    break
+                } else {
+                    incr retry -1
+                    after 100
+                }
+            }
+            if {$retry == 0} {
+                error "assertion:Peers not correctly synchronized"
+            }
+            asser_equal [[lindex $peers 1] get k] v
+            asser_equal [[lindex $peers 1] get k1] v1
+            asser_equal [[lindex $peers 1] get k2] v2 
+            asser_equal [[lindex $peers 1] get k3] v3
             [lindex $peers 1] peerof [lindex $peer_gids 0] no one
         }
     }
