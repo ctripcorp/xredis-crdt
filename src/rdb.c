@@ -1688,6 +1688,7 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                 }
                 currentMasterInstance = masterInstance;
             } else if (!strcasecmp(auxkey->ptr,"peer-master-host")) {
+                sdsfree(currentMasterInstance->masterhost);
                 currentMasterInstance->masterhost = sdsdup(auxval->ptr);
             } else if (!strcasecmp(auxkey->ptr,"peer-master-port")) {
                 currentMasterInstance->masterport = atoi(auxval->ptr);
