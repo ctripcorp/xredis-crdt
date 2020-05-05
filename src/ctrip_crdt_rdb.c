@@ -686,6 +686,15 @@ int initedCrdtServer() {
     }
     return 1;
 }
+int isMasterMySelf() {
+    if(crdt_mode && !server.master_is_crdt && server.masterhost ) {
+        return C_OK;
+    }
+    if(!server.masterhost) {
+        return C_OK;
+    }
+    return C_ERR;
+}
 int isMasterSlaveReplVerDiff() {
     if(crdt_mode && server.master_is_crdt) {
         return C_OK;

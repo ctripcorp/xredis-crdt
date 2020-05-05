@@ -184,7 +184,7 @@ void peerofCommand(client *c) {
      * we can continue. */
     crdtReplicationSetMaster(gid, c->argv[2]->ptr, (int)port);
     peerMaster = getPeerMaster(gid);
-    if (!server.masterhost) {
+    if (isMasterMySelf() == C_OK) {
         sds client = catClientInfoString(sdsempty(), c);
         serverLog(LL_NOTICE, "[CRDT]PEER OF %lld %s:%d enabled (user request from '%s')",
                   gid, peerMaster->masterhost, peerMaster->masterport, client);
@@ -239,7 +239,7 @@ crdtMergeStartCommand(client *c) {
 
     CRDT_Master_Instance *peerMaster = getPeerMaster(sourceGid);
     if (!peerMaster) {
-        if (!server.masterhost) {
+        if (isMasterMySelf() == C_OK) {
             peerMaster = createPeerMaster(c, sourceGid);
         } else {
             peerMaster = createPeerMaster(NULL, sourceGid);
@@ -280,11 +280,9 @@ crdtMergeEndCommand(client *c) {
     memcpy(peerMaster->master_replid, c->argv[3]->ptr, sizeof(peerMaster->master_replid));
     if (getLongLongFromObjectOrReply(c, c->argv[4], &offset, NULL) != C_OK) return;
     peerMaster->master_initial_offset = offset;
-    if (server.master == NULL) {
-        peerMaster->repl_state = REPL_STATE_CONNECTED;
-    }
     if(!crdtServer.repl_backlog) createReplicationBacklog(&crdtServer);
-    if (!server.masterhost) {
+    if (isMasterMySelf() == C_OK) {
+        peerMaster->repl_state = REPL_STATE_CONNECTED;
         crdtReplicationSendAck(getPeerMaster(c->gid));
     }
     server.dirty ++;
@@ -1434,7 +1432,7 @@ void crdtReplicationCron(void) {
     /**!!!!Important!!!!!
      * Connect crdt master if and only if I'm NOT a SLAVE here
      * SLAVE SHOULD RECEIVE DATA from their masters*/
-    if (!server.masterhost) {
+    if (isMasterMySelf() == C_OK) {
         listRewind(crdtServer.crdtMasters, &li);
         while ((ln = listNext(&li)) != NULL) {
             CRDT_Master_Instance *crdtMaster = ln->value;
@@ -1554,7 +1552,7 @@ void crdtReplicationCron(void) {
      * without sub-slaves attached should still accumulate data into the
      * backlog, in order to reply to PSYNC queries if they are turned into
      * masters after a failover. */
-    if (!server.masterhost && listLength(crdtServer.slaves) == 0 && crdtServer.repl_backlog_time_limit &&
+    if (isMasterMySelf() != C_OK && listLength(crdtServer.slaves) == 0 && crdtServer.repl_backlog_time_limit &&
         crdtServer.repl_backlog)
     {
         time_t idle = server.unixtime - crdtServer.repl_no_slaves_since;
