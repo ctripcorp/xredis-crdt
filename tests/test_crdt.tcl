@@ -14,6 +14,7 @@ source tests/support/util.tcl
 
 
 set ::all_tests { 
+    ctrip/integration/master-master/add_sync
     ctrip/master-not-crdt/peerof
     ctrip/master-not-crdt/master-redis-peer2
     ctrip/master-not-crdt/master-redis-peer
