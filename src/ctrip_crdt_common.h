@@ -64,25 +64,7 @@ typedef struct CrdtDataMethod {
     crdtUpdateLastVCFunc updateLastVC;
     crdtPropagateDelFunc propagateDel;
 } CrdtDataMethod;
-typedef struct CrdtExpireObj {
-    CrdtMeta* meta;
-    long long expireTime;
-} CrdtExpireObj; 
-typedef int (*crdtExpireAddFunc)(void* expire, CrdtExpireObj *obj);
-typedef CrdtExpireObj* (*crdtExpireGetFunc)(void* expire);
-typedef void (*crdtExpireFreeFunc)(void* value);
-typedef void* (*crdtExpireDupFunc)( void* value);
-typedef void (*crdtPersistFunc)(void* value, void* moduleKey, int dbId, void* key);
-typedef long long (*crdtExpireGetLastExpireTimeFunc)(struct CrdtExpire* expire);
-typedef int (*crdtExpireGetLastGid)(struct CrdtExpire* expire);
-typedef struct CrdtExpireMethod {
-    crdtExpireAddFunc add;
-    crdtExpireGetLastExpireTimeFunc getLastExpireTime;
-    crdtExpireGetLastGid getLastGid;
-    crdtExpireFreeFunc free;
-    crdtExpireDupFunc dup;
-    crdtPersistFunc persist;
-} CrdtExpireMethod;
+
 typedef struct CrdtTombstoneMethod {
     crdtMergeFunc merge;
     crdtFilterFunc filter;
@@ -90,18 +72,11 @@ typedef struct CrdtTombstoneMethod {
     crdtPurageFunc purage;
 } CrdtTombstoneMethod;
 typedef int (*crdtIsExpireFunc)(void* target, CrdtMeta* meta);
-typedef int (*crdtExpireTombstoneAddFunc)(void* target, CrdtMeta* meta);
-typedef struct CrdtExpireTombstoneMethod {
-    crdtIsExpireFunc isExpire;
-    crdtExpireTombstoneAddFunc add;
-} CrdtExpireTombstoneMethod;
-CrdtExpireMethod* getCrdtExpireMethod(CrdtObject* expire);
+
 CrdtDataMethod* getCrdtDataMethod(CrdtObject* expire);
 CrdtObjectMethod* getCrdtObjectMethod(CrdtObject* expire);
 CrdtTombstoneMethod* getCrdtTombstoneMethod(CrdtObject* tombstone);
 int getDataType(int type);
 int isData(int type);
-int isTombstone(int type);
-int isExpireTombstone(int type);
 int isTombstone(int type);
 #endif //REDIS_CTRIP_CRDT_COMMON_H

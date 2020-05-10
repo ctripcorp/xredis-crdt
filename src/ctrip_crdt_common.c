@@ -58,9 +58,6 @@ void* getMethod(void* obj, const char* name) {
     }
     return getmethod(obj);
 }
-CrdtExpireMethod* getCrdtExpireMethod(CrdtObject* expire) {
-    return getMethod(expire, "getCrdtExpireMethod");
-}
 CrdtDataMethod* getCrdtDataMethod(CrdtObject* expire) {
     return getMethod(expire, "getCrdtDataMethod");
 }
@@ -78,9 +75,6 @@ int isData(int type) {
 }
 int isExpire(int type) {
     return (int)getMethod((void*)type, "isExpire");
-}
-int isExpireTombstone(int type) {
-    return (int)getMethod((void*)type, "isExpireTombstone");
 }
 int isTombstone(int type) {
     return (int)getMethod((void*)type, "isTombstone");

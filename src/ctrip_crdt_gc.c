@@ -119,8 +119,6 @@ int gcIfNeeded(dict *d, robj *key) {
      * */
     //todo: update gc vector clock, each time when set operation
     updateGcVectorClock();
-    sds gcsds = vectorClockToSds(crdtServer.gcVectorClock);
-    sdsfree(gcsds);
     CrdtTombstoneMethod* method = getCrdtTombstoneMethod(tombstone);
     if(method == NULL) return 0;
     if(!method->gc(tombstone, crdtServer.gcVectorClock)){
@@ -156,9 +154,6 @@ void tombstoneSizeCommand(client *c) {
 }
 void expireSizeCommand(client *c) {
     addReplyLongLong(c,dictSize(c->db->expires));
-}
-void expireTombstoneSizeCommand(client *c) {
-    addReplyLongLong(c,dictSize(c->db->deleted_expires));
 }
 
 
@@ -382,16 +377,4 @@ void activeGcCycle(int type) {
     static int timelimit_exit = 0;      /* Time limit hit in previous call? */
     static long long last_fast_cycle = 0; /* When last fast cycle ran. */
     Gc(type, &current_db, &timelimit_exit, &last_fast_cycle, getDeletedKeys, "gc-cycle");
-}
-dict* getDeletedExpires(redisDb* db) {
-    return db->deleted_expires;
-}
-
-void activeExpireGcCycle(int type) {
-    /* This function has some global state in order to continue the work
-     * incrementally across calls. */
-    static unsigned int current_db = 0; /* Last DB tested. */
-    static int timelimit_exit = 0;      /* Time limit hit in previous call? */
-    static long long last_fast_cycle = 0; /* When last fast cycle ran. */
-    Gc(type, &current_db, &timelimit_exit, &last_fast_cycle, getDeletedExpires, "gc-expire-cycle");
 }

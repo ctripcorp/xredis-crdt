@@ -143,14 +143,7 @@ set checks(3) {
     assert {[$redis ttl key2] < 10000000}
     assert {[$redis ttl key2] > -1}
 }
-set adds(4) {
-    $redis crdt.set key3 value 1 100000 "1:100"
-    $redis crdt.expire key3 3 100000 "1:100;3:100" 100000 1
-    $redis crdt.persist key3 3 100000 "1:100;3:101" 1
-}
-set checks(4) {
-    assert_equal [$redis expiretombstonesize] 1
-}
+
 set len [array size adds]
 test "one" {
     for {set x 0} {$x<$len} {incr x} {
