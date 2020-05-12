@@ -11,6 +11,10 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
     set slave_port [srv 0 port]
     set slave_log [srv 0 stdout]
     set slave_gid 1
+    test "gid" {
+        set info [$slave crdt.info replication]
+        assert_equal [string match "*gid:1*" $info] 1
+    }
     start_server {config {crdt.conf} overrides {crdt-gid 2} module {crdt.so}} {
         set master [srv 0 client]
         set master_host [srv 0 host]
