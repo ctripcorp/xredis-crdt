@@ -738,11 +738,12 @@ void loadServerConfigFromString(char *config) {
             }
         } else if (!strcasecmp(argv[0],"crdt-gid")) {
             // server.crdt_gid is used for crdt module
-            server.crdt_gid = atoll(argv[1]);
-            crdtServer.crdt_gid = server.crdt_gid;
-            if (server.crdt_gid < 0) {
+            int gid = atoll(argv[1]);
+            if(!check_gid(gid)) {
                 err = "Invalid value for crdt_gid."; goto loaderr;
             }
+            server.crdt_gid = atoll(argv[1]);
+            crdtServer.crdt_gid = server.crdt_gid;
         } else if(!strcasecmp(argv[0],"local-clock")) {
             server.local_clock = atoll(argv[1]);
             crdtServer.local_clock = server.local_clock;

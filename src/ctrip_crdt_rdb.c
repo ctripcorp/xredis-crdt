@@ -346,6 +346,7 @@ int mergeCrdtObjectCommand(client *c, DictFindFunc find, DictAddFunc add, DictDe
     long long sourceGid;
     long long expireTime = -1;
     if (getLongLongFromObjectOrReply(c, c->argv[1], &sourceGid, NULL) != C_OK)  goto error;
+    if(!check_gid(sourceGid)) goto error;
     if (updateReplTransferLastio(sourceGid) != C_OK) goto error;
     robj *key = c->argv[2];
 
