@@ -1454,7 +1454,7 @@ int RM_CrdtMultiWrappedReplicate(RedisModuleCtx *ctx, const char *cmdname, const
 
 //todo: re-use
 void * RM_CurrentVectorClock() {
-    return dupVectorClock(crdtServer.vectorClock);
+    return crdtServer.vectorClock;
 }
 
 long long RM_CurrentGid(void) {
@@ -1757,10 +1757,7 @@ mstime_t RM_GetExpire(RedisModuleKey *key) {
     expire -= mstime();
     return expire >= 0 ? expire : 0;
 }
-void* RM_GetCrdtExpire(RedisModuleKey *key) {
-    CrdtObject* r = getCrdtExpire(key->db, key->key);
-    return r;
-}
+
 void* GetRobj(RedisModuleKey *key, dict* d) {
     dictEntry *de;
     /* No expire? return ASAP */
@@ -1769,11 +1766,6 @@ void* GetRobj(RedisModuleKey *key, dict* d) {
     return  dictGetVal(de);
 }
 
-void* RM_GetCrdtExpireTombstone(RedisModuleKey *key) {
-    gcIfNeeded(key->db->deleted_expires, key->key);
-    void* result = retrieveCrdtObject(GetRobj(key, key->db->deleted_expires));
-    return result;
-}
 /* Set a new expire for the key. If the special expire
  * REDISMODULE_NO_EXPIRE is set, the expire is cancelled if there was
  * one (the same as the PERSIST command).
@@ -1790,7 +1782,7 @@ int RM_SetExpire(RedisModuleKey *key, mstime_t expire) {
         expire += mstime();
         setExpire(key->ctx->client,key->db,key->key,expire);
     } else {
-        delExpire(key->db,key->key);
+        removeExpire(key->db,key->key);
     }
     return REDISMODULE_OK;
 }
@@ -1806,15 +1798,6 @@ int dictSetRobj(RedisModuleKey *key, dict* db, moduleType *mt ,struct CrdtObject
     }
     return REDISMODULE_OK;
     
-}
-int RM_SetCrdtExpire(RedisModuleKey *key, moduleType *mt ,CrdtObject* expire) {
-    int result = dictSetRobj(key, key->db->expires, mt, expire);
-    return result;
-}
-
-int RM_SetCrdtExpireTombstone(RedisModuleKey *key, moduleType *mt ,CrdtObject* expire) {
-    int r = dictSetRobj(key, key->db->deleted_expires, mt, expire);
-    return r;
 }
 
 
@@ -4380,11 +4363,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(StringDMA);
     REGISTER_API(StringTruncate);
     REGISTER_API(SetExpire);
-    REGISTER_API(SetCrdtExpire);
-    REGISTER_API(SetCrdtExpireTombstone);
     REGISTER_API(GetExpire);
-    REGISTER_API(GetCrdtExpire);
-    REGISTER_API(GetCrdtExpireTombstone);
     REGISTER_API(ZsetAdd);
     REGISTER_API(ZsetIncrby);
     REGISTER_API(ZsetScore);

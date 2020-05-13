@@ -210,7 +210,7 @@ void setKey(redisDb *db, robj *key, robj *val) {
         dbOverwrite(db,key,val);
     }
     incrRefCount(val);
-    // delExpire(db,key);
+    removeExpire(db,key);
     signalModifiedKey(db,key);
 }
 
@@ -248,7 +248,7 @@ robj *dbRandomKey(redisDb *db) {
 int dbSyncDelete(redisDb *db, robj *key) {
     /* Deleting an entry from the expires dict will not free the sds of
      * the key, because it is shared with the main dictionary. */
-    // if (dictSize(db->expires) > 0) dictDelete(db->expires,key->ptr);
+    if (dictSize(db->expires) > 0) dictDelete(db->expires,key->ptr);
     if (dictDelete(db->dict,key->ptr) == DICT_OK) {
         if (server.cluster_enabled) slotToKeyDel(key);
         return 1;
@@ -334,7 +334,6 @@ long long emptyDb(int dbnum, int flags, void(callback)(void*)) {
             dictEmpty(server.db[j].dict,callback);
             dictEmpty(server.db[j].expires,callback);
             dictEmpty(server.db[j].deleted_keys,callback);
-            dictEmpty(server.db[j].deleted_expires,callback);
         }
     }
     if (server.cluster_enabled) {
@@ -1009,13 +1008,11 @@ int dbSwapDatabases(int id1, int id2) {
     db1->dict = db2->dict;
     db1->expires = db2->expires;
     db1->deleted_keys = db2->deleted_keys;
-    db1->deleted_expires = db2->deleted_expires;
     db1->avg_ttl = db2->avg_ttl;
 
     db2->dict = aux.dict;
     db2->expires = aux.expires;
     db2->deleted_keys = aux.deleted_keys;
-    db2->deleted_expires = aux.deleted_expires;
     db2->avg_ttl = aux.avg_ttl;
 
     /* Now we need to handle clients blocked on lists: as an effect
@@ -1065,10 +1062,10 @@ void swapdbCommand(client *c) {
  * Expires API
  *----------------------------------------------------------------------------*/
 
-int delExpire(redisDb *db, robj *key) {
+int removeExpire(redisDb *db, robj *key) {
     /* An expire may only be removed if there is a corresponding entry in the
      * main dict. Otherwise, the key will never be freed. */
-    // serverAssertWithInfo(NULL,key,dictFind(db->dict,key->ptr) != NULL);
+    serverAssertWithInfo(NULL,key,dictFind(db->dict,key->ptr) != NULL);
     return dictDelete(db->expires,key->ptr) == DICT_OK;
 }
 
@@ -1090,17 +1087,6 @@ void setExpire(client *c, redisDb *db, robj *key, long long when) {
         rememberSlaveKeyWithExpire(db,key);
 }
 
-void setCrdtExpire(client *c, redisDb *db, robj *key, robj* obj) {
-    dictEntry *de;
-
-    /* Reuse the sds from the main dict in the expire dict */
-    de = dictAddOrFind(db->expires,sdsdup(key->ptr));
-    dictGetVal(de) = obj;
-
-    // int writable_slave = server.masterhost && server.repl_slave_ro == 0;
-    // if (c && writable_slave && !(c->flags & CLIENT_MASTER))
-    //     rememberSlaveKeyWithExpire(db,key);
-}
 
 
 
@@ -1143,16 +1129,8 @@ void propagateExpire(redisDb *db, robj *key, int lazy) {
     decrRefCount(argv[1]);
 }
 
-int crdtPropagateExpire(redisDb *db, robj *key, int lazy, CrdtObject* expire) {
+int crdtPropagateExpire(redisDb *db, robj *key, int lazy) {
     void *mk = NULL;
-    if(expire == NULL) {
-        dictEntry* d = dictFind(db->expires, key->ptr);
-        if(d == NULL) {
-            return C_ERR;
-        }
-        robj* e = dictGetVal(d);
-        expire = retrieveCrdtObject(e);
-    }
     dictEntry *entry = dictFind(db->dict, key->ptr);
     if(entry != NULL) {
          robj *val = dictGetVal(entry);
@@ -1160,9 +1138,6 @@ int crdtPropagateExpire(redisDb *db, robj *key, int lazy, CrdtObject* expire) {
             if(isModuleCrdt(val) == C_OK) {
                 struct moduleValue* rm = (struct moduleValue*)val->ptr;
                 CrdtObject* obj = ((CrdtObject*)(rm->value));
-                if(getDataType(obj->type) != getDataType(expire->type)) {
-                    goto clean;
-                }
                 mk = GetModuleKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE, 1);
                 if(mk != NULL) {
                     CrdtDataMethod* method = getCrdtDataMethod(obj);
@@ -1181,27 +1156,12 @@ int crdtPropagateExpire(redisDb *db, robj *key, int lazy, CrdtObject* expire) {
             }
         }
     }
-    goto clean;
-    
-clean:
-    mk = GetModuleKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE, 1);
-    if(mk != NULL) {
-        CrdtExpireMethod* expire_method = getCrdtExpireMethod(expire);
-        if(expire_method == NULL) {
-            CloseModuleKey(mk);
-            serverLog(LL_WARNING, "not find expire %d", expire->type);
-            return C_ERR;
-        }
-        expire_method->persist(expire, mk, db->id, key);
-        CloseModuleKey(mk);
-    }
-    crdtServer.stat_expiredkeys++;
     return C_ERR;
 }
 
 
 
-int _expireIfNeeded(redisDb *db, robj *key) {
+int expireIfNeeded(redisDb *db, robj *key) {
     mstime_t when = getExpire(db,key);
     mstime_t now;
 
@@ -1231,78 +1191,15 @@ int _expireIfNeeded(redisDb *db, robj *key) {
 
     /* Delete the key */
     server.stat_expiredkeys++;
-    propagateExpire(db,key,server.lazyfree_lazy_expire);
-    notifyKeyspaceEvent(NOTIFY_EXPIRED,
-        "expired",key,db->id);
-    return server.lazyfree_lazy_expire ? dbAsyncDelete(db,key) :
-                                         dbSyncDelete(db,key);
-}
-CrdtObject* getCrdtExpire(redisDb *db, robj *key) {
-    dictEntry *de;
-
-    /* No expire? return ASAP */
-    if (dictSize(db->expires) == 0 ||
-       (de = dictFind(db->expires,key->ptr)) == NULL) return NULL;
-    robj* val = dictGetVal(de);
-    if(val == NULL) return NULL;
-    return retrieveCrdtObject(val);
-}
-
-// CrdtExpireObj* getCrdtExpireObj(redisDb *db, robj *key) {
-//     CrdtObject* expire = getCrdtExpire(db, key);
-//     if(expire == NULL) return NULL;
-//     CrdtExpireMethod* method = getCrdtExpireMethod(expire);
-//     if(method == NULL) return NULL;
-//     return method->get(expire);
-// }
-
-int crdtExpireIfNeeded(redisDb *db, robj *key) {
-    CrdtObject* expire = getCrdtExpire(db, key);
-    if(expire == NULL) {
-        return 0;
-    }
-    CrdtExpireMethod* method = getCrdtExpireMethod(expire);
-    if(expire == NULL) return 0;
-    long long when = method->getLastExpireTime(expire);
-    mstime_t now;
-
-    if (when < 0) return 0; /* No expire for this key */
-
-    /* Don't expire anything while loading. It will be done later. */
-    if (server.loading) return 0;
-
-    /* If we are in the context of a Lua script, we claim that time is
-     * blocked to when the Lua script started. This way a key can expire
-     * only the first time it is accessed and not in the middle of the
-     * script execution, making propagation to slaves / AOF consistent.
-     * See issue #1525 on Github for more information. */
-    now = server.lua_caller ? server.lua_time_start : mstime();
-
-    /* If we are running in the context of a slave, return ASAP:
-     * the slave key expiration is controlled by the master that will
-     * send us synthesized DEL operations for expired keys.
-     *
-     * Still we try to return the right information to the caller,
-     * that is, 0 if we think the key should be still valid, 1 if
-     * we think the key is expired at this time. */
-    if (server.masterhost != NULL) return now > when;
-    if (server.crdt_gid != method->getLastGid(expire)) return now > when;
-    /* Return when this key has not expired */
-    if (now <= when) return 0;
-
-    /* Delete the key */
-    // server.stat_expiredkeys++;
-    if(crdtPropagateExpire(db,key,server.lazyfree_lazy_expire, expire) != C_OK) {
+    if(crdtPropagateExpire(db,key,server.lazyfree_lazy_expire) != C_OK) {
         return 0;
     }
     notifyKeyspaceEvent(NOTIFY_EXPIRED,
         "expired",key,db->id);
     return server.lazyfree_lazy_expire ? dbAsyncDelete(db,key) :
                                          dbSyncDelete(db,key);
-} 
-int expireIfNeeded(redisDb *db, robj *key) {
-    return crdtExpireIfNeeded(db, key);
 }
+
 
 /* -----------------------------------------------------------------------------
  * API to get key arguments from commands

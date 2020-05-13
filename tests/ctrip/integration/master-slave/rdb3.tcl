@@ -87,6 +87,7 @@ proc load {check server_path dbfile} {
         [lindex $peers 0] config crdt.set repl-diskless-sync-delay 1
         [lindex $peers 0] config set repl-diskless-sync-delay 1
         [lindex $peers 0] debug set-crdt-ovc 0
+        # log_file_matches [lindex $peer_stdouts 0]
         run [replace_client $check {[lindex $peers 0]}]  1
     }
 }
@@ -95,17 +96,15 @@ set checks(0) {
     assert_equal [$redis get key] value
 }
 set checks(1) {
-    assert_equal [$redis hget hash key] value
+    assert_equal [$redis hget h k] v
 }
 set checks(2) {
     assert_equal [$redis tombstonesize] 1
-}
-set checks(3) {
-    assert_equal [$redis expiretombstonesize] 1
 }
 set len [array size checks]
 set check $checks(0)
 for {set x 1} {$x<$len} {incr x} {
     append check $checks($x)
 }
+#old_version rdb
 load $check $server_path "crdt_1.0.0.rdb"

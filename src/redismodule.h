@@ -222,12 +222,7 @@ int REDISMODULE_API_FUNC(RedisModule_StringSet)(RedisModuleKey *key, RedisModule
 char *REDISMODULE_API_FUNC(RedisModule_StringDMA)(RedisModuleKey *key, size_t *len, int mode);
 int REDISMODULE_API_FUNC(RedisModule_StringTruncate)(RedisModuleKey *key, size_t newlen);
 mstime_t REDISMODULE_API_FUNC(RedisModule_GetExpire)(RedisModuleKey *key);
-void* REDISMODULE_API_FUNC(RedisModule_GetCrdtExpire)(RedisModuleKey *key);
-void* REDISMODULE_API_FUNC(RedisModule_GetCrdtExpireTombstone)(RedisModuleKey *key);
-void* REDISMODULE_API_FUNC(RedisModule_GetCrdtExpireByKey)(RedisModuleCtx *ctx, RedisModuleString* key);
 int REDISMODULE_API_FUNC(RedisModule_SetExpire)(RedisModuleKey *key, mstime_t expire);
-int REDISMODULE_API_FUNC(RedisModule_SetCrdtExpire)(RedisModuleKey *key,RedisModuleType* type, void* expire);
-int REDISMODULE_API_FUNC(RedisModule_SetCrdtExpireTombstone)(RedisModuleKey *key,RedisModuleType* type, void* expire);
 void REDISMODULE_API_FUNC(RedisModule_SaveRobj)(void* rdb, void* value);
 void REDISMODULE_API_FUNC(RedisModule_SaveInt)(void* rdb, int value);
 int REDISMODULE_API_FUNC(RedisModule_ZsetAdd)(RedisModuleKey *key, double score, RedisModuleString *ele, int *flagsptr);
@@ -269,6 +264,7 @@ void REDISMODULE_API_FUNC(RedisModule_SaveFloat)(RedisModuleIO *io, float value)
 float REDISMODULE_API_FUNC(RedisModule_LoadFloat)(RedisModuleIO *io);
 void REDISMODULE_API_FUNC(RedisModule_Log)(RedisModuleCtx *ctx, const char *level, const char *fmt, ...);
 void REDISMODULE_API_FUNC(RedisModule_Debug)( const char *level, const char *fmt, ...);
+size_t REDISMODULE_API_FUNC(RedisModule_UsedMemory)();
 void REDISMODULE_API_FUNC(RedisModule_LogIOError)(RedisModuleIO *io, const char *levelstr, const char *fmt, ...);
 int REDISMODULE_API_FUNC(RedisModule_StringAppendBuffer)(RedisModuleCtx *ctx, RedisModuleString *str, const char *buf, size_t len);
 void REDISMODULE_API_FUNC(RedisModule_RetainString)(RedisModuleCtx *ctx, RedisModuleString *str);
@@ -376,12 +372,7 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(StringDMA);
     REDISMODULE_GET_API(StringTruncate);
     REDISMODULE_GET_API(GetExpire);
-    REDISMODULE_GET_API(GetCrdtExpire);
-    REDISMODULE_GET_API(GetCrdtExpireTombstone);
-    REDISMODULE_GET_API(GetCrdtExpireByKey);
     REDISMODULE_GET_API(SetExpire);
-    REDISMODULE_GET_API(SetCrdtExpire);
-    REDISMODULE_GET_API(SetCrdtExpireTombstone);
     REDISMODULE_GET_API(SaveRobj);
     REDISMODULE_GET_API(SaveInt);
     REDISMODULE_GET_API(SetExpire);
@@ -424,6 +415,7 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(EmitAOF);
     REDISMODULE_GET_API(Log);
     REDISMODULE_GET_API(Debug);
+    REDISMODULE_GET_API(UsedMemory);
     REDISMODULE_GET_API(LogIOError);
     REDISMODULE_GET_API(StringAppendBuffer);
     REDISMODULE_GET_API(RetainString);

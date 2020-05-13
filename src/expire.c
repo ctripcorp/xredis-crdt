@@ -52,33 +52,12 @@
  * The parameter 'now' is the current time in milliseconds as is passed
  * to the function to avoid too many gettimeofday() syscalls. */
 int activeExpireCycleTryExpire(redisDb *db, dictEntry *de, long long now) {
-    // long long t = dictGetSignedIntegerVal(de);
-    long long t = -1;
-    robj* d = dictGetVal(de);
-    if(d != NULL) {
-        if(isModuleCrdt(d) == C_OK) {
-            CrdtObject* e = retrieveCrdtObject(d);
-            if(e != NULL) {
-                CrdtExpireMethod* method = getCrdtExpireMethod(e);
-                if(method == NULL) return 0;
-                if(method->getLastGid(e) != crdtServer.crdt_gid) {
-                    return 0;
-                }
-                t = method->getLastExpireTime(e);
-            }
-            
-        }else{
-            t = dictGetSignedIntegerVal(de);
-        } 
-    } 
-    if(t == -1) {
-        return 0;
-    }
+    long long t = dictGetSignedIntegerVal(de);
     if (now > t) {
         sds key = dictGetKey(de);
         robj *keyobj = createStringObject(key,sdslen(key));
 
-        if(crdtPropagateExpire(db,keyobj,server.lazyfree_lazy_expire, NULL) != C_OK) {
+        if(crdtPropagateExpire(db,keyobj,server.lazyfree_lazy_expire) != C_OK) {
             decrRefCount(keyobj);
             return 0;
         }
@@ -209,12 +188,7 @@ void activeExpireCycle(int type) {
                 long long ttl;
 
                 if ((de = dictGetRandomKey(db->expires)) == NULL) break;
-                // ttl = dictGetSignedIntegerVal(de)-now;
-                robj* r = dictGetVal(de);
-                CrdtObject* e = retrieveCrdtObject(r);
-                CrdtExpireMethod* method = getCrdtExpireMethod(e);
-                if(method == NULL) continue; 
-                ttl = method->getLastExpireTime(e) - now;
+                ttl = dictGetSignedIntegerVal(de)-now;
                 if (activeExpireCycleTryExpire(db,de,now)) expired++;
                 if (ttl > 0) {
                     /* We want the average TTL of keys yet not expired. */
@@ -515,7 +489,7 @@ void pttlCommand(client *c) {
 /* PERSIST key */
 void persistCommand(client *c) {
     if (lookupKeyWrite(c->db,c->argv[1])) {
-        if (delExpire(c->db,c->argv[1])) {
+        if (removeExpire(c->db,c->argv[1])) {
             addReply(c,shared.cone);
             server.dirty++;
         } else {
