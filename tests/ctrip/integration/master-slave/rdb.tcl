@@ -108,6 +108,7 @@ proc save {add check server_path dbfile} {
             }
         }
     }
+    #load rdb
     start_server [list overrides [list crdt-gid 1 loadmodule ./crdt.so  "dir"  $server_path "dbfilename" $dbfile]] {
         set peers {}
         set peer_hosts {}
@@ -134,10 +135,10 @@ set checks(0) {
     assert_equal [$redis get key] value
 }
 set adds(1) {
-    $redis hset hash key value
+    $redis hset h k v
 }
 set checks(1) {
-    assert_equal [$redis hget hash key] value
+    assert_equal [$redis hget h k] v
 }
 set adds(2) {
     $redis crdt.set kv value 1 1000000 "1:100"
@@ -153,14 +154,7 @@ set checks(3) {
     assert {[$redis ttl key2] <= 10000000}
     assert {[$redis ttl key2] > -1}
 }
-set adds(4) {
-    $redis crdt.set key3 value 1 100000 "1:100"
-    $redis crdt.expire key3 3 100000 "1:100;3:100" 100000 1
-    $redis crdt.persist key3 3 100000 "1:100;3:101" 1
-}
-set checks(4) {
-    assert_equal [$redis expiretombstonesize] 1
-}
+
 set len [array size adds]
 proc replace_foreach {  index  len core} {
     set str {

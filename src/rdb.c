@@ -904,9 +904,9 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
         dict *d = db->dict;
         if (dictSize(d) == 0 && !crdt_mode) continue;
         if (dictSize(d) == 0 && 
-            dictSize(db->deleted_keys) == 0 &&
-            dictSize(db->expires) == 0 &&
-            dictSize(db->deleted_expires) == 0) continue;
+            dictSize(db->deleted_keys) == 0 
+        ) 
+            continue;
         di = dictGetSafeIterator(d);
         keys = dictCreate(&setDictType, NULL);
         if (!di) return C_ERR;
@@ -1708,20 +1708,21 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
             decrRefCount(auxkey);
             decrRefCount(auxval);
             continue; /* Read type again. */
-        }else if(type == RDB_CRDT_VALUE) {
-            if(rdbLoadCrdtData(rdb, db) == C_ERR) goto eoferr;
+        } 
+        if(type == RDB_CRDT_VALUE) {
+            if(rdbLoadCrdtData(rdb, db, expiretime) == C_ERR) goto eoferr;
             continue;
-        }
+        } 
 
         /* Read key */
         if ((key = rdbLoadStringObject(rdb)) == NULL) goto eoferr;
         /* Read value */
         if ((val = rdbLoadObject(type,rdb)) == NULL) goto eoferr;
         /* Check if the key already expired. This function is used when loading
-         * an RDB file from disk, either at startup, or when an RDB was
-         * received from the master. In the latter case, the master is
-         * responsible for key expiry. If we would expire keys here, the
-         * snapshot taken by the master may not be reflected on the slave. */
+        * an RDB file from disk, either at startup, or when an RDB was
+        * received from the master. In the latter case, the master is
+        * responsible for key expiry. If we would expire keys here, the
+        * snapshot taken by the master may not be reflected on the slave. */
         
         /* Add the new object in the hash table */
         if(!isCrdtRdb && crdt_mode) {
@@ -1742,14 +1743,22 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
             }
             dbAdd(db,key,val);
         }
+        
+
+        
         /* Set the expire time if needed */
         if (expiretime != -1) {
+            /*
+                A: redis, B: crdt C: crdt
+                1. C slaveof B 
+                2. B slaveof A
+                    a. C->B add sync (B expire must send C)
+            */
             if(!isCrdtRdb && crdt_mode) {
                 expire2CrdtExpire(fakeClient, key, expiretime);
             }else{
                 setExpire(NULL,db,key,expiretime);
             }
-            
         }
 
         decrRefCount(key);
