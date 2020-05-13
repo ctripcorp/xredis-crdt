@@ -1630,7 +1630,7 @@ ssize_t rdbSaveAuxFieldStrStr(rio *rdb, char *key, char *val);
 int rdbSaveCrdtData(rio *rdb, int dbid,redisDb* db, dict* keys, long long now, int flags, size_t* processed);
 int rdbSaveCrdtDbSize(rio* rdb, redisDb* db);
 int rdbSaveCrdtInfoAuxFields(rio* rdb);
-int rdbLoadCrdtData(rio* rdb, redisDb* db,  long long expire_time);
+int rdbLoadCrdtData(rio* rdb, redisDb* db,  long long current_expire_time);
 int rdbLoadCrdtDbSize(rio* rdb, redisDb* db);
 int data2CrdtData(client* fakeClient,redisDb* db, robj* key, robj* val);
 
