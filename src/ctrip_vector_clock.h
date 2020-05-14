@@ -34,6 +34,7 @@
 #define REDIS_VECTOR_CLOCK_H
 
 #include "sds.h"
+#include <stdlib.h>
 
 // "<gid>:<clock>;<gid>:<clock>"
 #define VECTOR_CLOCK_SEPARATOR ";"
@@ -47,16 +48,83 @@
  * To shrink down mem usage, an unsigned long long will stand for [gid, clock]
  * where, higher 4 bits is allocated for gid (16 gid in total)
  * and,   lower 60 bits represents the logical clk
+ * |0000|0000|xxxxxxxxxxxxxxxxxx|
+ * |4bit|4bit|56            bits|
+ * |len |gid | logic clock      |
  * */
 typedef unsigned long long clk;
+typedef unsigned long long VectorClock;
+
 #define VectorClockUnit clk
-typedef struct VectorClock {
-    char length;
-    union clocks {
-        clk single;
-        clk *multi;
-    } clocks;
-}__attribute__((packed, aligned(1)))VectorClock;
+
+
+const size_t               XPlatformAddressOffsetBits    = 56; // 65536TB
+const size_t               XPlatformGidMaskBits          = 4;
+const size_t               XPlatformLengthBitsOffset     = XPlatformAddressOffsetBits + XPlatformGidMaskBits;
+const size_t               XPlatformVectorClockLengthBits    = XPlatformGidMaskBits;
+const unsigned long long   XAddressOffsetShift           = 0;
+const unsigned long long   XAddressOffsetBits            = XPlatformAddressOffsetBits;
+const unsigned long long   XAddressOffsetMask            = (((unsigned long long)1 << XAddressOffsetBits) - 1) << XAddressOffsetShift;
+const size_t      XAddressOffsetMax                      = (unsigned long long)1 << XAddressOffsetBits;
+
+const unsigned long long   XPlatformAddressMetadataShift = XPlatformAddressOffsetBits;
+
+const unsigned long long   XAddressMetadataShift         = XPlatformAddressMetadataShift;
+
+const unsigned long long LogicClockMask = XAddressOffsetMask;
+const size_t GidMask = (((unsigned long long)1 << XPlatformGidMaskBits) - 1) << XAddressOffsetShift;
+const size_t VectorClockLengthMask = (((unsigned long long)1 << XPlatformVectorClockLengthBits) - 1) << XAddressOffsetShift;
+
+
+inline unsigned long long int offset(unsigned long long value) {
+    return value & XAddressOffsetMask;
+}
+
+inline unsigned long long* clocks_address(unsigned long long value) {
+    return (unsigned long long *) (value & XAddressOffsetMask);
+}
+
+inline VectorClock* address(unsigned long long *value) {
+    return value;
+}
+
+inline char get_len(const VectorClock *vclock) {
+    return (char) ((*vclock >> XPlatformLengthBitsOffset) & VectorClockLengthMask);
+}
+
+inline clk* get_clock_unit_by_index(VectorClock *vc, char index) {
+    char len = get_len(vc);
+    if (index > len) {
+        return NULL;
+    }
+    if (len == 1) {
+        return vc;
+    } else {
+        return address((unsigned long long *) offset(*vc));
+    }
+
+}
+
+inline void set_len(VectorClock *vc, char length) {
+    *vc = ((unsigned long long)length << XPlatformLengthBitsOffset) & ((((unsigned long long)1 << XPlatformLengthBitsOffset) - 1) & (*vc));
+}
+
+inline void set_clock_unit_only(clk *clock, clk logic_time) {
+    *clock = (((*clock) >> XPlatformLengthBitsOffset) << XPlatformLengthBitsOffset) | ((((unsigned long long)1 << XPlatformLengthBitsOffset) - 1) & (logic_time));
+}
+
+inline void set_clock_unit_by_index(VectorClock *vclock, char index, clk clock) {
+    if(get_len(vclock) == 1) {
+        *vclock = (((*vclock) >> XPlatformLengthBitsOffset) << XPlatformLengthBitsOffset) | ((((unsigned long long)1 << XPlatformLengthBitsOffset) - 1) & (clock));
+    } else {
+        *(clocks_address(*vclock) + index) = (((*vclock) >> XPlatformLengthBitsOffset) << XPlatformLengthBitsOffset) | ((((unsigned long long)1 << XPlatformLengthBitsOffset) - 1) & (clock));
+    }
+}
+
+inline clk init_clock(char gid, clk logic_clk) {
+    return ((clk)gid << XPlatformAddressOffsetBits) | offset(logic_clk);
+}
+
 
 #define APPEND(x, y) x ## y
 #define ULL(x) APPEND(x, ull)
@@ -66,14 +134,12 @@ typedef struct VectorClock {
 
 #define LOGIC_CLOCK_UNDEFINE ULL(0xFFFFFFFFFFFFFFFF)
 
-#define LOGIC_CLOCK_TEMPLATE 0xFFFFFFFFFFFFFFF
-#define LOGIC_CLOCK_BITS 60u
-#define get_logic_clock(clock) (clock & ULL(LOGIC_CLOCK_TEMPLATE))
-#define get_gid(clock) ((clock >> LOGIC_CLOCK_BITS) & 0xF)
-#define init_clock(gid, logic_clk) ((clk)gid << LOGIC_CLOCK_BITS) | (ULL(LOGIC_CLOCK_TEMPLATE) & logic_clk)
-#define clock_overlap(gid, logic_clk) (gid > 0xF || (long long)logic_clk > LOGIC_CLOCK_TEMPLATE) ? 1 : 0
-#define get_clock_unit_by_index(vclock, index) (index < vclock->length ? (vclock->length == 1 ? &(vclock->clocks.single) : ((unsigned long long *)vclock->clocks.multi + index)) : NULL)
-#define set_clock_unit_by_index(vclock, index, clock)  *((unsigned long long *)vclock->clocks.multi + index) = clock
+//const unsigned long long LOGIC_CLOCK_TEMPLATE = 0xFFFFFFFFFFFFFFF;
+
+
+#define get_logic_clock(clock) offset(clock)
+#define get_gid(clock) ((clock >> XPlatformAddressOffsetBits) & GidMask)
+#define clock_overlap(gid, logic_clk) (gid > GidMask || (long long)logic_clk > LogicClockMask) ? 1 : 0
 
 /**------------------------Vector Clock Lifecycle--------------------------------------*/
 VectorClock*
