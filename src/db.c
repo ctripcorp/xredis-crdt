@@ -483,6 +483,10 @@ void crdtSelectCommand(client *c) {
     if (getLongLongFromObjectOrReply(c, c->argv[1], &gid,
                                  "invalid gid") != C_OK)
         return;
+    if(!check_gid(gid)) {
+        addReplyError(c,"gid must < 15");
+        return;
+    }
 
     if (getLongFromObjectOrReply(c, c->argv[2], &id,
                                  "invalid DB index") != C_OK)

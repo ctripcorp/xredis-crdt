@@ -48,7 +48,12 @@ int isModuleCrdt(robj *obj) {
     return C_ERR;
 }
 
-
+int check_gid(int gid) {
+    if(gid > 0 && gid < 15) {
+        return 1; 
+    }
+    return 0;
+}
 void* getMethod(void* obj, const char* name) {
     void* (*getmethod)(void*);
     // save = (void (*)(redisDb*, rio*, void*))(unsigned long)

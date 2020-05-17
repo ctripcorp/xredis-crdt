@@ -236,7 +236,7 @@ crdtMergeStartCommand(client *c) {
     serverLog(LL_NOTICE, "[CRDT][crdtMergeStartCommand][begin]");
     long long sourceGid;
     if (getLongLongFromObjectOrReply(c, c->argv[1], &sourceGid, NULL) != C_OK) return;
-
+    if(!check_gid(sourceGid)) { return; }
     CRDT_Master_Instance *peerMaster = getPeerMaster(sourceGid);
     if (!peerMaster) {
         if (isMasterMySelf() == C_OK) {
@@ -265,7 +265,7 @@ void
 crdtMergeEndCommand(client *c) {
     long long sourceGid, offset;
     if (getLongLongFromObjectOrReply(c, c->argv[1], &sourceGid, NULL) != C_OK) return;
-
+    if(!check_gid(sourceGid)) goto err;
     CRDT_Master_Instance *peerMaster = getPeerMaster(sourceGid);
     peerMaster->repl_transfer_lastio = server.unixtime;
     if (!peerMaster) goto err;

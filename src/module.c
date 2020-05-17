@@ -1460,6 +1460,12 @@ void * RM_CurrentVectorClock() {
 long long RM_CurrentGid(void) {
     return crdtServer.crdt_gid;
 }
+int RM_CheckGid(int gid) {
+    if(check_gid(gid)) {
+        return REDISMODULE_OK;
+    }
+    return REDISMODULE_ERR;
+}
 void jumpVectorClock() {
     long long qps = getQps();
     incrLocalVcUnit(max(qps * 60 * 24 , 10000));
@@ -4429,6 +4435,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(CrdtMultiWrappedReplicate);
     REGISTER_API(CurrentVectorClock);
     REGISTER_API(CurrentGid);
+    REGISTER_API(CheckGid);
     REGISTER_API(IncrLocalVectorClock);
     REGISTER_API(MergeVectorClock);
     REGISTER_API(ModuleTombstoneSetValue);

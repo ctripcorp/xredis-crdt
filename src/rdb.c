@@ -1665,7 +1665,13 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                         "BODY: %s", auxval->ptr);
                 }
             } else if (!strcasecmp(auxkey->ptr,"crdt-gid")) {
-                crdtServer.crdt_gid = atoi(auxval->ptr);
+                int gid = atoi(auxval->ptr);
+                if(!check_gid(gid)) {
+                    rdbExitReportCorruptRDB(
+                        "Can't load gid from RDB file! "
+                        "BODY: %d", gid);
+                }
+                crdtServer.crdt_gid = gid;
                 // update config file, to persist crdt-gid
                 rewriteConfig(server.configfile);
             } else if (!strcasecmp(auxkey->ptr,"vclock")) {
@@ -1681,6 +1687,11 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                 crdtServer.master_repl_offset = strtoll(auxval->ptr,NULL,10);
             } else if (!strcasecmp(auxkey->ptr,"peer-master-gid")) {
                 int gid = atoi(auxval->ptr);
+                if(!check_gid(gid)) {
+                    rdbExitReportCorruptRDB(
+                        "Can't load peer-master-gid from RDB file! "
+                        "BODY: %d", gid);
+                }
                 CRDT_Master_Instance *masterInstance = getPeerMaster(gid);
                 if(masterInstance == NULL) {
                     masterInstance = createPeerMaster(NULL, gid);
