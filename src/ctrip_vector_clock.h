@@ -35,6 +35,7 @@
 
 #include "sds.h"
 #include <stdlib.h>
+#include <stdio.h>
 
 // "<gid>:<clock>;<gid>:<clock>"
 #define VECTOR_CLOCK_SEPARATOR ";"
@@ -50,160 +51,164 @@
  * and,   lower 60 bits represents the logical clk
  * |0000|0000|xxxxxxxxxxxxxxxxxx|
  * |4bit|4bit|56            bits|
- * |len |gid | logic clock      |
+ * |option |gid | logic clock      |
  * */
 typedef unsigned long long clk;
+
+/**
+ * single one
+ * |0000|0000|xxxxxxxxxxxxxxxxxx|
+ * |4bit|4bit|56            bits|
+ * |len |gid | logic clock      |
+ *
+ * multi one
+ * |0000|0000   |xxxxxxxxxxxxxxxxxx|
+ * |4bit|4bit   | 56          bits |
+ * |len |option | address          |
+ * */
 typedef unsigned long long VectorClock;
 
+
+
 #define VectorClockUnit clk
+#define APPEND(x, y) x ## y
+#define ULL(val) (unsigned long long) val
+
+const size_t       XAddressOffsetBits    = 56; // 65536TB
+const size_t       XLogicClockOffsetBits = 56; // 65536TB
+const size_t       XGidOffsetBits        = 4;
+const size_t       XLengthOffsetBits     = 60;
+
+const VectorClock  XAddressOffsetMask    = (1ull << XAddressOffsetBits) - 1;
+const clk          XLogicClockOffsetMask = (1ull << XLogicClockOffsetBits) - 1;
+const size_t       XGidMask              = (1 << XGidOffsetBits) - 1;
+const size_t       XLenMask              = (1 << XGidOffsetBits) - 1;
+
+const clk          GidCleanUpMask        = ~(ULL(XGidMask) << XLogicClockOffsetBits);
+const clk          LogicTimeCleanUpMask  = ~(XLogicClockOffsetMask);
 
 
-const size_t               XPlatformAddressOffsetBits    = 56; // 65536TB
-const size_t               XPlatformGidMaskBits          = 4;
-const size_t               XPlatformLengthBitsOffset     = XPlatformAddressOffsetBits + XPlatformGidMaskBits;
-const size_t               XPlatformVectorClockLengthBits    = XPlatformGidMaskBits;
-const unsigned long long   XAddressOffsetShift           = 0;
-const unsigned long long   XAddressOffsetBits            = XPlatformAddressOffsetBits;
-const unsigned long long   XAddressOffsetMask            = (((unsigned long long)1 << XAddressOffsetBits) - 1) << XAddressOffsetShift;
-const size_t      XAddressOffsetMax                      = (unsigned long long)1 << XAddressOffsetBits;
-
-const unsigned long long   XPlatformAddressMetadataShift = XPlatformAddressOffsetBits;
-
-const unsigned long long   XAddressMetadataShift         = XPlatformAddressMetadataShift;
-
-const unsigned long long LogicClockMask = XAddressOffsetMask;
-const size_t GidMask = (((unsigned long long)1 << XPlatformGidMaskBits) - 1) << XAddressOffsetShift;
-const size_t VectorClockLengthMask = (((unsigned long long)1 << XPlatformVectorClockLengthBits) - 1) << XAddressOffsetShift;
-
-
-inline unsigned long long int offset(unsigned long long value) {
-    return value & XAddressOffsetMask;
+/**-------------------------------------------length utils-------------------------------------------------**/
+inline char get_len(VectorClock vclock) {
+    return (char) ((ULL(vclock) >> XLengthOffsetBits) & XLenMask);
 }
 
-inline unsigned long long* clocks_address(unsigned long long value) {
-    return (unsigned long long *) (value & XAddressOffsetMask);
+inline void set_len(VectorClock *vclock, char length) {
+    *vclock = (ULL(length) << XLengthOffsetBits) | (((1ull << XLengthOffsetBits) - 1) & *vclock);
 }
 
-inline VectorClock* address(unsigned long long *value) {
-    return value;
+inline int ismulti(VectorClock vclock) {
+    return get_len(vclock) > 1 ? 1 : 0;
+}
+/**-------------------------------------------gid utils-------------------------------------------------**/
+inline char get_gid(clk clock) {
+    return (char) ((clock >> XLogicClockOffsetBits) & XGidMask);
 }
 
-inline char get_len(const VectorClock *vclock) {
-    return (char) ((*vclock >> XPlatformLengthBitsOffset) & VectorClockLengthMask);
+inline void set_gid(clk *clock, char gid) {
+    *clock = (*clock & GidCleanUpMask) | ((ULL(gid) & XGidMask) << XLogicClockOffsetBits);
+}
+
+/**-------------------------------------------logic clock utils-----------------------------------------**/
+inline long long get_logic_clock(clk clock) {
+    return (long long) (clock & XLogicClockOffsetMask);
+}
+
+inline void set_logic_clock(clk *clock, long long logic_time) {
+    *clock = ULL((*clock & LogicTimeCleanUpMask)) | logic_time;
+}
+
+/**-------------------------------------------vector clock utils-------------------------------------------------**/
+inline clk* clocks_address(VectorClock value) {
+    return (clk *) (value & XAddressOffsetMask);
 }
 
 inline clk* get_clock_unit_by_index(VectorClock *vc, char index) {
-    char len = get_len(vc);
+    char len = get_len(*vc);
     if (index > len) {
         return NULL;
     }
     if (len == 1) {
-        return vc;
+        return (clk*) vc;
     } else {
-        return address((unsigned long long *) offset(*vc));
+        return (clk *) (clocks_address(*vc) + (int)index);
     }
 
 }
 
-inline void set_len(VectorClock *vc, char length) {
-    *vc = ((unsigned long long)length << XPlatformLengthBitsOffset) & ((((unsigned long long)1 << XPlatformLengthBitsOffset) - 1) & (*vc));
-}
-
-inline void set_clock_unit_only(clk *clock, clk logic_time) {
-    *clock = (((*clock) >> XPlatformLengthBitsOffset) << XPlatformLengthBitsOffset) | ((((unsigned long long)1 << XPlatformLengthBitsOffset) - 1) & (logic_time));
-}
-
-inline void set_clock_unit_by_index(VectorClock *vclock, char index, clk clock) {
-    if(get_len(vclock) == 1) {
-        *vclock = (((*vclock) >> XPlatformLengthBitsOffset) << XPlatformLengthBitsOffset) | ((((unsigned long long)1 << XPlatformLengthBitsOffset) - 1) & (clock));
+void set_clock_unit_by_index(VectorClock *vclock, char index, clk gid_logic_time) {
+    clk *clock;
+    if(get_len(*vclock) == 1) {
+        clock = (clk*) vclock;
     } else {
-        *(clocks_address(*vclock) + index) = (((*vclock) >> XPlatformLengthBitsOffset) << XPlatformLengthBitsOffset) | ((((unsigned long long)1 << XPlatformLengthBitsOffset) - 1) & (clock));
+        clock = get_clock_unit_by_index(vclock, index);
     }
+    set_gid(clock, get_gid(gid_logic_time));
+    set_logic_clock(clock, get_logic_clock(gid_logic_time));
 }
-
+//
 inline clk init_clock(char gid, clk logic_clk) {
-    return ((clk)gid << XPlatformAddressOffsetBits) | offset(logic_clk);
+    return (clk)((unsigned long long)gid << XAddressOffsetBits) | get_logic_clock(logic_clk);
 }
 
-
-#define APPEND(x, y) x ## y
-#define ULL(x) APPEND(x, ull)
 //#define null NULL
 #define CLOCK_UNIT_MAX 0
 #define CLOCK_UNIT_ALIGN 1
 
 #define LOGIC_CLOCK_UNDEFINE ULL(0xFFFFFFFFFFFFFFFF)
 
-//const unsigned long long LOGIC_CLOCK_TEMPLATE = 0xFFFFFFFFFFFFFFF;
-
-
-#define get_logic_clock(clock) offset(clock)
-#define get_gid(clock) ((clock >> XPlatformAddressOffsetBits) & GidMask)
-#define clock_overlap(gid, logic_clk) (gid > GidMask || (long long)logic_clk > LogicClockMask) ? 1 : 0
 
 /**------------------------Vector Clock Lifecycle--------------------------------------*/
-VectorClock*
-mergeMinVectorClock(VectorClock *vclock1, VectorClock *vclock2);
-
-void
-cloneVectorClock(VectorClock *dst, VectorClock *src);
-
-VectorClock*
+VectorClock
 newVectorClock(int numVcUnits);
 
 void
-freeVectorClock(VectorClock *vc);
+freeVectorClock(VectorClock vc);
 
 void
-freeInnerClocks(VectorClock *vc);
+freeInnerClocks(VectorClock vclock);
 
-VectorClock*
-addVectorClockUnit(VectorClock *vc, int gid, long long logic_time);
+VectorClock
+addVectorClockUnit(VectorClock vc, int gid, long long logic_time);
 
-VectorClock*
-dupVectorClock(VectorClock *vc);
+VectorClock
+dupVectorClock(VectorClock vc);
 
 /**------------------------Vector Clock & sds convertion--------------------------------------*/
-VectorClock*
+VectorClock
 sdsToVectorClock(sds vcStr);
 
 sds
-vectorClockToSds(VectorClock *vc);
-
-void
-sdsCpToVectorClock(sds src, VectorClock *dst);
+vectorClockToSds(VectorClock vc);
 
 
 /**------------------------Vector Clock Util--------------------------------------*/
 
-clk*
-getVectorClockUnit(VectorClock *vc, int gid);
+clk
+getVectorClockUnit(VectorClock vc, int gid);
 
 void
 incrLogicClock(VectorClock *vc, int gid, int delta);
 
-//vector_clock, length, gid, clock, gid, clock, gid, clock
 void
-init(VectorClock *vc, int num, ...);
+sortVectorClock(VectorClock vc);
 
-void
-merge(VectorClock *dst, VectorClock *src);
+/**------------------------Vector Clock Merge--------------------------------------*/
 
-// for key's vector clock update
 void
 mergeLogicClock(VectorClock *dst, VectorClock *src, int gid);
 
-VectorClock*
-getMonoVectorClock(VectorClock *src, int gid);
+VectorClock
+mergeMinVectorClock(VectorClock vclock1, VectorClock vclock2);
 
-void
-sortVectorClock(VectorClock *vc);
+VectorClock
+getMonoVectorClock(VectorClock src, int gid);
 
 int
-isVectorClockMonoIncr(VectorClock *current, VectorClock *future);
+isVectorClockMonoIncr(VectorClock current, VectorClock future);
 
-VectorClock*
-vectorClockMerge(VectorClock *vclock1, VectorClock *vclock2);
+VectorClock
+vectorClockMerge(VectorClock vclock1, VectorClock vclock2);
 
 /**------------------------Replication Usage--------------------------------------*/
 void
