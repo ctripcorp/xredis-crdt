@@ -208,8 +208,9 @@ void crdtReplicationSetMaster(int gid, char *ip, int port) {
     peerMaster->masterport = port;
     if (peerMaster->master) {
         freeClient(peerMaster->master);
-    }
-
+    } 
+    crdtCancelReplicationHandshake(gid);
+    
     peerMaster->repl_state = REPL_STATE_CONNECT;
     peerMaster->repl_down_since = 0;
 }
