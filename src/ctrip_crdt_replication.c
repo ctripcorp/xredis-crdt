@@ -73,7 +73,7 @@ void freePeerMaster(CRDT_Master_Instance *masterInstance) {
     serverAssert(ln != NULL);
     listDelNode(l,ln);
 
-    if(masterInstance->vectorClock) {
+    if(masterInstance->vectorClock != LOGIC_CLOCK_UNDEFINE) {
         freeVectorClock(masterInstance->vectorClock);
         masterInstance->vectorClock = NULL;
     }
@@ -108,8 +108,8 @@ CRDT_Master_Instance *getPeerMaster(int gid) {
 }
 
 void refreshVectorClock(client *c, sds vcStr) {
-    VectorClock *vclock = sdsToVectorClock(vcStr);
-    if(c->vectorClock) {
+    VectorClock vclock = sdsToVectorClock(vcStr);
+    if(c->vectorClock != LOGIC_CLOCK_UNDEFINE) {
         freeVectorClock(c->vectorClock);
         c->vectorClock = NULL;
     }
@@ -247,14 +247,14 @@ crdtMergeStartCommand(client *c) {
         listAddNodeTail(crdtServer.crdtMasters, peerMaster);
     }
     peerMaster->repl_transfer_lastio = server.unixtime;
-    VectorClock *vclock = sdsToVectorClock(c->argv[2]->ptr);
-    VectorClock *curGcVclock = crdtServer.gcVectorClock;
+    VectorClock vclock = sdsToVectorClock(c->argv[2]->ptr);
+    VectorClock curGcVclock = crdtServer.gcVectorClock;
     crdtServer.gcVectorClock = vectorClockMerge(crdtServer.gcVectorClock, vclock);
-    if (getVectorClockUnit(crdtServer.vectorClock, sourceGid) == NULL) {
+    if (getVectorClockUnit(crdtServer.vectorClock, sourceGid) == 0) {
         crdtServer.vectorClock = addVectorClockUnit(crdtServer.vectorClock, sourceGid, 0);
     }
-    freeVectorClock(vclock);;
-    freeVectorClock(curGcVclock);
+    freeInnerClocks(vclock);;
+    freeInnerClocks(curGcVclock);
     server.dirty ++;
     serverLog(LL_NOTICE, "[CRDT][crdtMergeStartCommand][end] master gid: %lld", sourceGid);
 }
@@ -271,11 +271,11 @@ crdtMergeEndCommand(client *c) {
     if (!peerMaster) goto err;
     serverLog(LL_NOTICE, "[CRDT][crdtMergeEndCommand][begin] master gid: %lld", sourceGid);
 
-    if (peerMaster->vectorClock != NULL) {
+    if (peerMaster->vectorClock != LOGIC_CLOCK_UNDEFINE) {
         freeVectorClock(peerMaster->vectorClock);
     }
     peerMaster->vectorClock = sdsToVectorClock(c->argv[2]->ptr);
-    mergeLogicClock(crdtServer.vectorClock, peerMaster->vectorClock, sourceGid);
+    mergeLogicClock(&crdtServer.vectorClock, &peerMaster->vectorClock, sourceGid);
     refreshGcVectorClock(peerMaster->vectorClock);
     memcpy(peerMaster->master_replid, c->argv[3]->ptr, sizeof(peerMaster->master_replid));
     if (getLongLongFromObjectOrReply(c, c->argv[4], &offset, NULL) != C_OK) return;
@@ -299,15 +299,15 @@ err:
 
 /** ================================== CRDT Repl MASTER ================================== */
 
-long long getMyGidLogicTime(VectorClock *vc) {
-    if (vc == NULL) {
+long long getMyGidLogicTime(VectorClock vc) {
+    if (vc != LOGIC_CLOCK_UNDEFINE) {
         return 0;
     }
-    VectorClockUnit *vcu = getVectorClockUnit(vc, crdtServer.crdt_gid);
-    if (vcu == NULL) {
+    VectorClockUnit vcu = getVectorClockUnit(vc, crdtServer.crdt_gid);
+    if (vcu == 0) {
         return 0;
     }
-    return get_logic_clock(*vcu);
+    return get_logic_clock(vcu);
 }
 
 long long getMyLogicTime() {
@@ -1173,7 +1173,7 @@ void crdtOvcCommand(client *c) {
     int flags = PROPAGATE_REPL;
     if (gid != crdtServer.crdt_gid) {
         sds vclockStr = (sds) c->argv[2]->ptr;
-        VectorClock *vclock = sdsToVectorClock(vclockStr);
+        VectorClock vclock = sdsToVectorClock(vclockStr);
 
         CRDT_Master_Instance *peerMaster = getPeerMaster(gid);
         if (peerMaster == NULL) {
@@ -1187,8 +1187,8 @@ void crdtOvcCommand(client *c) {
                 return;
             }
         }
-        VectorClock *newVectorClock = vectorClockMerge(peerMaster->vectorClock, vclock);
-        if (peerMaster->vectorClock != NULL) {
+        VectorClock newVectorClock = vectorClockMerge(peerMaster->vectorClock, vclock);
+        if (peerMaster->vectorClock != LOGIC_CLOCK_UNDEFINE) {
             freeVectorClock(peerMaster->vectorClock);
         }
         freeVectorClock(vclock);

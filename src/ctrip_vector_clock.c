@@ -70,7 +70,7 @@ newVectorClock(int numVcUnits) {
 
 void
 freeVectorClock(VectorClock vc) {
-    if (vc == NULL || (get_len(vc) < 2)) {
+    if (vc == LOGIC_CLOCK_UNDEFINE || (get_len(vc) < 2)) {
         return;
     }
     zfree(clocks_address(vc));
@@ -137,7 +137,9 @@ getVectorClockUnit(VectorClock vc, int gid) {
     if (vc == LOGIC_CLOCK_UNDEFINE || get_len(vc) == 0) {
         return 0ull;
     }
-    return *get_clock_unit(&vc, gid);
+    clk* result = get_clock_unit(&vc, gid);
+    if(result == NULL) return 0ull;
+    return *result;
 }
 
 void incrLogicClock(VectorClock *vc, int gid, int delta) {
@@ -225,10 +227,12 @@ void mergeLogicClock(VectorClock *dst, VectorClock *src, int gid) {
 VectorClock
 dupVectorClock(VectorClock vc) {
     char length = get_len(vc);
-    VectorClock dup = newVectorClock(length);
-    dup = vc;
+    VectorClock dup = LOGIC_CLOCK_UNDEFINE;
     if(length > 1) {
+        dup = newVectorClock(length);
         memcpy(clocks_address(dup), clocks_address(vc), length * sizeof(clk));
+    }else{
+        dup = vc;
     }
     return dup;
 }
@@ -558,9 +562,16 @@ int testFreeVectorClock(void) {
 
 int testvectorClockToSds(void) {
     printf("========[testvectorClockToSds]==========\r\n");
-    sds vcStr = sdsnew("1:123;2:234;3:345");
-    VectorClock vc = sdsToVectorClock(vcStr);
-    sds dup = vectorClockToSds(vc);
+    sds vcStr = sdsnew("1:123");
+    VectorClock vc = newVectorClock(1);
+    set_clock_unit_by_index(&vc, 0, init_clock(1, 123));
+    sds dup = vectorClockToSds(dupVectorClock(vc));
+    printf("expected: %s, actual: %s \r\n", vcStr, dup);
+    test_cond("[testvectorClockToSds]", sdscmp(vcStr, dup) == 0);
+    freeVectorClock(vc);
+    vcStr = sdsnew("1:123;2:234;3:345");
+    vc = sdsToVectorClock(vcStr);
+    dup = vectorClockToSds(vc);
     printf("expected: %s, actual: %s \r\n", vcStr, dup);
     test_cond("[testvectorClockToSds]", sdscmp(vcStr, dup) == 0);
     freeVectorClock(vc);
@@ -608,6 +619,10 @@ int testDupVectorClock(void) {
     sds dupSds = vectorClockToSds(dup);
 
     test_cond("[testDupVectorClock]", sdscmp(vcStr, dupSds) == 0);
+    test_cond("[testDupVectorClock] value", dup != vc);
+    freeVectorClock(vc);
+    freeVectorClock(dup);
+
     return 0;
 }
 

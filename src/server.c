@@ -339,7 +339,7 @@ struct redisCommand redisCommandTable[] = {
 void
 incrLocalVcUnit(long delta) {
     // VectorClockUnit *localVcu = getVectorClockUnit(crdtServer.vectorClock, crdtServer.crdt_gid);
-    incrLogicClock(crdtServer.vectorClock, crdtServer.crdt_gid, delta);
+    incrLogicClock(&crdtServer.vectorClock, crdtServer.crdt_gid, delta);
 }
 
 /*============================ Utility functions ============================ */
@@ -2111,13 +2111,13 @@ void initServer(struct redisServer *srv) {
         srv->crdtMasters = listCreate();
         srv->crdt_gid = server.crdt_gid;
     }
-    VectorClock *vc = newVectorClock(1);
-    init(vc, 1,crdtServer.crdt_gid, (long long)crdtServer.local_clock);
-    // addVectorClockUnit(vc, crdtServer.crdt_gid, (long long)crdtServer.local_clock);
+    VectorClock vc = newVectorClock(1);
+    set_clock_unit_by_index(&vc, 0, init_clock(crdtServer.crdt_gid, (long long)crdtServer.local_clock));
+
     srv->vectorClock = vc;
-    VectorClock *gcVclock = newVectorClock(1);
-    init(gcVclock, 1,crdtServer.crdt_gid, 0);
-    srv->gcVectorClock = gcVclock;
+    VectorClock gcVclock = newVectorClock(1);
+    set_clock_unit_by_index(&gcVclock, 0, init_clock(crdtServer.crdt_gid, 0));
+    srv->gcVectorClock =  gcVclock;
 }
 
 /* Populates the Redis Command Table starting from the hard coded list
@@ -3805,7 +3805,9 @@ void redisAsciiArt(void) {
 
 static void sigShutdownHandler(int sig) {
     char *msg;
-
+    freeInnerClocks(crdtServer.vectorClock);
+    freeInnerClocks(server.vectorClock);
+    serverLog(LL_WARNING, "sigShutdown free VC");
     switch (sig) {
     case SIGINT:
         msg = "Received SIGINT scheduling shutdown...";
@@ -3816,7 +3818,6 @@ static void sigShutdownHandler(int sig) {
     default:
         msg = "Received shutdown signal, scheduling shutdown...";
     };
-
     /* SIGINT is often delivered via Ctrl+C in an interactive session.
      * If we receive the signal the second time, we interpret this as
      * the user really wanting to quit ASAP without waiting to persist
@@ -4223,15 +4224,18 @@ int main(int argc, char **argv) {
     aeSetBeforeSleepProc(server.el,beforeSleep);
     aeSetAfterSleepProc(server.el,afterSleep);
     aeMain(server.el);
+    serverLog(LL_WARNING, "redis over");
     aeDeleteEventLoop(server.el);
+    freeInnerClocks(crdtServer.vectorClock);
+    freeInnerClocks(server.vectorClock);
     return 0;
 }
 
 void
-refreshGcVectorClock(VectorClock *other) {
-    VectorClock *gcVectorClock = crdtServer.gcVectorClock;
+refreshGcVectorClock(VectorClock other) {
+    VectorClock gcVectorClock = crdtServer.gcVectorClock;
     crdtServer.gcVectorClock = mergeMinVectorClock(crdtServer.gcVectorClock,  other); 
-    freeVectorClock(gcVectorClock);
+    freeInnerClocks(gcVectorClock);
 }
 
 /* The End */

@@ -74,18 +74,18 @@ typedef unsigned long long VectorClock;
 #define APPEND(x, y) x ## y
 #define ULL(val) (unsigned long long) val
 
-const size_t       XAddressOffsetBits    = 56; // 65536TB
-const size_t       XLogicClockOffsetBits = 56; // 65536TB
-const size_t       XGidOffsetBits        = 4;
-const size_t       XLengthOffsetBits     = 60;
+static const size_t       XAddressOffsetBits    = 56; // 65536TB
+static const size_t       XLogicClockOffsetBits = 56; // 65536TB
+static const size_t       XGidOffsetBits        = 4;
+static const size_t       XLengthOffsetBits     = 60;
 
-const VectorClock  XAddressOffsetMask    = (1ull << XAddressOffsetBits) - 1;
-const clk          XLogicClockOffsetMask = (1ull << XLogicClockOffsetBits) - 1;
-const size_t       XGidMask              = (1 << XGidOffsetBits) - 1;
-const size_t       XLenMask              = (1 << XGidOffsetBits) - 1;
+static const VectorClock  XAddressOffsetMask    = (1ull << XAddressOffsetBits) - 1;
+static const clk          XLogicClockOffsetMask = (1ull << XLogicClockOffsetBits) - 1;
+static const size_t       XGidMask              = (1 << XGidOffsetBits) - 1;
+static const size_t       XLenMask              = (1 << XGidOffsetBits) - 1;
 
-const clk          GidCleanUpMask        = ~(ULL(XGidMask) << XLogicClockOffsetBits);
-const clk          LogicTimeCleanUpMask  = ~(XLogicClockOffsetMask);
+static const clk          GidCleanUpMask        = ~(ULL(XGidMask) << XLogicClockOffsetBits);
+static const clk          LogicTimeCleanUpMask  = ~(XLogicClockOffsetMask);
 
 
 /**-------------------------------------------length utils-------------------------------------------------**/
@@ -110,7 +110,7 @@ inline void set_gid(clk *clock, char gid) {
 }
 
 /**-------------------------------------------logic clock utils-----------------------------------------**/
-inline long long get_logic_clock(clk clock) {
+static inline long long get_logic_clock(clk clock) {
     return (long long) (clock & XLogicClockOffsetMask);
 }
 
@@ -119,7 +119,7 @@ inline void set_logic_clock(clk *clock, long long logic_time) {
 }
 
 /**-------------------------------------------vector clock utils-------------------------------------------------**/
-inline clk* clocks_address(VectorClock value) {
+static clk* clocks_address(VectorClock value) {
     return (clk *) (value & XAddressOffsetMask);
 }
 
@@ -136,7 +136,7 @@ inline clk* get_clock_unit_by_index(VectorClock *vc, char index) {
 
 }
 
-void set_clock_unit_by_index(VectorClock *vclock, char index, clk gid_logic_time) {
+static void set_clock_unit_by_index(VectorClock *vclock, char index, clk gid_logic_time) {
     clk *clock;
     if(get_len(*vclock) == 1) {
         clock = (clk*) vclock;

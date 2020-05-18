@@ -1675,8 +1675,8 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                 // update config file, to persist crdt-gid
                 rewriteConfig(server.configfile);
             } else if (!strcasecmp(auxkey->ptr,"vclock")) {
-                if (crdtServer.vectorClock) {
-                    freeVectorClock(crdtServer.vectorClock);
+                if (crdtServer.vectorClock != LOGIC_CLOCK_UNDEFINE) {
+                    freeInnerClocks(crdtServer.vectorClock);
                 }
                 crdtServer.vectorClock = sdsToVectorClock(auxval->ptr);
             } else if (!strcasecmp(auxkey->ptr,"crdt-repl-id")) {
@@ -1741,9 +1741,9 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                 decrRefCount(key);
                 freeFakeClient(fakeClient);
                 serverLog(LL_WARNING, "crdt load not crdt rdb datatype error");
-                freeVectorClock(crdtServer.vectorClock);
+                freeInnerClocks(crdtServer.vectorClock);
                 crdtServer.vectorClock = newVectorClock(1);
-                init(crdtServer.vectorClock, 1,crdtServer.crdt_gid, 0);
+                set_clock_unit_by_index(&crdtServer.vectorClock, 0, init_clock(crdtServer.crdt_gid, 0));
                 return C_ERR;
             }
         }else{
