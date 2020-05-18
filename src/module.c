@@ -1453,7 +1453,7 @@ int RM_CrdtMultiWrappedReplicate(RedisModuleCtx *ctx, const char *cmdname, const
 }
 
 //todo: re-use
-void * RM_CurrentVectorClock() {
+long long RM_CurrentVectorClock() {
     return crdtServer.vectorClock;
 }
 
@@ -1474,9 +1474,9 @@ void RM_IncrLocalVectorClock (long long delta) {
     incrLocalVcUnit(delta);
 }
 
-void RM_MergeVectorClock (int gid, VectorClock *vclock) {
+void RM_MergeVectorClock (int gid, VectorClock vclock) {
     
-    updateProcessVectorClock(crdtServer.vectorClock, vclock, gid, crdtServer.crdt_gid);
+    updateProcessVectorClock(&crdtServer.vectorClock, &vclock, gid, crdtServer.crdt_gid);
     
     
     // refreshMinVectorClock(vclock, gid);

@@ -914,7 +914,7 @@ void freeClient(client *c) {
     /* Release other dynamically allocated client structure fields,
      * and finally release the client structure itself. */
     if (c->name) decrRefCount(c->name);
-    if (c->vectorClock) {
+    if (c->vectorClock == LOGIC_CLOCK_UNDEFINE) {
         freeVectorClock(c->vectorClock);
         c->vectorClock = NULL;
     }
