@@ -2113,7 +2113,6 @@ void initServer(struct redisServer *srv) {
     }
     VectorClock vc = newVectorClock(1);
     set_clock_unit_by_index(&vc, 0, init_clock(crdtServer.crdt_gid, (long long)crdtServer.local_clock));
-
     srv->vectorClock = vc;
     VectorClock gcVclock = newVectorClock(1);
     set_clock_unit_by_index(&gcVclock, 0, init_clock(crdtServer.crdt_gid, 0));
@@ -3805,9 +3804,6 @@ void redisAsciiArt(void) {
 
 static void sigShutdownHandler(int sig) {
     char *msg;
-    freeInnerClocks(crdtServer.vectorClock);
-    freeInnerClocks(server.vectorClock);
-    serverLog(LL_WARNING, "sigShutdown free VC");
     switch (sig) {
     case SIGINT:
         msg = "Received SIGINT scheduling shutdown...";
@@ -4224,10 +4220,7 @@ int main(int argc, char **argv) {
     aeSetBeforeSleepProc(server.el,beforeSleep);
     aeSetAfterSleepProc(server.el,afterSleep);
     aeMain(server.el);
-    serverLog(LL_WARNING, "redis over");
     aeDeleteEventLoop(server.el);
-    freeInnerClocks(crdtServer.vectorClock);
-    freeInnerClocks(server.vectorClock);
     return 0;
 }
 
@@ -4235,7 +4228,7 @@ void
 refreshGcVectorClock(VectorClock other) {
     VectorClock gcVectorClock = crdtServer.gcVectorClock;
     crdtServer.gcVectorClock = mergeMinVectorClock(crdtServer.gcVectorClock,  other); 
-    freeInnerClocks(gcVectorClock);
+    freeVectorClock(gcVectorClock);
 }
 
 /* The End */

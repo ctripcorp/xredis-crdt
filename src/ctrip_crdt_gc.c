@@ -181,7 +181,7 @@ VectorClock getGcVectorClock() {
         VectorClock old = gcVectorClock;
         gcVectorClock = mergeMinVectorClock(old, other);
         
-        freeInnerClocks(old);
+        freeVectorClock(old);
         // for (int i = 0; i < gcVectorClock->length; i++) {
         //     VectorClockUnit *gcVectorClockUnit = &(gcVectorClock->clocks[i]);
         //     VectorClockUnit *otherVectorClockUnit = getVectorClockUnit(other, gcVectorClock->clocks[i].gid);
@@ -196,9 +196,9 @@ VectorClock getGcVectorClock() {
 }
 void updateGcVectorClock() {
     
-    if (crdtServer.gcVectorClock != LOGIC_CLOCK_UNDEFINE) {
-        freeInnerClocks(crdtServer.gcVectorClock);
-        crdtServer.gcVectorClock = LOGIC_CLOCK_UNDEFINE;
+    if (!isNullVectorClock(crdtServer.gcVectorClock)) {
+        freeVectorClock(crdtServer.gcVectorClock);
+        crdtServer.gcVectorClock = newVectorClock(0);
     }
     crdtServer.gcVectorClock = getGcVectorClock();
 }

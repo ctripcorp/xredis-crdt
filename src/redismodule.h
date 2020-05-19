@@ -305,6 +305,7 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     void *getapifuncptr = ((void**)ctx)[0];
     RedisModule_GetApi = (int (*)(const char *, void *)) (unsigned long)getapifuncptr;
     REDISMODULE_GET_API(Alloc);
+    REDISMODULE_GET_API(UsedMemory);
     REDISMODULE_GET_API(Calloc);
     REDISMODULE_GET_API(Free);
     REDISMODULE_GET_API(Realloc);

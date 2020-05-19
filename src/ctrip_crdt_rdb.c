@@ -320,7 +320,7 @@ int checkTombstoneType(void* current, void* other, robj* key) {
                 key->ptr, c->type, o->type);
         return C_ERR;
     }
-    if(!isTombstone(c->type)) {
+    if(!isTombstone(c)) {
         serverLog(LL_WARNING, "[INCONSIS][MERGE TOMBSTONE TYPE] key: %s, tombstone type: %d",
                 key->ptr, c->type);
         return C_ERR;
@@ -578,7 +578,7 @@ int initedCrdtServer() {
         return 1;
     }
     VectorClockUnit unit = getVectorClockUnit(crdtServer.vectorClock, crdtServer.crdt_gid);
-    if(unit == 0) return 0;
+    if(isNullVectorClockUnit(unit)) return 0;
     long long vcu = get_logic_clock(unit);
     if(vcu == 0) {
         return 0;
