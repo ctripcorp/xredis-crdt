@@ -2084,7 +2084,7 @@ int rewriteConfig(char *path) {
     rewriteConfigNumericalOption(state,"crdt-gid", crdtServer.crdt_gid, CONFIG_DEFAULT_GID);
     VectorClockUnit unit = getVectorClockUnit(crdtServer.vectorClock,crdtServer.crdt_gid);
     
-    if(unit != NULL) {
+    if(!isNullVectorClockUnit(unit)) {
         long long vcu = get_logic_clock(unit);
         rewriteConfigNumericalOption(state, "local-clock", vcu, CONFIG_DEFAULT_VECTORCLOCK_UNIT);
     }

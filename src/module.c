@@ -242,7 +242,9 @@ static void zsetKeyReset(RedisModuleKey *key);
 void *RM_Alloc(size_t bytes) {
     return zmalloc(bytes);
 }
-
+size_t RM_UsedMemory() {
+    return zmalloc_used_memory();
+}
 /* Use like calloc(). Memory allocated with this function is reported in
  * Redis INFO memory, used for keys eviction according to maxmemory settings
  * and in general is taken into account as memory allocated by Redis.
@@ -1454,7 +1456,7 @@ int RM_CrdtMultiWrappedReplicate(RedisModuleCtx *ctx, const char *cmdname, const
 
 //todo: re-use
 long long RM_CurrentVectorClock() {
-    return crdtServer.vectorClock;
+    return *(long long*)(&crdtServer.vectorClock);
 }
 
 long long RM_CurrentGid(void) {
@@ -4307,6 +4309,7 @@ size_t moduleCount(void) {
 void moduleRegisterCoreAPI(void) {
     server.moduleapi = dictCreate(&moduleAPIDictType,NULL);
     REGISTER_API(Alloc);
+    REGISTER_API(UsedMemory);
     REGISTER_API(Calloc);
     REGISTER_API(Realloc);
     REGISTER_API(Free);

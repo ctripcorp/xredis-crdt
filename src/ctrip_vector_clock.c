@@ -41,8 +41,11 @@
 /**------------------------Vector Clock Inner Functions--------------------------------------*/
 
 static inline clk *get_clock_unit(VectorClock *vc, char gid) {
-    if (get_len(*vc) == 1 && get_gid(*vc) == gid) {
-        return (clk *) vc;
+    if(vc == NULL) {
+        return NULL;
+    }
+    if (get_len(*vc) == 1 && get_gid(*get_clock_unit_by_index(vc, 0)) == gid) {
+        return get_clock_unit_by_index(vc, 0);
     }
     for (char i = 0; i < get_len(*vc); i++) {
         clk *clock = (clk *)(get_clock_unit_by_index(vc, i));
@@ -56,25 +59,44 @@ static inline clk *get_clock_unit(VectorClock *vc, char gid) {
 
 /**------------------------Vector Clock Lifecycle--------------------------------------*/
 
-
-VectorClock
-newVectorClock(int numVcUnits) {
-    VectorClock result = 0ull;
-    if(numVcUnits > 1) {
-        clk *clocks = zmalloc(sizeof(clk) * numVcUnits);
-        result = ULL(clocks);
+#if defined(TCL_TEST)
+    VectorClock
+    newVectorClock(int numVcUnits) {
+        if(numVcUnits == 0) return NULL;
+        VectorClock result = zmalloc(sizeof(VectorClockUnit) * numVcUnits + 1);
+        result->len = numVcUnits;
+        return result;
     }
-    set_len(&result, (char)numVcUnits);
-    return result;
-}
-
-void
-freeVectorClock(VectorClock vc) {
-    if (vc == LOGIC_CLOCK_UNDEFINE || (get_len(vc) < 2)) {
-        return;
+    void
+    freeVectorClock(VectorClock vc) {
+        zfree(vc);
     }
-    zfree(clocks_address(vc));
-}
+#else
+    VectorClock
+    newVectorClock(int numVcUnits) {
+        long long vc = 0ull;
+        VectorClock result = VC(vc);
+        if(numVcUnits == 0) {
+            return result;
+        }
+        if(numVcUnits > 1) {
+            clk *clocks = zmalloc(sizeof(clk) * numVcUnits);
+            result.pvc.pvc = ULL(clocks);
+        }
+        set_len(&result, (char)numVcUnits);
+        return result;
+    }
+    void
+    freeVectorClock(VectorClock vc) {
+        if (isNullVectorClock(vc) || (get_len(vc) < 2)) {
+            return;
+        }
+        zfree(clocks_address(vc));
+    }
+#endif
+
+
+
 
 VectorClock
 addVectorClockUnit(VectorClock vc, int gid, long long logic_time) {
@@ -91,7 +113,7 @@ addVectorClockUnit(VectorClock vc, int gid, long long logic_time) {
         set_clock_unit_by_index(&target, tar_index++, *clock);
         vc_index ++;
     }
-    clk wanted = init_clock((clk)gid, (clk)logic_time);
+    clk wanted = init_clock((char)gid, logic_time);
     if(tar_index < get_len(target)) {
         set_clock_unit_by_index(&target, tar_index++, wanted);
     }
@@ -100,15 +122,7 @@ addVectorClockUnit(VectorClock vc, int gid, long long logic_time) {
     return target;
 }
 
-void
-freeInnerClocks(VectorClock vclock) {
-    if(get_len(vclock) < 2) {
-        return;
-    }
-    if(clocks_address(vclock)) {
-        zfree(clocks_address(vclock));
-    }
-}
+
 
 /**------------------------Vector Clock Util--------------------------------------*/
 
@@ -131,14 +145,14 @@ void sortVectorClock(VectorClock vc) {
     qsort(clocks_address(vc), get_len(vc), sizeof(clk), sort_vector_clock_unit);
 }
 
-
 clk
 getVectorClockUnit(VectorClock vc, int gid) {
-    if (vc == LOGIC_CLOCK_UNDEFINE || get_len(vc) == 0) {
-        return 0ull;
+    long long unit = 0;
+    if (isNullVectorClock(vc)) {
+        return VCU(unit);
     }
     clk* result = get_clock_unit(&vc, gid);
-    if(result == NULL) return 0ull;
+    if(result == NULL) return VCU(unit);
     return *result;
 }
 
@@ -154,7 +168,7 @@ void incrLogicClock(VectorClock *vc, int gid, int delta) {
 static inline int count_all_gid_num(VectorClock dst, VectorClock src) {
     unsigned int gid_bit_map = 0u; int gid_num = 0;
     if(get_len(src) == 1) {
-        unsigned char gid = (unsigned char) get_gid(src);
+        unsigned char gid = (unsigned char) get_gid(*get_clock_unit_by_index(&src, 0));
         if(!((gid_bit_map >> gid) & 0x1u)) {
             gid_num ++;
             gid_bit_map |= (0x1u << gid);
@@ -169,7 +183,7 @@ static inline int count_all_gid_num(VectorClock dst, VectorClock src) {
         }
     }
     if(get_len(dst) == 1) {
-        unsigned char gid = (unsigned char) get_gid(dst);
+        unsigned char gid = (unsigned char) get_gid(*get_clock_unit_by_index(&dst, 0));
         if(!((gid_bit_map >> gid) & 0x1u)) {
             gid_num ++;
             gid_bit_map |= (0x1u << gid);
@@ -195,17 +209,29 @@ static void commonMergeFunction(VectorClock *dst, VectorClock *src, int gid, int
     //dst does not hold the gid
     if(dst_logic_clock == NULL) {
         char dst_length = get_len(*dst);
-        clk *new_clocks = zmalloc(sizeof(clk) * (dst_length + 1));
-        if (dst_length == 1) {
-            new_clocks[0] = init_clock(get_gid(*dst), get_logic_clock(*dst));
+        VectorClock result = newVectorClock(dst_length + 1);
+        if(dst_length == 1) {
+            set_clock_unit_by_index(&result, 0, *get_clock_unit_by_index(dst, 0));
         } else {
-            memcpy(new_clocks, clocks_address(*dst), dst_length * sizeof(clk));
+            for(int i = 0; i < dst_length; i++) {
+                set_clock_unit_by_index(&result, i, *get_clock_unit_by_index(dst, (char)i));
+            }
         }
-        new_clocks[(int)dst_length] = init_clock(gid, *src_logic_clock);
+        set_clock_unit_by_index(&result, dst_length, init_clock(gid, get_logic_clock(*src_logic_clock)));
+        VectorClock* v = dst;
+        freeVectorClock(*dst);
+        *v = result;
+        // clk *new_clocks = zmalloc(sizeof(clk) * (dst_length + 1));
+        // if (dst_length == 1) {
+        //     new_clocks[0] = init_clock(get_gid(get_frist_unit(dst)), get_logic_clock(get_frist_unit(dst)));
+        // } else {
+        //     memcpy(new_clocks, clocks_address(*dst), dst_length * sizeof(clk));
+        // }
+        // new_clocks[(int)dst_length] = init_clock(gid, get_logic_clock(*src_logic_clock));
 
-        freeInnerClocks(*dst);
-        *dst = ULL(new_clocks);
-        set_len(dst, dst_length + 1);
+        // freeVectorClock(*dst);
+        // dst->pvc.pvc = new_clocks;
+        // set_len(dst, dst_length + 1);
         sortVectorClock(*dst);
 
     } else {
@@ -227,25 +253,25 @@ void mergeLogicClock(VectorClock *dst, VectorClock *src, int gid) {
 VectorClock
 dupVectorClock(VectorClock vc) {
     char length = get_len(vc);
-    VectorClock dup = LOGIC_CLOCK_UNDEFINE;
+    VectorClock dup;
+    dup = newVectorClock(length);
     if(length > 1) {
-        dup = newVectorClock(length);
         memcpy(clocks_address(dup), clocks_address(vc), length * sizeof(clk));
-    }else{
-        dup = vc;
+    }else if(length == 1){
+        set_clock_unit_by_index(&dup, 0, *get_clock_unit_by_index(&vc, 0));
     }
     return dup;
 }
 
 VectorClock
 vectorClockMerge(VectorClock vclock1, VectorClock vclock2) {
-    if (vclock1 == LOGIC_CLOCK_UNDEFINE && vclock2 == LOGIC_CLOCK_UNDEFINE) {
-        return LOGIC_CLOCK_UNDEFINE;
+    if (isNullVectorClock(vclock1) && isNullVectorClock(vclock2)) {
+        return newVectorClock(0);
     }
-    if (vclock1 == LOGIC_CLOCK_UNDEFINE) {
+    if (isNullVectorClock(vclock1)) {
         return dupVectorClock(vclock2);
     }
-    if (vclock2 == LOGIC_CLOCK_UNDEFINE) {
+    if (isNullVectorClock(vclock2)) {
         return dupVectorClock(vclock1);
     }
     int gid_num = count_all_gid_num(vclock1, vclock2);
@@ -254,8 +280,8 @@ vectorClockMerge(VectorClock vclock1, VectorClock vclock2) {
         target = newVectorClock(gid_num);
     } else {
         target = dupVectorClock(vclock2);
-        clk logic_time = max((get_logic_clock(vclock2)), (get_logic_clock(vclock1)));
-        set_logic_clock(&target, logic_time);
+        long long logic_time = max((get_logic_clock(*get_clock_unit_by_index(&vclock2, 0))), (get_logic_clock(*get_clock_unit_by_index(&vclock1, 0))));
+        set_logic_clock(get_clock_unit_by_index(&target, 0), logic_time);
         return target;
     }
 
@@ -268,7 +294,7 @@ vectorClockMerge(VectorClock vclock1, VectorClock vclock2) {
         clk *dst_clock = get_clock_unit_by_index(&vclock2, index2);
         if((char)get_gid(*src_clock) == (char)get_gid(*dst_clock)) {
             long long logic_clock = max((long long)(get_logic_clock(*src_clock)), (long long)(get_logic_clock(*dst_clock)));
-            clk tar_clock = init_clock((clk)get_gid(*src_clock), (clk)logic_clock);
+            clk tar_clock = init_clock(get_gid(*src_clock), logic_clock);
             set_clock_unit_by_index(&target, tar_index++, tar_clock);
             index1 ++;
             index2 ++;
@@ -298,15 +324,15 @@ vectorClockMerge(VectorClock vclock1, VectorClock vclock2) {
 clk
 sdsToVectorClockUnit(sds vcUnitStr) {
     int numElements;
+    long long result = 0;
     sds *vcUnits = sdssplitlen(vcUnitStr, sdslen(vcUnitStr), VECTOR_CLOCK_UNIT_SEPARATOR, 1, &numElements);
     if(!vcUnits || numElements != 2) {
         sdsfreesplitres(vcUnits, numElements);
-        return LOGIC_CLOCK_UNDEFINE;
+        return VCU(result);
     }
     long long ll_gid, ll_time;
     string2ll(vcUnits[0], sdslen(vcUnits[0]), &ll_gid);
     string2ll(vcUnits[1], sdslen(vcUnits[1]), &ll_time);
-
     sdsfreesplitres(vcUnits, numElements);
     return init_clock((char)ll_gid, ll_time);
 }
@@ -318,7 +344,7 @@ sdsToVectorClock(sds vcStr) {
     int numVcUnits, clockNum;
     sds *vcUnits = sdssplitlen(vcStr, sdslen(vcStr), VECTOR_CLOCK_SEPARATOR, 1, &numVcUnits);
     if(numVcUnits <= 0 || !vcUnits) {
-        return LOGIC_CLOCK_UNDEFINE;
+        return newVectorClock(0);
     }
     clockNum = numVcUnits;
     sdstrim(vcUnits[numVcUnits-1], "");
@@ -345,13 +371,13 @@ sdsToVectorClock(sds vcStr) {
 
 sds
 vectorClockToSds(VectorClock vc) {
-    if(!vc || get_len(vc) < 1) {
+    if(isNullVectorClock(vc) || get_len(vc) < 1) {
         return sdsempty();
     }
     int length = get_len(vc);
     sds vcStr = sdsempty();
     if(length == 1) {
-        vcStr = sdscatprintf(vcStr, "%d:%lld", (int)get_gid(vc), get_logic_clock(vc));
+        vcStr = sdscatprintf(vcStr, "%d:%lld", (int)get_gid(*get_clock_unit_by_index(&vc, 0)), get_logic_clock(*get_clock_unit_by_index(&vc, 0)));
     } else {
         for (int i = 0; i < length; i++) {
             clk *vc_unit = get_clock_unit_by_index(&vc, i);
@@ -367,7 +393,7 @@ vectorClockToSds(VectorClock vc) {
 
 int
 isVectorClockMonoIncr(VectorClock current, VectorClock future) {
-    if (current == LOGIC_CLOCK_UNDEFINE || future == LOGIC_CLOCK_UNDEFINE) {
+    if (isNullVectorClock(current) || isNullVectorClock(future)) {
         return 0;
     }
     char current_length = get_len(current), future_length = get_len(future);
@@ -402,9 +428,12 @@ getMonoVectorClock(VectorClock src, int gid) {
     VectorClock dst = newVectorClock(1);
     clk *clock = get_clock_unit(&src, gid);
     if (clock == NULL) {
-        dst = LOGIC_CLOCK_UNDEFINE;
+       return newVectorClock(0);
     } else {
-        dst = *clock;
+        // dst.unit = *clock;
+        clk* f = get_clock_unit_by_index(&dst, 0);
+        set_logic_clock(f, get_logic_clock(*clock));
+        set_gid(f, get_gid(*clock));
     }
     set_len(&dst, 1);
     return dst;
@@ -413,7 +442,7 @@ getMonoVectorClock(VectorClock src, int gid) {
 void cleanVectorClock(VectorClock *vclock) {
     char length = get_len(*vclock);
     if(length == 1) {
-        set_logic_clock(vclock, 0);
+        set_logic_clock(get_clock_unit_by_index(vclock, 0), 0);
     } else {
         int index = 0;
         while(index < length) {
@@ -426,15 +455,15 @@ void cleanVectorClock(VectorClock *vclock) {
 
 VectorClock
 mergeMinVectorClock(VectorClock vclock1, VectorClock vclock2) {
-    if (vclock1 == LOGIC_CLOCK_UNDEFINE && vclock2 == LOGIC_CLOCK_UNDEFINE) {
-        return LOGIC_CLOCK_UNDEFINE;
+    if (isNullVectorClock(vclock1) && isNullVectorClock(vclock2)) {
+        return newVectorClock(0);
     }
-    if (vclock1 == LOGIC_CLOCK_UNDEFINE) {
+    if (isNullVectorClock(vclock1)) {
         VectorClock result = dupVectorClock(vclock2);
         cleanVectorClock(&result);
         return result;
     }
-    if (vclock2 == LOGIC_CLOCK_UNDEFINE) {
+    if (isNullVectorClock(vclock2)) {
         VectorClock result = dupVectorClock(vclock1);
         cleanVectorClock(&result);
         return result;
@@ -448,8 +477,9 @@ mergeMinVectorClock(VectorClock vclock1, VectorClock vclock2) {
         target = newVectorClock(gid_nums);
     } else {
         target = dupVectorClock(vclock2);
-        clk logic_time = min((long long)(get_logic_clock(vclock2)), (long long)(get_logic_clock(vclock1)));
-        set_logic_clock(&target, logic_time);
+        long long logic_time = min(get_logic_clock(*get_clock_unit_by_index(&vclock2, 0)),get_logic_clock(*get_clock_unit_by_index(&vclock1, 0)));
+        clk* f = get_clock_unit_by_index(&target, 0);
+        set_logic_clock(f, logic_time);
         return target;
     }
     set_len(&target, (char) gid_nums);
@@ -462,31 +492,31 @@ mergeMinVectorClock(VectorClock vclock1, VectorClock vclock2) {
         clk *dst_clock = get_clock_unit_by_index(&vclock2, index2);
         if((char)get_gid(*src_clock) == (char)get_gid(*dst_clock)) {
             long long logic_clock = min((long long)(get_logic_clock(*src_clock)), (long long)(get_logic_clock(*dst_clock)));
-            clk tar_clock = init_clock((clk)get_gid(*src_clock), (clk)logic_clock);
+            clk tar_clock = init_clock((char)get_gid(*src_clock), (long long)logic_clock);
             set_clock_unit_by_index(&target, tar_index++, tar_clock);
             index1 ++;
             index2 ++;
         } else if((char)get_gid(*src_clock) > (char)get_gid(*dst_clock)) {
             long long logic_clock = 0;
-            clk tar_clock = init_clock((clk)get_gid(*dst_clock), (clk)logic_clock);
+            clk tar_clock = init_clock((char)get_gid(*dst_clock), (long long)logic_clock);
             set_clock_unit_by_index(&target, tar_index++, tar_clock);
             index2 ++;
         } else {
             long long logic_clock = 0;
-            clk tar_clock = init_clock((clk)get_gid(*src_clock), (clk)logic_clock);
+            clk tar_clock = init_clock((char)get_gid(*src_clock), (long long)logic_clock);
             set_clock_unit_by_index(&target, tar_index++, tar_clock);
             index1 ++;
         }
     }
     while(index1 < clock1_length) {
         clk *src_clock = get_clock_unit_by_index(&vclock1, index1);
-        clk tar_clock = init_clock((clk)get_gid(*src_clock), (clk)0);;
+        clk tar_clock = init_clock((char)get_gid(*src_clock), 0);;
         set_clock_unit_by_index(&target, tar_index++, tar_clock);
         index1++;
     }
     while(index2 < clock2_length) {
         clk *dst_clock = get_clock_unit_by_index(&vclock2, index2);
-        clk tar_clock = init_clock((clk)get_gid(*dst_clock), (clk)0);
+        clk tar_clock = init_clock((char)get_gid(*dst_clock), 0);
         set_clock_unit_by_index(&target, tar_index++, tar_clock);
         index2++;
     }
@@ -541,14 +571,14 @@ int testSdsConvert2VectorClock(void) {
     vcStr = sdsnew("1:123");
     vc = sdsToVectorClock(vcStr);
     test_cond("[one clock unit]length", 1 == get_len(vc));
-    test_cond("[one clock unit]", 1 == get_gid(vc));
-    test_cond("[one clock unit]", 123 == get_logic_clock(vc));
+    test_cond("[one clock unit]", 1 == get_gid(*get_clock_unit_by_index(&vc, 0)));
+    test_cond("[one clock unit]", 123 == get_logic_clock(*get_clock_unit_by_index(&vc, 0)));
 
     vcStr = sdsnew("1:123;");
     vc = sdsToVectorClock(vcStr);
     test_cond("[one clock unit;]length", 1 == get_len(vc));
-    test_cond("[one clock unit;]gid equals", 1 == get_gid(vc));
-    test_cond("[one clock unit;]logic_time equals", 123 == (long long)get_logic_clock(vc));
+    test_cond("[one clock unit;]gid equals", 1 == get_gid(*get_clock_unit_by_index(&vc, 0)));
+    test_cond("[one clock unit;]logic_time equals", 123 == (long long)get_logic_clock(*get_clock_unit_by_index(&vc, 0)));
     return 0;
 }
 
@@ -619,7 +649,7 @@ int testDupVectorClock(void) {
     sds dupSds = vectorClockToSds(dup);
 
     test_cond("[testDupVectorClock]", sdscmp(vcStr, dupSds) == 0);
-    test_cond("[testDupVectorClock] value", dup != vc);
+    // test_cond("[testDupVectorClock] value", dup != vc);
     freeVectorClock(vc);
     freeVectorClock(dup);
 
@@ -629,7 +659,7 @@ int testDupVectorClock(void) {
 int testAddVectorClockUnit(void) {
     printf("========[testAddVectorClockUnit]==========\r\n");
     sds vcStr = sdsnew("1:123;2:234;3:345");
-    VectorClock *vc = sdsToVectorClock(vcStr);
+    VectorClock vc = sdsToVectorClock(vcStr);
 
     vc = addVectorClockUnit(vc, 11, 50);
 
@@ -752,8 +782,9 @@ int testIsMulti() {
 int testGid() {
     printf("========[testGid]==========\r\n");
     VectorClock vc = newVectorClock(1);
-    set_gid(&vc, 10);
-    test_cond("[testGid-1]", get_gid(vc) == 10);
+    // set_gid(&vc, 10);
+    set_gid(get_clock_unit_by_index(&vc, 0), 10);
+    test_cond("[testGid-1]", get_gid(*get_clock_unit_by_index(&vc, 0)) == 10);
 
     vc = newVectorClock(2);
     clk *clock = get_clock_unit_by_index(&vc, 1);
@@ -764,10 +795,11 @@ int testGid() {
 int testLogicClock() {
     printf("========[testLogicClock]==========\r\n");
     VectorClock vc = newVectorClock(1);
-    set_gid(&vc, 10);
-    set_logic_clock(&vc, 12345);
-    test_cond("[testLogicClock-1]", get_gid(vc) == 10);
-    test_cond("[testLogicClock-1]", get_logic_clock(vc) == 12345);
+    set_gid(get_clock_unit_by_index(&vc, 0),10);
+    // set_gid(&vc, 10);
+    set_logic_clock(get_clock_unit_by_index(&vc, 0), 12345);
+    test_cond("[testLogicClock-1]", get_gid(*get_clock_unit_by_index(&vc, 0)) == 10);
+    test_cond("[testLogicClock-1]", get_logic_clock(*get_clock_unit_by_index(&vc, 0)) == 12345);
 
     vc = newVectorClock(2);
     clk *clock = get_clock_unit_by_index(&vc, 1);
@@ -779,20 +811,22 @@ int testLogicClock() {
 int testIncrLogicClock() {
     printf("========[testIncrLogicClock]==========\r\n");
     VectorClock vc = newVectorClock(1);
-    set_gid(&vc, 10);
-    set_logic_clock(&vc, 12345);
-    test_cond("[testIncrLogicClock-1]gid", get_gid(vc) == 10);
-    test_cond("[testIncrLogicClock-1]logic clock", get_logic_clock(vc) == 12345);
+    set_gid(get_clock_unit_by_index(&vc, 0), 10);
+    set_logic_clock(get_clock_unit_by_index(&vc, 0), 12345);
+    test_cond("[testIncrLogicClock-1]gid", get_gid(*get_clock_unit_by_index(&vc, 0)) == 10);
+    test_cond("[testIncrLogicClock-1]logic clock", get_logic_clock(*get_clock_unit_by_index(&vc, 0)) == 12345);
+    printf("get_len(*vc) %lld\n",get_len(vc));
     incrLogicClock(&vc, 10, 1);
-    test_cond("[testIncrLogicClock-1]logic clock-2", get_logic_clock(vc) == 12346);
+    printf("get_len(*vc) %lld\n",get_len(vc));
+    test_cond("[testIncrLogicClock-1]logic clock-2", get_logic_clock(*get_clock_unit_by_index(&vc, 0)) == 12346);
     incrLogicClock(&vc, 2, 1);
-    test_cond("[testIncrLogicClock-1]logic clock-3", get_logic_clock(vc) == 12346);
+    test_cond("[testIncrLogicClock-1]logic clock-3", get_logic_clock(*get_clock_unit_by_index(&vc, 0)) == 12346);
     incrLogicClock(&vc, 10, 1);
-    test_cond("[testIncrLogicClock-1]logic clock-4", get_logic_clock(vc) == 12347);
+    test_cond("[testIncrLogicClock-1]logic clock-4", get_logic_clock(*get_clock_unit_by_index(&vc, 0)) == 12347);
 
     vc = sdsToVectorClock(sdsnew("1:123;2:456;3:789"));
     incrLogicClock(&vc, 10, 1);
-
+    test_cond("[testIncrLogicClock-2]logic len", get_len(vc) == 3);
     test_cond("[testIncrLogicClock-2]logic clock-1", get_logic_clock(*get_clock_unit_by_index(&vc, 0)) == 123);
     test_cond("[testIncrLogicClock-2]logic clock-2", get_logic_clock(*get_clock_unit_by_index(&vc, 1)) == 456);
     test_cond("[testIncrLogicClock-2]logic clock-3", get_logic_clock(*get_clock_unit_by_index(&vc, 2)) == 789);
@@ -1019,7 +1053,6 @@ int testVectorClockMerge(void) {
     vc = vectorClockMerge(vc, sdsToVectorClock(sdsnew("2:500")));
     printf("[result]%s\n", vectorClockToSds(vc));
     test_cond("[testvectorClockMerge][merge-only]", sdscmp(sdsnew("1:100;2:500;3:300"), vectorClockToSds(vc)) == 0);
-
 
     //sixth, dst/src is single and same
     vc = sdsToVectorClock(sdsnew("1:100"));

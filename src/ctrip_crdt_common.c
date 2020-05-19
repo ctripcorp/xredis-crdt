@@ -49,7 +49,7 @@ int isModuleCrdt(robj *obj) {
 }
 
 int check_gid(int gid) {
-    if(gid > 0 && gid < 15) {
+    if(gid > 0 && gid < (1 << GIDSIZE)) {
         return 1; 
     }
     return 0;

@@ -136,7 +136,7 @@ client *createClient(int fd) {
     c->crdt_pubsub_patterns = listCreate();
     c->peerid = NULL;
     c->gid = 0;
-    c->vectorClock = NULL;
+    c->vectorClock = newVectorClock(0);
     listSetFreeMethod(c->pubsub_patterns,decrRefCountVoid);
     listSetMatchMethod(c->pubsub_patterns,listMatchObjects);
     listSetFreeMethod(c->crdt_pubsub_patterns,decrRefCountVoid);
@@ -914,9 +914,9 @@ void freeClient(client *c) {
     /* Release other dynamically allocated client structure fields,
      * and finally release the client structure itself. */
     if (c->name) decrRefCount(c->name);
-    if (c->vectorClock == LOGIC_CLOCK_UNDEFINE) {
+    if (!isNullVectorClock(c->vectorClock)) {
         freeVectorClock(c->vectorClock);
-        c->vectorClock = NULL;
+        c->vectorClock = newVectorClock(0);
     }
     zfree(c->argv);
     freeClientMultiState(c);

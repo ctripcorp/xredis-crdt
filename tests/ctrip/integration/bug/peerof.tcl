@@ -35,7 +35,6 @@ start_server { tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskl
     
         [lindex $peers 0] hset key field v0
         [lindex $peers 1] hset key field v1
-        [lindex $peers 0] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
         after 3000
         assert {[[lindex $peers 0] ping] eq {PONG}}
         start_server {config {crdt.conf} overrides {crdt-gid 2 repl-diskless-sync-delay 1} module {crdt.so} } {

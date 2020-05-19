@@ -59,7 +59,7 @@ CRDT_Master_Instance *createPeerMaster(client *c, int gid) {
     masterInstance->masterhost = NULL;
     masterInstance->masterport = -1;
     masterInstance->masterauth = NULL;
-    masterInstance->vectorClock = NULL;
+    masterInstance->vectorClock = newVectorClock(0);
     masterInstance->repl_transfer_lastio = mstime();
     return masterInstance;
 }
@@ -73,9 +73,9 @@ void freePeerMaster(CRDT_Master_Instance *masterInstance) {
     serverAssert(ln != NULL);
     listDelNode(l,ln);
 
-    if(masterInstance->vectorClock != LOGIC_CLOCK_UNDEFINE) {
+    if(!isNullVectorClock(masterInstance->vectorClock)) {
         freeVectorClock(masterInstance->vectorClock);
-        masterInstance->vectorClock = NULL;
+        masterInstance->vectorClock = newVectorClock(0);
     }
     if (masterInstance->master) {
         masterInstance->master ->flags &= ~CLIENT_CRDT_MASTER;
@@ -109,9 +109,9 @@ CRDT_Master_Instance *getPeerMaster(int gid) {
 
 void refreshVectorClock(client *c, sds vcStr) {
     VectorClock vclock = sdsToVectorClock(vcStr);
-    if(c->vectorClock != LOGIC_CLOCK_UNDEFINE) {
+    if(!isNullVectorClock(c->vectorClock)) {
         freeVectorClock(c->vectorClock);
-        c->vectorClock = NULL;
+        c->vectorClock = newVectorClock(0);
     }
     c->vectorClock = vclock;
 }
@@ -251,11 +251,11 @@ crdtMergeStartCommand(client *c) {
     VectorClock vclock = sdsToVectorClock(c->argv[2]->ptr);
     VectorClock curGcVclock = crdtServer.gcVectorClock;
     crdtServer.gcVectorClock = vectorClockMerge(crdtServer.gcVectorClock, vclock);
-    if (getVectorClockUnit(crdtServer.vectorClock, sourceGid) == 0) {
+    if (isNullVectorClockUnit(getVectorClockUnit(crdtServer.vectorClock, sourceGid))) {
         crdtServer.vectorClock = addVectorClockUnit(crdtServer.vectorClock, sourceGid, 0);
     }
-    freeInnerClocks(vclock);;
-    freeInnerClocks(curGcVclock);
+    freeVectorClock(vclock);;
+    freeVectorClock(curGcVclock);
     server.dirty ++;
     serverLog(LL_NOTICE, "[CRDT][crdtMergeStartCommand][end] master gid: %lld", sourceGid);
 }
@@ -272,7 +272,7 @@ crdtMergeEndCommand(client *c) {
     if (!peerMaster) goto err;
     serverLog(LL_NOTICE, "[CRDT][crdtMergeEndCommand][begin] master gid: %lld", sourceGid);
 
-    if (peerMaster->vectorClock != LOGIC_CLOCK_UNDEFINE) {
+    if (!isNullVectorClock(peerMaster->vectorClock)) {
         freeVectorClock(peerMaster->vectorClock);
     }
     peerMaster->vectorClock = sdsToVectorClock(c->argv[2]->ptr);
@@ -301,11 +301,11 @@ err:
 /** ================================== CRDT Repl MASTER ================================== */
 
 long long getMyGidLogicTime(VectorClock vc) {
-    if (vc != LOGIC_CLOCK_UNDEFINE) {
+    if (isNullVectorClock(vc)) {
         return 0;
     }
     VectorClockUnit vcu = getVectorClockUnit(vc, crdtServer.crdt_gid);
-    if (vcu == 0) {
+    if (isNullVectorClockUnit(vcu)) {
         return 0;
     }
     return get_logic_clock(vcu);
@@ -1189,7 +1189,7 @@ void crdtOvcCommand(client *c) {
             }
         }
         VectorClock newVectorClock = vectorClockMerge(peerMaster->vectorClock, vclock);
-        if (peerMaster->vectorClock != LOGIC_CLOCK_UNDEFINE) {
+        if (!isNullVectorClock(peerMaster->vectorClock)) {
             freeVectorClock(peerMaster->vectorClock);
         }
         freeVectorClock(vclock);
@@ -1538,9 +1538,9 @@ void crdtReplicationCron(void) {
             {
                 serverLog(LL_WARNING, "[CRDT] Disconnecting timedout slave: %s",
                           replicationGetSlaveName(slave));
-                if (slave->vectorClock) {
+                if (!isNullVectorClock(slave->vectorClock)) {
                     freeVectorClock(slave->vectorClock);
-                    slave->vectorClock = NULL;
+                    slave->vectorClock = newVectorClock(0);
                 }
                 freeClient(slave);
             }
