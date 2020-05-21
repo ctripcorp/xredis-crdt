@@ -37,11 +37,14 @@
 
 #include "sds.h"
 #include "ctrip_vector_clock.h"
+typedef struct CrdtObject {
+    unsigned char type;
+} CrdtObject;
 int check_gid(int gid);
 typedef void *(*crdtMergeFunc)(void *curVal, void *value);
 // RM_CrdtMultiWrappedReplicate should be called during this
 typedef int (*crdtPropagateDelFunc)(int db_id, void *keyRobj, void *key, void *crdtObj);
-typedef void* (*crdtFilterFunc)(void* obj,int gid, long long logic_time);
+typedef CrdtObject* (*crdtFilterFunc)(CrdtObject* obj,int gid, long long logic_time);
 typedef int (*crdtGCFunc)(void *crdtObj, VectorClock clock);
 typedef int (*crdtPurageFunc)(void* tombstone, void* value);
 
@@ -50,9 +53,7 @@ typedef struct CrdtObjectMethod {
     crdtFilterFunc filter;
 } CrdtObjectMethod;
 
-typedef struct CrdtObject {
-    unsigned char type;
-} CrdtObject;
+
 typedef VectorClock (*crdtGetLastVCFunc)(void* value);
 typedef void* (*crdtUpdateLastVCFunc)(void* value,VectorClock data);
 typedef struct CrdtDataMethod {

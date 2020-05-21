@@ -57,7 +57,7 @@ rdbSaveRioWithCrdtMerge(rio *rdb, int *error, void *rsi) {
     sds sdsVectorClock = vectorClockToSds(crdtServer.vectorClock);
     if (rioWriteBulkString(rdb, sdsVectorClock, sdslen(sdsVectorClock)) == 0) goto werr;
     if (rioWriteBulkString(rdb, info->repl_id, 41) == 0) goto werr;
-    serverLog(LL_NOTICE, "[CRDT] [rdbSaveRioWithCrdtMerge] CRDT.MERGE_START %lld %s %s", crdtServer.crdt_gid, sdsVectorClock, info->repl_id);
+    serverLog(LL_NOTICE, "[CRDT] [rdbSaveRioWithCrdtMerge] CRDT.MERGE_START %d %s %s", crdtServer.crdt_gid, sdsVectorClock, info->repl_id);
 
     serverLog(LL_NOTICE, "[CRDT] [rdbSaveRioWithCrdtMerge] CRDT.MERGE");
     if (crdtRdbSaveRio(rdb, error, info) == C_ERR) goto werr;
@@ -265,7 +265,7 @@ int crdtMergeTomstoneCommand(client* c, DictFindFunc findtombstone, DictAddFunc 
         
        CrdtTombstoneMethod* method = getCrdtTombstoneMethod(common);
         if(method == NULL) {
-            serverLog(LL_WARNING, "no tombstone merge method, type: %lld", common->type);
+            serverLog(LL_WARNING, "no tombstone merge method, type: %hhu", common->type);
             return C_ERR;
         }
         void *mergedVal = method->merge(common, oldCommon);
@@ -468,7 +468,7 @@ void addKeys(dict* d, dict* keys) {
     dictReleaseIterator(di);
 }
 
-int rdbSaveCrdtData(rio *rdb, int dbid,redisDb* db, dict* keys, long long now, int flags, size_t* processed) {
+int rdbSaveCrdtData(rio *rdb, redisDb* db, dict* keys, int flags, size_t* processed) {
     addKeys(db->deleted_keys, keys);
     addKeys(db->expires, keys);
     dictEntry* de = NULL;
@@ -510,8 +510,8 @@ int rdbLoadCrdtData(rio* rdb, redisDb* db, long long current_expire_time) {
     robj* key = NULL;
     int result = C_ERR;
     if ((key = rdbLoadStringObject(rdb)) == NULL) goto eoferr;
-    int (*load)(redisDb*, void*, void*);
-    load = getModuleFunction(CRDT_MODULE, LOAD_CRDT_VALUE);
+    int (*load)(redisDb*, robj*, void*);
+    load = (int (*)(redisDb*, robj*, void*))(unsigned long)getModuleFunction(CRDT_MODULE, LOAD_CRDT_VALUE);
     if(load == NULL) goto eoferr;
     if(load(db, key, rdb) == C_ERR) goto eoferr;
     if(dictFind(db->dict,key->ptr) != NULL && current_expire_time != -1) {
@@ -532,7 +532,7 @@ int rdbSaveCrdtDbSize(rio* rdb, redisDb* db) {
     return C_OK;
 }
 int rdbLoadCrdtDbSize(rio* rdb, redisDb* db) {
-    uint64_t tombstone_size, expires_tombstone_size;
+    uint64_t tombstone_size;
     if ((tombstone_size = rdbLoadLen(rdb,NULL)) == RDB_LENERR)
         return C_ERR;
     dictExpand(db->deleted_keys,tombstone_size);
@@ -572,6 +572,7 @@ int rdbSaveCrdtInfoAuxFields(rio* rdb) {
     if (rdbSaveAuxFieldStrInt(rdb,"crdt-repl-offset",crdtServer.master_repl_offset)
         == -1) return -1;
     if(rdbSaveAuxFieldCrdt(rdb) == -1) return -1;
+    return 1;
 }
 int initedCrdtServer() {
     if(get_len(crdtServer.vectorClock) != 1) {
@@ -624,7 +625,7 @@ robj* reverseHashToArgv(hashTypeIterator* hi, int type) {
         long long vll = LLONG_MAX;
         hashTypeCurrentFromZiplist(hi, type, &vstr, &vlen, &vll);
         if (vstr) {
-            return createStringObject(vstr, vlen);
+            return createStringObject((const char *)vstr, vlen);
         }else{
             return createStrRobjFromLongLong(vll);
         }
@@ -656,11 +657,9 @@ int crdtSelectDb(client* fakeClient, int dbid) {
     fakeClient->argv = zmalloc(sizeof(robj*)*2);
     fakeClient->argv[0] = createStringObject("select", 6);
     fakeClient->argv[1] = createStrRobjFromLongLong(dbid);
-    struct redisCommand* cmd = NULL;
     return processInputRdb(fakeClient);
 }
-int data2CrdtData(client* fakeClient, redisDb* db, robj* key, robj* val) {
-    struct redisCommand* cmd = NULL;
+int data2CrdtData(client* fakeClient,robj* key, robj* val) {
     long long len;
     switch(val->type) {
         case OBJ_STRING: 
@@ -709,8 +708,6 @@ error:
 }
 
 int expire2CrdtExpire(client* fakeClient, robj* key, long long expiretime) {
-    struct redisCommand* cmd = NULL;
-    long long len;
     fakeClient->argc = 3;
     fakeClient->argv = zmalloc(sizeof(robj*)*3);
     fakeClient->argv[0] = createStringObject("expireAt", 8);

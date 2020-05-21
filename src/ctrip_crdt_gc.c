@@ -365,7 +365,7 @@ void Gc(int type, unsigned int *current_db,int *timelimit_exit, long long *last_
         } while (deleted > ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP/4);
     }
     elapsed = ustime()-start;
-    latencyAddSampleIfNeeded(name,elapsed/1000);
+    latencyAddSampleIfNeeded((char *)name,elapsed/1000);
 }
 dict* getDeletedKeys(redisDb* db) {
     return db->deleted_keys;

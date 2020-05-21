@@ -34,7 +34,6 @@
 #include "config.h"
 #include "solarisfixes.h"
 #include "rio.h"
-#include "ctrip_crdt_common.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -1626,13 +1625,8 @@ void stopLoading(void);
 #include "rdb.h"
 int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi);
 ssize_t rdbSaveAuxFieldStrStr(rio *rdb, char *key, char *val);
-/* CRDT RDB */
-int rdbSaveCrdtData(rio *rdb, int dbid,redisDb* db, dict* keys, long long now, int flags, size_t* processed);
-int rdbSaveCrdtDbSize(rio* rdb, redisDb* db);
-int rdbSaveCrdtInfoAuxFields(rio* rdb);
-int rdbLoadCrdtData(rio* rdb, redisDb* db,  long long current_expire_time);
-int rdbLoadCrdtDbSize(rio* rdb, redisDb* db);
-int data2CrdtData(client* fakeClient,redisDb* db, robj* key, robj* val);
+
+
 
 /* AOF persistence */
 void flushAppendOnlyFile(int force);
@@ -1654,6 +1648,10 @@ void sendChildInfo(int process_type, struct redisServer *srv);
 void receiveChildInfo(struct redisServer *srv);
 
 //module 
+/* API flags and constants */
+#define REDISMODULE_READ (1<<0)
+#define REDISMODULE_WRITE (1<<1)
+#define REDISMODULE_TOMBSTONE (1<<2)
 void *GetModuleKey(redisDb *db, robj *keyname, int mode, int needCheck);
 void CloseModuleKey(void *moduleKey);
 
@@ -1953,7 +1951,9 @@ void dictSdsDestructor(void *privdata, void *val);
 char *redisGitSHA1(void);
 char *redisGitDirty(void);
 uint64_t redisBuildId(void);
-
+/* Client */
+void freeFakeClient(struct client *c);
+void freeFakeClientArgv(struct client *c);
 /* Commands prototypes */
 void authCommand(client *c);
 void pingCommand(client *c);

@@ -30,7 +30,7 @@
 #include "server.h"
 #include "cluster.h"
 #include "atomicvar.h"
-#include "redismodule.h"
+#include "ctrip_crdt_common.h"
 #include <signal.h>
 #include <ctype.h>
 

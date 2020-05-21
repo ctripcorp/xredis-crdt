@@ -32,5 +32,5 @@
 
 #ifndef REDIS_CTRIP_CRDT_GC_H
 #define REDIS_CTRIP_CRDT_GC_H
-
+#include "ctrip_crdt_common.h"
 #endif //REDIS_CTRIP_CRDT_GC_H
