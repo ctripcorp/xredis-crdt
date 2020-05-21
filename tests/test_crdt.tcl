@@ -14,6 +14,7 @@ source tests/support/util.tcl
 
 
 set ::all_tests { 
+    
     ctrip/integration/bug/peerof
     ctrip/integration/master-master/add_sync
     ctrip/master-not-crdt/peerof
@@ -78,6 +79,7 @@ set ::all_tests {
     ctrip/integration/master-slave/rdb2
     ctrip/integration/master-slave/psync2
     ctrip/integration/master-slave/replication-psync
+    ctrip/integration/master-master/change_to_slave
 }
 
 set ::temp_tests {

@@ -266,6 +266,7 @@ int crdtMergeTomstoneCommand(client* c, DictFindFunc findtombstone, DictAddFunc 
        CrdtTombstoneMethod* method = getCrdtTombstoneMethod(common);
         if(method == NULL) {
             serverLog(LL_WARNING, "no tombstone merge method, type: %hhu", common->type);
+            decrRefCount(obj);
             return C_ERR;
         }
         void *mergedVal = method->merge(common, oldCommon);
@@ -349,7 +350,7 @@ int mergeCrdtObjectCommand(client *c, DictFindFunc find, DictAddFunc add, DictDe
     if (updateReplTransferLastio(sourceGid) != C_OK) goto error;
     robj *key = c->argv[2];
 
-
+    if (getLongLongFromObjectOrReply(c, c->argv[4], &expireTime, NULL) != C_OK) goto error;
     if (verifyDumpPayload(c->argv[3]->ptr,sdslen(c->argv[3]->ptr)) == C_ERR) {
         goto error;
     }
@@ -361,7 +362,7 @@ int mergeCrdtObjectCommand(client *c, DictFindFunc find, DictAddFunc add, DictDe
         goto error;
     }
     
-    if (getLongLongFromObjectOrReply(c, c->argv[4], &expireTime, NULL) != C_OK) goto error;
+    
     
     long long et = getExpire(c->db, key);
     if(et != -1) {
@@ -378,6 +379,7 @@ int mergeCrdtObjectCommand(client *c, DictFindFunc find, DictAddFunc add, DictDe
     CrdtObject *mergedVal;
     CrdtObjectMethod* method = getCrdtObjectMethod(common);
     if(method == NULL) {
+        decrRefCount(obj);
         return C_ERR;
     }
     if (currentVal) {
