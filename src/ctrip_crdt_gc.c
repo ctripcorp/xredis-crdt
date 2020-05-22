@@ -29,7 +29,7 @@
 //
 // Created by zhuchen on 2019-08-05.
 //
-
+#include "ctrip_vector_clock.h"
 #include "ctrip_crdt_gc.h"
 #include "server.h"
 #include "dict.h"
@@ -164,10 +164,10 @@ void expireSizeCommand(client *c) {
  * mechanism in order to ensure keys are eventually removed when deleted even
  * if no access is performed on them.
  *----------------------------------------------------------------------------*/
-VectorClock* getGcVectorClock() {
+VectorClock getGcVectorClock() {
     listIter li;
     listNode *ln;
-    VectorClock* gcVectorClock = dupVectorClock(crdtServer.vectorClock);
+    VectorClock gcVectorClock = dupVectorClock(crdtServer.vectorClock);
     if (crdtServer.crdtMasters == NULL || listLength(crdtServer.crdtMasters) == 0) {
         return gcVectorClock;
     }
@@ -177,8 +177,8 @@ VectorClock* getGcVectorClock() {
         if (crdtMaster == NULL) {
             continue;
         }
-        VectorClock *other = crdtMaster->vectorClock;
-        VectorClock *old = gcVectorClock;
+        VectorClock other = crdtMaster->vectorClock;
+        VectorClock old = gcVectorClock;
         gcVectorClock = mergeMinVectorClock(old, other);
         
         freeVectorClock(old);
@@ -196,9 +196,9 @@ VectorClock* getGcVectorClock() {
 }
 void updateGcVectorClock() {
     
-    if (crdtServer.gcVectorClock) {
+    if (!isNullVectorClock(crdtServer.gcVectorClock)) {
         freeVectorClock(crdtServer.gcVectorClock);
-        crdtServer.gcVectorClock = NULL;
+        crdtServer.gcVectorClock = newVectorClock(0);
     }
     crdtServer.gcVectorClock = getGcVectorClock();
 }

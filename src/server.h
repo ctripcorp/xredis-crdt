@@ -754,7 +754,7 @@ typedef struct client {
     char buf[PROTO_REPLY_CHUNK_BYTES];
 
     /* Crdt Stuff*/
-    VectorClock *vectorClock; // used for slave client only, when the client is a master, use crdtMasterInstance
+    VectorClock vectorClock; // used for slave client only, when the client is a master, use crdtMasterInstance
     long long gid; // use for master client only, to locate the crdtMasterInstance
 } client;
 
@@ -906,7 +906,7 @@ typedef struct CRDT_Master_Instance {
     char master_replid[CONFIG_RUN_ID_SIZE+1];  /* Master PSYNC repl_id. */
     long long master_initial_offset;           /* Master PSYNC offset. used for the full sync*/
 
-    VectorClock *vectorClock;
+    VectorClock vectorClock;
 
 } CRDT_Master_Instance;
 
@@ -1261,8 +1261,8 @@ struct redisServer {
 
     /*crdt stuff*/
     int crdt_gid;
-    VectorClock *vectorClock;
-    VectorClock *gcVectorClock;
+    VectorClock vectorClock;
+    VectorClock gcVectorClock;
     list *crdtMasters;
     int active_crdt_ovc;      /* Can be disabled for testing purposes. */
     long long crdt_conflict;
@@ -1598,7 +1598,7 @@ void incrLocalVcUnit(long delta);
 void crdtPsyncCommand(client *c);
 CRDT_Master_Instance *getPeerMaster(int gid);
 void refreshVectorClock(client *c, sds vcStr);
-long long getMyGidLogicTime(VectorClock *vc);
+long long getMyGidLogicTime(VectorClock vc);
 long long getMyLogicTime();
 void crdtReplicationUnsetMaster(int gid);
 void crdtReplicationCloseAllMasters();
@@ -2173,6 +2173,6 @@ void xorDigest(unsigned char *digest, void *ptr, size_t len);
 // refreshMinVectorClock(VectorClock *other, int sourceGid);
 
 void
-refreshGcVectorClock(VectorClock *other);
+refreshGcVectorClock(VectorClock other);
 
 #endif

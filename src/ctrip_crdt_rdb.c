@@ -159,7 +159,6 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
     dictIterator *di = NULL;
     char llstr[LONG_STR_SIZE];
     int j;
-
     serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveRio] start");
     for (j = 0; j < server.dbnum; j++) {
         redisDb *db = server.db+j;
@@ -321,7 +320,7 @@ int checkTombstoneType(void* current, void* other, robj* key) {
                 key->ptr, c->type, o->type);
         return C_ERR;
     }
-    if(!isTombstone(c->type)) {
+    if(!isTombstone(c)) {
         serverLog(LL_WARNING, "[INCONSIS][MERGE TOMBSTONE TYPE] key: %s, tombstone type: %d",
                 key->ptr, c->type);
         return C_ERR;
@@ -430,15 +429,14 @@ void addExpire(redisDb *db, robj *key, robj *value) {
 int checkDataType(void* current, void* other, robj* key) {
     CrdtObject* c = (CrdtObject*)current;
     CrdtObject* o = (CrdtObject*)other;
-    if(!(isData(c->type))) {
+    if(!(isData(c))) {
         serverLog(LL_WARNING, "[INCONSIS][MERGE DATA TYPE ERROR] key: %s, local type: %d",
                 key->ptr, c->type);
         return C_ERR;
     }
-    
     if (c->type != o->type) {
         serverLog(LL_WARNING, "[INCONSIS][MERGE DATA] key: %s, local type: %d, merge type %d",
-                key->ptr, getDataType(c->type), getDataType(o->type));
+                key->ptr, getDataType(c), getDataType(o));
         return C_ERR;
     }
     
@@ -576,12 +574,12 @@ int rdbSaveCrdtInfoAuxFields(rio* rdb) {
     if(rdbSaveAuxFieldCrdt(rdb) == -1) return -1;
 }
 int initedCrdtServer() {
-    if(crdtServer.vectorClock->length != 1) {
+    if(get_len(crdtServer.vectorClock) != 1) {
         return 1;
     }
-    VectorClockUnit* unit = getVectorClockUnit(crdtServer.vectorClock, crdtServer.crdt_gid);
-    if(unit == NULL) return 0;
-    long long vcu = get_logic_clock(*unit);
+    VectorClockUnit unit = getVectorClockUnit(crdtServer.vectorClock, crdtServer.crdt_gid);
+    if(isNullVectorClockUnit(unit)) return 0;
+    long long vcu = get_logic_clock(unit);
     if(vcu == 0) {
         return 0;
     }

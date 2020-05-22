@@ -14,6 +14,7 @@ source tests/support/util.tcl
 
 
 set ::all_tests { 
+    ctrip/integration/bug/peerof
     ctrip/integration/master-master/add_sync
     ctrip/master-not-crdt/peerof
     ctrip/master-not-crdt/master-redis-peer2
@@ -80,6 +81,7 @@ set ::all_tests {
 }
 
 set ::temp_tests {
+    
     #####
     ctrip/integration/bug/redis-crash-when-full-sync-hash-merge
     ctrip/integration/bug/redis-when-full-sync-mater-timeout-vectorclock-update

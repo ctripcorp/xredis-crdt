@@ -899,7 +899,7 @@ void replconfCommand(client *c) {
             serverAssertWithInfo(c, NULL, sdsEncodedObject(c->argv[j+1]));
             refreshVectorClock(c, c->argv[j+1]->ptr);
 
-            VectorClock *vclock = sdsToVectorClock(c->argv[j+1]->ptr);
+            VectorClock vclock = sdsToVectorClock(c->argv[j+1]->ptr);
             refreshGcVectorClock(vclock);
             freeVectorClock(vclock);
             /* If this was a diskless replication, we need to really put
