@@ -49,14 +49,13 @@ int isModuleCrdt(robj *obj) {
 }
 
 int check_gid(int gid) {
-    if(gid > 0 && gid < 15) {
+    if(gid > 0 && gid < (1 << GIDSIZE)) {
         return 1; 
     }
     return 0;
 }
 void* getMethod(void* obj, const char* name) {
     void* (*getmethod)(void*);
-    // save = (void (*)(redisDb*, rio*, void*))(unsigned long)
     getmethod = getModuleFunction(CRDT_MODULE, name);
     if(getmethod == NULL) {
         return NULL;
@@ -72,17 +71,14 @@ CrdtObjectMethod* getCrdtObjectMethod(CrdtObject* obj) {
 CrdtTombstoneMethod* getCrdtTombstoneMethod(CrdtObject* tombstone) {
     return getMethod(tombstone, "getCrdtTombstoneMethod");
 }
-int getDataType(int type) {
-    return (int)getMethod((void*)type, "getDataType");
+int getDataType(CrdtObject* data) {
+    return (int)getMethod(data, "getDataType");
 }
-int isData(int type) {
-    return (int)getMethod((void*)type, "isData");
+int isData(CrdtObject* data) {
+    return (int)getMethod(data, "isData");
 }
-int isExpire(int type) {
-    return (int)getMethod((void*)type, "isExpire");
-}
-int isTombstone(int type) {
-    return (int)getMethod((void*)type, "isTombstone");
+int isTombstone(CrdtObject* data) {
+    return (int)getMethod(data, "isTombstone");
 }
 void* getObjValue(robj *obj) {
     if (obj == NULL || isModuleCrdt(obj) == C_ERR) return NULL;

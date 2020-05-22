@@ -34,6 +34,9 @@
 #define REDIS_VECTOR_CLOCK_H
 
 #include "sds.h"
+#include <stdlib.h>
+#include <stdio.h>
+#include <assert.h>
 
 // "<gid>:<clock>;<gid>:<clock>"
 #define VECTOR_CLOCK_SEPARATOR ";"
@@ -42,102 +45,220 @@
 #define min(x, y) x > y ? y : x
 
 #define max(x, y) x > y ? x : y
-
+#define GIDSIZE 4
 /**
  * To shrink down mem usage, an unsigned long long will stand for [gid, clock]
  * where, higher 4 bits is allocated for gid (16 gid in total)
  * and,   lower 60 bits represents the logical clk
+ * |0000|0000|xxxxxxxxxxxxxxxxxx|
+ * |4bit|4bit|56            bits|
+ * |option |gid | logic clock      |
  * */
-typedef unsigned long long clk;
-#define VectorClockUnit clk
-typedef struct VectorClock {
-    char length;
-    union clocks {
-        clk single;
-        clk *multi;
-    } clocks;
-}__attribute__((packed, aligned(1)))VectorClock;
+// typedef unsigned long long clk;
+
+/**
+ * single one
+ * |0000|0000|xxxxxxxxxxxxxxxxxx|
+ * |4bit|4bit|56            bits|
+ * |len |gid | logic clock      |
+ *
+ * multi one
+ * |0000|0000   |xxxxxxxxxxxxxxxxxx|
+ * |4bit|4bit   | 56          bits |
+ * |len |option | address          |
+ * */
+// typedef unsigned long long VectorClock;
+typedef unsigned long long ULONGLONG;
+
+typedef struct {
+    ULONGLONG clock:(64-2*GIDSIZE);
+    ULONGLONG gid:GIDSIZE;
+    ULONGLONG opt:GIDSIZE;
+}VectorClockUnit;
+
+// #define clk VectorClockUnit
+typedef VectorClockUnit clk;
+#if defined(TCL_TEST)
+    typedef struct {
+        char len;
+        VectorClockUnit vcu[];
+    } TestVectorClock;
+    typedef TestVectorClock* VectorClock ;
+    static inline char get_len(VectorClock vclock) {
+        if(vclock == NULL) {
+            return 0;
+        }
+        return vclock->len;
+    }
+
+    static inline void set_len(VectorClock *vclock, char length) {
+        assert(length < (1 << GIDSIZE) && length > 0);
+        (*vclock)->len = length;
+    }
+    static clk* clocks_address(VectorClock value) {
+        return &value->vcu;
+    }
+    static inline clk* get_clock_unit_by_index(VectorClock *vc, char index) {
+        assert(vc != NULL);
+        assert(index < ((*vc)->len));
+        return &(*vc)->vcu[(int)index];
+    }
+#else
+    typedef union{
+        struct{
+            ULONGLONG   opt:(64-GIDSIZE);
+            ULONGLONG   len:GIDSIZE;
+        }vc;
+        VectorClockUnit unit;
+        struct{
+            ULONGLONG   pvc:(64-GIDSIZE);
+            ULONGLONG   opt:GIDSIZE;
+        }pvc;
+    }VectorClock;
+    static inline char get_len(VectorClock vclock) {
+        if(*(long long*)(&vclock) == 0) return 0;
+        return vclock.vc.len;
+    }
+
+    static inline void set_len(VectorClock *vclock, char length) {
+        assert(length < (1 << GIDSIZE) && length > 0);
+        vclock->vc.len = length;
+    }
+    static clk* clocks_address(VectorClock value) {
+        if(get_len(value) == 1) {
+            return &(value.unit);
+        }
+        return (clk*)value.pvc.pvc;
+    }
+    static inline clk* get_clock_unit_by_index(VectorClock *vc, char index) {
+        char len = get_len(*vc);
+        if (index > len) {
+            return NULL;
+        }
+        if(len == 1) {
+            return &(vc->unit);
+        }
+        return (clk *) (clocks_address(*vc) + (int)index);
+        
+
+    }
+#endif
+
+
 
 #define APPEND(x, y) x ## y
-#define ULL(x) APPEND(x, ull)
+#define ULL(val) (unsigned long long) val
+
+/**-------------------------------------------length utils-------------------------------------------------**/
+
+
+static inline int ismulti(VectorClock vclock) {
+    return get_len(vclock) > 1 ? 1 : 0;
+}
+/**-------------------------------------------gid utils-------------------------------------------------**/
+static inline char get_gid(clk clock) {
+    return (char) clock.gid;
+}
+
+static inline void set_gid(clk *clock, char gid) {
+    assert(gid < (1 << GIDSIZE) && gid > 0);
+    clock->gid = gid;
+}
+
+/**-------------------------------------------logic clock utils-----------------------------------------**/
+static inline long long get_logic_clock(clk clock) {
+    return (long long) clock.clock;
+}
+
+inline void set_logic_clock(clk *clock, long long logic_time) {
+    clock->clock = logic_time;
+}
+
+/**-------------------------------------------vector clock utils-------------------------------------------------**/
+
+
+
+
+static void set_clock_unit_by_index(VectorClock *vclock, char index, clk gid_logic_time) {
+    clk *clock = get_clock_unit_by_index(vclock, index);
+    assert(get_gid(gid_logic_time) != 0);
+    // *clock = gid_logic_time; 
+    set_gid(clock, get_gid(gid_logic_time));
+    set_logic_clock(clock, get_logic_clock(gid_logic_time));
+}
+#define VCU(unit) (*(clk*)(&unit))
+#define VC(vc) (*(VectorClock*)(&vc))
+static int isNullVectorClock(VectorClock vc) {
+    return get_len(vc) == 0;
+}
+static int isNullVectorClockUnit(VectorClockUnit unit) {
+    return unit.clock == 0;
+}
+//
+static inline clk init_clock(char gid, long long logic_clk) {
+    long long unit = 0;
+    clk result = VCU(unit);
+    result.gid = gid;
+    result.clock = logic_clk; 
+    return result;
+}
+
 //#define null NULL
 #define CLOCK_UNIT_MAX 0
 #define CLOCK_UNIT_ALIGN 1
 
 #define LOGIC_CLOCK_UNDEFINE ULL(0xFFFFFFFFFFFFFFFF)
 
-#define LOGIC_CLOCK_TEMPLATE 0xFFFFFFFFFFFFFFF
-#define LOGIC_CLOCK_BITS 60u
-#define get_logic_clock(clock) (clock & ULL(LOGIC_CLOCK_TEMPLATE))
-#define get_gid(clock) ((clock >> LOGIC_CLOCK_BITS) & 0xF)
-#define init_clock(gid, logic_clk) ((clk)gid << LOGIC_CLOCK_BITS) | (ULL(LOGIC_CLOCK_TEMPLATE) & logic_clk)
-#define clock_overlap(gid, logic_clk) (gid > 0xF || (long long)logic_clk > LOGIC_CLOCK_TEMPLATE) ? 1 : 0
-#define get_clock_unit_by_index(vclock, index) (index < vclock->length ? (vclock->length == 1 ? &(vclock->clocks.single) : ((unsigned long long *)vclock->clocks.multi + index)) : NULL)
-#define set_clock_unit_by_index(vclock, index, clock)  *((unsigned long long *)vclock->clocks.multi + index) = clock
 
 /**------------------------Vector Clock Lifecycle--------------------------------------*/
-VectorClock*
-mergeMinVectorClock(VectorClock *vclock1, VectorClock *vclock2);
-
-void
-cloneVectorClock(VectorClock *dst, VectorClock *src);
-
-VectorClock*
+VectorClock
 newVectorClock(int numVcUnits);
 
 void
-freeVectorClock(VectorClock *vc);
+freeVectorClock(VectorClock vc);
 
-void
-freeInnerClocks(VectorClock *vc);
 
-VectorClock*
-addVectorClockUnit(VectorClock *vc, int gid, long long logic_time);
+VectorClock
+addVectorClockUnit(VectorClock vc, int gid, long long logic_time);
 
-VectorClock*
-dupVectorClock(VectorClock *vc);
+VectorClock
+dupVectorClock(VectorClock vc);
 
 /**------------------------Vector Clock & sds convertion--------------------------------------*/
-VectorClock*
+VectorClock
 sdsToVectorClock(sds vcStr);
 
 sds
-vectorClockToSds(VectorClock *vc);
-
-void
-sdsCpToVectorClock(sds src, VectorClock *dst);
+vectorClockToSds(VectorClock vc);
 
 
 /**------------------------Vector Clock Util--------------------------------------*/
 
-clk*
-getVectorClockUnit(VectorClock *vc, int gid);
+clk
+getVectorClockUnit(VectorClock vc, int gid);
 
 void
 incrLogicClock(VectorClock *vc, int gid, int delta);
 
-//vector_clock, length, gid, clock, gid, clock, gid, clock
 void
-init(VectorClock *vc, int num, ...);
+sortVectorClock(VectorClock vc);
 
-void
-merge(VectorClock *dst, VectorClock *src);
+/**------------------------Vector Clock Merge--------------------------------------*/
 
-// for key's vector clock update
 void
 mergeLogicClock(VectorClock *dst, VectorClock *src, int gid);
 
-VectorClock*
-getMonoVectorClock(VectorClock *src, int gid);
+VectorClock
+mergeMinVectorClock(VectorClock vclock1, VectorClock vclock2);
 
-void
-sortVectorClock(VectorClock *vc);
+VectorClock
+getMonoVectorClock(VectorClock src, int gid);
 
 int
-isVectorClockMonoIncr(VectorClock *current, VectorClock *future);
+isVectorClockMonoIncr(VectorClock current, VectorClock future);
 
-VectorClock*
-vectorClockMerge(VectorClock *vclock1, VectorClock *vclock2);
+VectorClock
+vectorClockMerge(VectorClock vclock1, VectorClock vclock2);
 
 /**------------------------Replication Usage--------------------------------------*/
 void

@@ -42,13 +42,9 @@ typedef void *(*crdtMergeFunc)(void *curVal, void *value);
 // RM_CrdtMultiWrappedReplicate should be called during this
 typedef int (*crdtPropagateDelFunc)(int db_id, void *keyRobj, void *key, void *crdtObj);
 typedef void* (*crdtFilterFunc)(void* obj,int gid, long long logic_time);
-typedef int (*crdtGCFunc)(void *crdtObj, VectorClock* clock);
+typedef int (*crdtGCFunc)(void *crdtObj, VectorClock clock);
 typedef int (*crdtPurageFunc)(void* tombstone, void* value);
-typedef struct CrdtMeta {
-    int gid;
-    VectorClock *vectorClock;
-    long long timestamp;
-} CrdtMeta;
+
 typedef struct CrdtObjectMethod {
     crdtMergeFunc merge;
     crdtFilterFunc filter;
@@ -56,10 +52,9 @@ typedef struct CrdtObjectMethod {
 
 typedef struct CrdtObject {
     unsigned char type;
-    // CrdtObjectMethod* method;
 } CrdtObject;
-typedef VectorClock* (*crdtGetLastVCFunc)(void* value);
-typedef void* (*crdtUpdateLastVCFunc)(void* value,VectorClock* data);
+typedef VectorClock (*crdtGetLastVCFunc)(void* value);
+typedef void* (*crdtUpdateLastVCFunc)(void* value,VectorClock data);
 typedef struct CrdtDataMethod {
     crdtGetLastVCFunc getLastVC;
     crdtUpdateLastVCFunc updateLastVC;
@@ -72,12 +67,11 @@ typedef struct CrdtTombstoneMethod {
     crdtGCFunc gc;
     crdtPurageFunc purage;
 } CrdtTombstoneMethod;
-typedef int (*crdtIsExpireFunc)(void* target, CrdtMeta* meta);
 
 CrdtDataMethod* getCrdtDataMethod(CrdtObject* expire);
 CrdtObjectMethod* getCrdtObjectMethod(CrdtObject* expire);
 CrdtTombstoneMethod* getCrdtTombstoneMethod(CrdtObject* tombstone);
-int getDataType(int type);
-int isData(int type);
-int isTombstone(int type);
+int getDataType(CrdtObject* data);
+int isData(CrdtObject* data);
+int isTombstone(CrdtObject* data);
 #endif //REDIS_CTRIP_CRDT_COMMON_H
