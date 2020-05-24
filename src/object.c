@@ -828,17 +828,29 @@ struct redisMemOverhead *getMemoryOverheadData(void) {
     mem = 0;
     if (server.repl_backlog)
         mem += zmalloc_size(server.repl_backlog);
-    // if (crdtServer.repl_backlog)
-    //     mem += zmalloc_size(crdtServer.repl_backlog);
+    if (crdtServer.repl_backlog)
+        mem += zmalloc_size(crdtServer.repl_backlog);
     mh->repl_backlog = mem;
     mem_total += mem;
-
+    
     mem = 0;
     if (listLength(server.slaves)) {
         listIter li;
         listNode *ln;
 
         listRewind(server.slaves,&li);
+        while((ln = listNext(&li))) {
+            client *c = listNodeValue(ln);
+            mem += getClientOutputBufferMemoryUsage(c);
+            mem += sdsAllocSize(c->querybuf);
+            mem += sizeof(client);
+        }
+    }
+    if (listLength(crdtServer.slaves)) {
+        listIter li;
+        listNode *ln;
+
+        listRewind(crdtServer.slaves,&li);
         while((ln = listNext(&li))) {
             client *c = listNodeValue(ln);
             mem += getClientOutputBufferMemoryUsage(c);
@@ -864,6 +876,20 @@ struct redisMemOverhead *getMemoryOverheadData(void) {
             mem += sizeof(client);
         }
     }
+    if (listLength(crdtServer.clients)) {
+        listIter li;
+        listNode *ln;
+
+        listRewind(crdtServer.clients,&li);
+        while((ln = listNext(&li))) {
+            client *c = listNodeValue(ln);
+            if (c->flags & CLIENT_SLAVE)
+                continue;
+            mem += getClientOutputBufferMemoryUsage(c);
+            mem += sdsAllocSize(c->querybuf);
+            mem += sizeof(client);
+        }
+    }
     mh->clients_normal = mem;
     mem_total+=mem;
 
@@ -872,9 +898,12 @@ struct redisMemOverhead *getMemoryOverheadData(void) {
         mem += sdslen(server.aof_buf);
         mem += aofRewriteBufferSize();
     }
+    if (crdtServer.aof_state != AOF_OFF) {
+        mem += sdslen(crdtServer.aof_buf);
+        mem += aofRewriteBufferSize();
+    }
     mh->aof_buffer = mem;
     mem_total+=mem;
-
     for (j = 0; j < server.dbnum; j++) {
         redisDb *db = server.db+j;
         long long keyscount = dictSize(db->dict);
@@ -883,7 +912,6 @@ struct redisMemOverhead *getMemoryOverheadData(void) {
         mh->total_keys += keyscount;
         mh->db = zrealloc(mh->db,sizeof(mh->db[0])*(mh->num_dbs+1));
         mh->db[mh->num_dbs].dbid = j;
-
         mem = dictSize(db->dict) * sizeof(dictEntry) +
               dictSlots(db->dict) * sizeof(dictEntry*) +
               dictSize(db->dict) * sizeof(robj);
@@ -893,6 +921,12 @@ struct redisMemOverhead *getMemoryOverheadData(void) {
         mem = dictSize(db->expires) * sizeof(dictEntry) +
               dictSlots(db->expires) * sizeof(dictEntry*);
         mh->db[mh->num_dbs].overhead_ht_expires = mem;
+        mem_total+=mem;
+
+        mem = dictSize(db->deleted_keys) * sizeof(dictEntry)  +
+            dictSlots(db->deleted_keys) * sizeof(dictEntry*) + 
+            dictSize(db->deleted_keys) * sizeof(robj);
+        mh->db[mh->num_dbs].overhead_ht_tombstone = mem;
         mem_total+=mem;
 
         mh->num_dbs++;
@@ -1128,13 +1162,16 @@ void memoryCommand(client *c) {
             char dbname[32];
             snprintf(dbname,sizeof(dbname),"db.%zd",mh->db[j].dbid);
             addReplyBulkCString(c,dbname);
-            addReplyMultiBulkLen(c,4);
+            addReplyMultiBulkLen(c,6);
 
             addReplyBulkCString(c,"overhead.hashtable.main");
             addReplyLongLong(c,mh->db[j].overhead_ht_main);
 
             addReplyBulkCString(c,"overhead.hashtable.expires");
             addReplyLongLong(c,mh->db[j].overhead_ht_expires);
+
+            addReplyBulkCString(c,"overhead.hashtable.tombstone");
+            addReplyLongLong(c,mh->db[j].overhead_ht_tombstone);
         }
 
         addReplyBulkCString(c,"overhead.total");

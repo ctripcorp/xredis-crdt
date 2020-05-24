@@ -105,6 +105,7 @@ int crdtSendMergeRequest(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di, const
     dictEntry *de;
     rio payload;
     robj *result = NULL;
+    int num = 0;
     /* Iterate this DB tombstone writing every entry that is locally changed, but not gc'ed*/
     while((de = dictNext(di)) != NULL) {
         sds keystr = dictGetKey(de);
@@ -146,8 +147,9 @@ int crdtSendMergeRequest(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di, const
         decrRefCount(result);
         result = NULL;
         if(!rioWriteBulkLongLong(rdb, expire)) return C_ERR;
+        num++;
     }
-    return C_OK;
+    return num;
 error:
     if(result != NULL) {decrRefCount(result);}
     return C_ERR;
@@ -191,16 +193,24 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
         if (needDelete == C_OK) {
             decrRefCount(selectcmd);
         }
-        if (dictSize(d) != 0 && crdtSendMergeRequest(rdb, rsi, di, "CRDT.Merge", dataFilter, db) == C_ERR) {
-            goto werr;
+        if (dictSize(d) != 0) {
+            int num = crdtSendMergeRequest(rdb, rsi, di, "CRDT.Merge", dataFilter, db);
+            if(num == C_ERR) {
+                goto werr;
+            }
+            serverLog(LL_WARNING, "db :%d ,send crdt data num: %d", j, num);
         }
         dictReleaseIterator(di);
 
         d = db->deleted_keys;
         di = dictGetSafeIterator(d);
         if (!di) return C_ERR;
-        if (dictSize(d) != 0 && crdtSendMergeRequest(rdb, rsi, di, "CRDT.Merge_Del", tombstoneFilter, NULL) == C_ERR) {
-            goto werr;
+        if (dictSize(d) != 0) {
+            int num = crdtSendMergeRequest(rdb, rsi, di, "CRDT.Merge_Del", tombstoneFilter, NULL);
+            if(num == C_ERR) {
+                goto werr;
+            }
+            serverLog(LL_WARNING, "db :%d ,send crdt tombstone num: %d", j, num);
         }
         dictReleaseIterator(di);        
     }

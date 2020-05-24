@@ -1018,6 +1018,8 @@ int testIsVectorClockMonoIncr(void) {
     current = sdsToVectorClock(sdsnew("1:123;3:301"));
     future = sdsToVectorClock(sdsnew("1:123"));
     test_cond("[testGetMonoVectorClock]", isVectorClockMonoIncr(current, future) == 0);
+    current = sdsToVectorClock(sdsnew("1:1296487482;2:1296792063;3:1296491753"));
+    test_cond("[testGetMonoVectorClock] get ", get_logic_clock(*get_clock_unit_by_index(&current, 0)) == 1296487482);
 
     return 0;
 }
