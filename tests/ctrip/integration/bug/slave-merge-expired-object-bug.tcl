@@ -55,17 +55,24 @@ start_redis [list overrides [list repl-diskless-sync-delay 1 "dir"  $server_path
             lappend peer_gids 2
             [lindex $peers 1] config crdt.set repl-diskless-sync-delay 1
             [lindex $peers 1] config set repl-diskless-sync-delay 1 
-            [lindex $peers 1] set key value1
-            
             [lindex $peers 0] slaveof $master_host $master_port  
             wait $master 0 info $master_stdout
-            [lindex $peers 0] set key value ex 5
-            after 5000
-            [lindex $peers 0] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
-            wait [lindex $peers 1] 0 crdt.info [lindex $peer_stdouts 0]
+            
             # print_log_file [lindex $peer_stdouts 0]
             test "test" {
+                [lindex $peers 0] set key value ex 5
+                [lindex $peers 0] set tombstone value ex 5
+                [lindex $peers 1] set key value1
+                [lindex $peers 1] set tombstone value1
+                after 5000
+                assert_equal [[lindex $peers 0] dbsize] 2
+                [lindex $peers 1] crdt.del_reg tombstone 2 [clock milliseconds] "2:2;3:1" 
+                [lindex $peers 0] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
+                # [lindex $peers 1] del tombstone
+                wait [lindex $peers 1] 0 crdt.info [lindex $peer_stdouts 0]
+                print_log_file [lindex $peer_stdouts 0]
                 assert_equal [[lindex $peers 0] get key] ""
+                assert_equal [[lindex $peers 0] dbsize] 1
             }
         }
     }
