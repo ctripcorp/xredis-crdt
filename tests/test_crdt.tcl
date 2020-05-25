@@ -14,6 +14,7 @@ source tests/support/util.tcl
 
 
 set ::all_tests { 
+    ctrip/integration/bug/slave-merge-expired-object-bug
     ctrip/integration/bug/peerof
     ctrip/integration/master-master/add_sync
     ctrip/master-not-crdt/peerof
