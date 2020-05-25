@@ -151,13 +151,11 @@ int dictExpand(dict *d, unsigned long size)
     /* the size is invalid if it is smaller than the number of
      * elements already inside the hash table */
     if (dictIsRehashing(d) || d->ht[0].used > size) {
-        printf("dictIsRehashing error size: %lld, realsize: %lld\n",size, realsize);
         return DICT_ERR;
     }
 
     /* Rehashing to the same table size is not useful. */
     if (realsize == d->ht[0].size) {
-        printf("ht size error size: %lld, realsize: %lld\n",size, realsize);
         return DICT_ERR;
     }
 
@@ -304,7 +302,6 @@ dictEntry *dictAddRaw(dict *d, void *key, dictEntry **existing)
     /* Get the index of the new element, or -1 if
      * the element already exists. */
     if ((index = _dictKeyIndex(d, key, dictHashKey(d,key), existing)) == -1) {
-        // printf("_dictKeyIndex error \n");
         return NULL;
     }
         
@@ -970,7 +967,6 @@ static long _dictKeyIndex(dict *d, const void *key, uint64_t hash, dictEntry **e
 
     /* Expand the hash table if needed */
     if (_dictExpandIfNeeded(d) == DICT_ERR) {
-        printf("_dictExpandIfNeeded error \n");
         return -1;
     }
     for (table = 0; table <= 1; table++) {
@@ -980,7 +976,6 @@ static long _dictKeyIndex(dict *d, const void *key, uint64_t hash, dictEntry **e
         while(he) {
             if (key==he->key || dictCompareKeys(d, key, he->key)) {
                 if (existing) *existing = he;
-                // printf("_dictKeyIndex dictCompareKeys\n");
                 return -1;
             }
             he = he->next;
