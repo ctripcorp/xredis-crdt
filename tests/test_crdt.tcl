@@ -14,11 +14,7 @@ source tests/support/util.tcl
 
 
 set ::all_tests { 
-    
-    demo/demo21
-}
-
-set ::temp_tests {  
+    ctrip/unit/peerof
     ctrip/integration/bug/slave-merge-expired-object-bug
     ctrip/integration/bug/peerof
     ctrip/integration/master-master/add_sync
@@ -85,6 +81,11 @@ set ::temp_tests {
     ctrip/integration/master-slave/psync2
     ctrip/integration/master-slave/replication-psync
     ctrip/integration/master-master/change_to_slave 
+
+}
+
+set ::temp_tests {  
+    
     #####
     ctrip/integration/bug/redis-crash-when-full-sync-hash-merge
     ctrip/integration/bug/redis-when-full-sync-mater-timeout-vectorclock-update
