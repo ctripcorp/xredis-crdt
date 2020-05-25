@@ -78,6 +78,7 @@ typedef struct {
 
 // #define clk VectorClockUnit
 typedef VectorClockUnit clk;
+
 #if defined(TCL_TEST)
     typedef struct {
         char len;
@@ -92,17 +93,16 @@ typedef VectorClockUnit clk;
     }
 
     static inline void set_len(VectorClock *vclock, char length) {
-        assert(length < (1 << GIDSIZE) && length > 0);
+        assert(length < (1<<(GIDSIZE)) && length > 0);
         (*vclock)->len = length;
     }
-    static clk* clocks_address(VectorClock value) {
-        return &value->vcu;
-    }
+    
     static inline clk* get_clock_unit_by_index(VectorClock *vc, char index) {
         assert(vc != NULL);
-        assert(index < ((*vc)->len));
+        assert(index < (*vc)->len);
         return &(*vc)->vcu[(int)index];
     }
+    clk* clocks_address(VectorClock value);
 #else
     typedef union{
         struct{
@@ -116,7 +116,6 @@ typedef VectorClockUnit clk;
         }pvc;
     }VectorClock;
     static inline char get_len(VectorClock vclock) {
-        if(*(long long*)(&vclock) == 0) return 0;
         return vclock.vc.len;
     }
 
@@ -124,12 +123,7 @@ typedef VectorClockUnit clk;
         assert(length < (1 << GIDSIZE) && length > 0);
         vclock->vc.len = length;
     }
-    static clk* clocks_address(VectorClock value) {
-        if(get_len(value) == 1) {
-            return &(value.unit);
-        }
-        return (clk*)value.pvc.pvc;
-    }
+    clk* clocks_address(VectorClock value);
     static inline clk* get_clock_unit_by_index(VectorClock *vc, char index) {
         char len = get_len(*vc);
         if (index > len) {
@@ -139,8 +133,6 @@ typedef VectorClockUnit clk;
             return &(vc->unit);
         }
         return (clk *) (clocks_address(*vc) + (int)index);
-        
-
     }
 #endif
 
@@ -170,30 +162,18 @@ static inline long long get_logic_clock(clk clock) {
     return (long long) clock.clock;
 }
 
-inline void set_logic_clock(clk *clock, long long logic_time) {
+static inline void set_logic_clock(clk *clock, long long logic_time) {
     clock->clock = logic_time;
 }
 
 /**-------------------------------------------vector clock utils-------------------------------------------------**/
 
 
-
-
-static void set_clock_unit_by_index(VectorClock *vclock, char index, clk gid_logic_time) {
-    clk *clock = get_clock_unit_by_index(vclock, index);
-    assert(get_gid(gid_logic_time) != 0);
-    // *clock = gid_logic_time; 
-    set_gid(clock, get_gid(gid_logic_time));
-    set_logic_clock(clock, get_logic_clock(gid_logic_time));
-}
+int isNullVectorClock(VectorClock vc);
+int isNullVectorClockUnit(VectorClockUnit unit);
+void set_clock_unit_by_index(VectorClock *vclock, char index, clk gid_logic_time); 
 #define VCU(unit) (*(clk*)(&unit))
 #define VC(vc) (*(VectorClock*)(&vc))
-static int isNullVectorClock(VectorClock vc) {
-    return get_len(vc) == 0;
-}
-static int isNullVectorClockUnit(VectorClockUnit unit) {
-    return unit.clock == 0;
-}
 //
 static inline clk init_clock(char gid, long long logic_clk) {
     long long unit = 0;

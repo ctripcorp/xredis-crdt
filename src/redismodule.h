@@ -14,10 +14,7 @@
 /* API versions. */
 #define REDISMODULE_APIVER_1 1
 
-/* API flags and constants */
-#define REDISMODULE_READ (1<<0)
-#define REDISMODULE_WRITE (1<<1)
-#define REDISMODULE_TOMBSTONE (1<<2)
+
 
 #define REDISMODULE_LIST_HEAD 0
 #define REDISMODULE_LIST_TAIL 1

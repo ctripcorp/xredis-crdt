@@ -961,7 +961,7 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
             }
         }
         if(crdt_mode) {
-            if(rdbSaveCrdtData(rdb, j, db, keys, now, flags, &processed) == C_ERR) {
+            if(rdbSaveCrdtData(rdb, db, keys, flags, &processed) == C_ERR) {
                 goto werr;
             }
         }
@@ -1737,7 +1737,7 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
         
         /* Add the new object in the hash table */
         if(!isCrdtRdb && crdt_mode) {
-            if(data2CrdtData(fakeClient, db, key, val) == C_ERR) {
+            if(data2CrdtData(fakeClient, key, val) == C_ERR) {
                 decrRefCount(key);
                 freeFakeClient(fakeClient);
                 serverLog(LL_WARNING, "crdt load not crdt rdb datatype error");

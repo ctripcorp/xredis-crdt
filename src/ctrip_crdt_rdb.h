@@ -34,6 +34,7 @@
 #define REDIS_CRDT_RDB_H
 
 #include "server.h"
+#include "ctrip_crdt_common.h"
 typedef struct crdtRdbSaveInfo {
     int repl_stream_db;  /* DB to select in server.master client. */
     int repl_id_is_set;  /* True if repl_id field is set. */
@@ -56,6 +57,16 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi);
 int
 rdbSaveRioWithCrdtMerge(rio *rdb, int *error, void *rsi);
 int initedCrdtServer();
-
-
+ssize_t rdbSaveAuxFieldStrInt(rio *rdb, char *key, long long val);
+int data2CrdtData(client* fakeClient, robj* key, robj* val);
+int isRdbReplVerDiff(int isCrdtRdb);
+int expire2CrdtExpire(client* client, robj* key, long long expiretime);
+/* CRDT RDB */
+int rdbSaveCrdtData(rio *rdb,redisDb* db, dict* keys, int flags, size_t* processed);
+int rdbSaveCrdtDbSize(rio* rdb, redisDb* db);
+int rdbSaveCrdtInfoAuxFields(rio* rdb);
+int rdbLoadCrdtData(rio* rdb, redisDb* db,  long long current_expire_time);
+int rdbLoadCrdtDbSize(rio* rdb, redisDb* db);
+int rdbSaveMillisecondTime(rio *rdb, long long t);
+int crdtSelectDb(client* fakeClient, int dbid);
 #endif //REDIS_CRDT_RDB_H

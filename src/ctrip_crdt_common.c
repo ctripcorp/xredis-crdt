@@ -56,7 +56,7 @@ int check_gid(int gid) {
 }
 void* getMethod(void* obj, const char* name) {
     void* (*getmethod)(void*);
-    getmethod = getModuleFunction(CRDT_MODULE, name);
+    getmethod = (void* (*)(void*))(unsigned long)getModuleFunction(CRDT_MODULE, (char*)name);
     if(getmethod == NULL) {
         return NULL;
     }

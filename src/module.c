@@ -1670,7 +1670,7 @@ void* RM_LoadModuleValue(rio* rio, moduleType* t) {
     return result;
 }
 
-int *RM_SaveModuleValue(rio* rio, moduleType *t, void* value) {
+int RM_SaveModuleValue(rio* rio, moduleType *t, void* value) {
     RedisModuleIO io;
     moduleInitIOContext(io,t,rio);
     io.ver = 2;
@@ -1797,7 +1797,7 @@ int RM_SetExpire(RedisModuleKey *key, mstime_t expire) {
 int dictSetRobj(RedisModuleKey *key, dict* db, moduleType *mt ,struct CrdtObject* expire) {
     if (expire != NULL) {
         robj *o = createModuleObject(mt,expire);
-        dictEntry *kde, *de;
+        dictEntry *de;
         /* Reuse the sds from the main dict in the expire dict */
         de = dictAddOrFind(db,sdsdup(key->key->ptr));
         dictGetVal(de) = o;
