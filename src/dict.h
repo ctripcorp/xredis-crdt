@@ -45,14 +45,14 @@
 #define DICT_NOTUSED(V) ((void) V)
 
 typedef struct dictEntry {
-    void *key;
+    void *key;//8
     union {
         void *val;
         uint64_t u64;
         int64_t s64;
         double d;
-    } v;
-    struct dictEntry *next;
+    } v; //8
+    struct dictEntry *next;//8
 } dictEntry;
 
 typedef struct dictType {
