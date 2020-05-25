@@ -343,7 +343,7 @@ crdtMergeDelCommand(client *c) {
     crdtMergeTomstoneCommand(c, 
         findTombstone, 
         addTombstone,
-        lookupKeyRead,
+        lookupKeyWrite,
         dbDelete,
         checkTombstoneType
     );
@@ -407,9 +407,9 @@ int mergeCrdtObjectCommand(client *c, DictFindFunc find, DictAddFunc add, DictDe
     robj* tombstone = findtombstone(c->db,key);
     if(tombstone != NULL) {
         CrdtObject* tom = retrieveCrdtObject(tombstone);
-        CrdtTombstoneMethod* method = getCrdtTombstoneMethod(tom);
-        if(method == NULL) return C_ERR;
-        if(method->purage(tom, mergedVal)) {
+        CrdtTombstoneMethod* tombstone_method = getCrdtTombstoneMethod(tom);
+        if(tombstone_method == NULL) return C_ERR;
+        if(tombstone_method->purage(tom, mergedVal)) {
             mt->free(mergedVal);
             mergedVal = NULL;
         }
@@ -458,7 +458,7 @@ int checkDataType(void* current, void* other, robj* key) {
 // 0           1    2       3       4
 void crdtMergeCommand(client *c) {
     mergeCrdtObjectCommand(c, 
-        lookupKeyRead,
+        lookupKeyWrite,
         dbAdd,
         dbDelete,
         findTombstone,
