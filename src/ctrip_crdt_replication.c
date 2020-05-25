@@ -150,7 +150,10 @@ void peerofCommand(client *c) {
     long long gid;
     if ((getLongLongFromObjectOrReply(c, c->argv[1], &gid, NULL) != C_OK))
         return;
-
+    if (gid == crdtServer.crdt_gid) {
+        addReplyError(c,"invalid gid");
+        return ;
+    }
     if (!strcasecmp(c->argv[2]->ptr,"no") &&
         !strcasecmp(c->argv[3]->ptr,"one")) {
 
