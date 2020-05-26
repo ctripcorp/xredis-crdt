@@ -51,15 +51,15 @@ proc wait { client index type log}  {
 }
 start_server {tags {"crdt-dict"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
 
-    test {"set config dict-expand-max-difference"} {
-        assert_equal [lindex [r config get dict-expand-max-difference] 1] 536870912
-        r config set dict-expand-max-difference 32
-        assert_equal [lindex [r config get dict-expand-max-difference] 1] 32
+    test {"set config dict-expand-max-idle"} {
+        assert_equal [lindex [r config get dict-expand-max-idle] 1] 536870912
+        r config set dict-expand-max-idle 32
+        assert_equal [lindex [r config get dict-expand-max-idle] 1] 32
     }
 }
-start_server {tags {"crdt-dict"} overrides {crdt-gid 1 dict-expand-max-difference 32} config {crdt.conf} module {crdt.so} } {
-    test {"file config dict-expand-max-difference"} {
-        assert_equal [lindex [r config get dict-expand-max-difference] 1] 32
+start_server {tags {"crdt-dict"} overrides {crdt-gid 1 dict-expand-max-idle 32} config {crdt.conf} module {crdt.so} } {
+    test {"file config dict-expand-max-idle"} {
+        assert_equal [lindex [r config get dict-expand-max-idle] 1] 32
     }
     set master [srv 0 client]
     set master_host [srv 0 host]
@@ -72,7 +72,7 @@ start_server {tags {"crdt-dict"} overrides {crdt-gid 1 dict-expand-max-differenc
     for {set i 10000} {$i < 18192} {incr i} {
         $master set $i $i
     }
-    start_server {tags {"crdt-dict"} overrides {crdt-gid 1 dict-expand-max-difference 32} config {crdt.conf} module {crdt.so} } {
+    start_server {tags {"crdt-dict"} overrides {crdt-gid 1 dict-expand-max-idle 32} config {crdt.conf} module {crdt.so} } {
         set slave [srv 0 client]
         set slave_host [srv 0 host]
         set slave_port [srv 0 port]

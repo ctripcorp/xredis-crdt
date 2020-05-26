@@ -750,8 +750,8 @@ void loadServerConfigFromString(char *config) {
             if (server.local_clock < 0) {
                 err = "Invalid value for crdt-clockunit."; goto loaderr;
             }
-        } else if(!strcasecmp(argv[0], "dict-expand-max-difference")) {
-            setDictExpandMaxDifference(atoll(argv[1]));
+        } else if(!strcasecmp(argv[0], "dict-expand-max-idle")) {
+            setDictExpandMaxIdle(atoll(argv[1]));
         }else {
             err = "Bad directive or wrong number of arguments"; goto loaderr;
         }
@@ -1008,9 +1008,9 @@ void configSetCommand(client *c, struct redisServer *srv) {
     } config_set_special_field("slave-announce-ip") {
         zfree(srv->slave_announce_ip);
         srv->slave_announce_ip = ((char*)o->ptr)[0] ? zstrdup(o->ptr) : NULL;
-    } config_set_special_field("dict-expand-max-difference") {
+    } config_set_special_field("dict-expand-max-idle") {
         if (getLongLongFromObject(o,&ll) == C_ERR || ll < 1) goto badfmt;
-        setDictExpandMaxDifference(ll);
+        setDictExpandMaxIdle(ll);
     /* Boolean fields.
      * config_set_bool_field(name,var). */
     } config_set_bool_field(
@@ -1319,7 +1319,7 @@ void configGetCommand(client *c, struct redisServer *srv) {
     // srv->crdt_gid
     config_get_numerical_field("crdt-gid", srv->crdt_gid);
     config_get_numerical_field("local-clock", srv->local_clock);
-    config_get_numerical_field("dict-expand-max-difference", getDictExpandMaxDifference());
+    config_get_numerical_field("dict-expand-max-idle", getDictExpandMaxIdle());
     /* Bool (yes/no) values */
     config_get_bool_field("cluster-require-full-coverage",
             srv->cluster_require_full_coverage);
