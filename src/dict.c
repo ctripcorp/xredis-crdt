@@ -60,6 +60,7 @@
  * the number of elements and the buckets > dict_force_resize_ratio. */
 static int dict_can_resize = 1;
 static unsigned int dict_force_resize_ratio = 5;
+static unsigned long dict_expand_max_idle = 512 * 1024 * 1024;
 
 /* -------------------------- private prototypes ---------------------------- */
 
@@ -934,7 +935,14 @@ static int _dictExpandIfNeeded(dict *d)
         (dict_can_resize ||
          d->ht[0].used/d->ht[0].size > dict_force_resize_ratio))
     {
-        return dictExpand(d, d->ht[0].used*2);
+        unsigned long min_2x = _dictNextPower(d->ht[0].used);
+        if(min_2x > d->ht[0].used
+            && 2* min_2x - d->ht[0].used  > dict_expand_max_idle) {
+            return dictExpand(d, _dictNextPower(d->ht[0].used));
+        } else {
+            return dictExpand(d, d->ht[0].used*2);
+        }
+        
     }
     return DICT_OK;
 }
@@ -998,6 +1006,12 @@ void dictEnableResize(void) {
 
 void dictDisableResize(void) {
     dict_can_resize = 0;
+}
+void setDictExpandMaxIdle(unsigned long size) {
+    dict_expand_max_idle = size;
+}
+unsigned long getDictExpandMaxIdle() {
+    return dict_expand_max_idle;
 }
 
 uint64_t dictGetHash(dict *d, const void *key) {
