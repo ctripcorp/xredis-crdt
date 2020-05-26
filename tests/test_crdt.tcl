@@ -14,6 +14,9 @@ source tests/support/util.tcl
 
 
 set ::all_tests { 
+    ctrip/readonly/basic_crdt_type
+    ctrip/readonly/basic_type
+    ctrip/readonly/basic_crdt_type_del
     ctrip/unit/peerof
     ctrip/unit/dict-expend
     ctrip/integration/bug/slave-merge-expired-object-bug
@@ -82,7 +85,6 @@ set ::all_tests {
     ctrip/integration/master-slave/psync2
     ctrip/integration/master-slave/replication-psync
     ctrip/integration/master-master/change_to_slave 
-
 }
 
 set ::temp_tests {  
