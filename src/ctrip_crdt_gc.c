@@ -76,17 +76,9 @@ robj *lookupTombstone(dict *d, robj *key) {
  *
  * All the new keys in the database should be created via this interface. */
 void setKeyToTombstone(redisDb *db, robj *key, robj *val) {
-    robj *existing;
-    if ((existing = lookupTombstone(db->deleted_keys,key)) == NULL) {
+    if (lookupTombstone(db->deleted_keys,key) == NULL) {
         tombstoneAdd(db,key,val);
     } else {
-        // CrdtCommon *existingCrdtCommon = retrieveCrdtCommon(existing);
-        // CrdtCommon *incomeCrdtCommon = retrieveCrdtCommon(val);
-        // if (!isVectorClockMonoIncr(existingCrdtCommon->vectorClock, incomeCrdtCommon->vectorClock)) {
-        //     VectorClock *toFree = incomeCrdtCommon->vectorClock;
-        //     incomeCrdtCommon->vectorClock = vectorClockMerge(existingCrdtCommon->vectorClock, incomeCrdtCommon->vectorClock);
-        //     freeVectorClock(toFree);
-        // }
         tombstoneOverwrite(db, key, val);
     }
     incrRefCount(val);
@@ -229,8 +221,7 @@ int activeGcCycleTryGc(dict *d, dictEntry *de) {
         serverLog(LL_WARNING, "no gc method");
         return 0;
     }
-    sds gc = vectorClockToSds(crdtServer.gcVectorClock);
-    sdsfree(gc);
+
     if(!method->gc(tombstone, crdtServer.gcVectorClock)) {
         return 0;
     }
