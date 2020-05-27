@@ -364,7 +364,6 @@ char *crdtSendSynchronousCommand(CRDT_Master_Instance *crdtMaster, int flags, in
         while(1) {
             arg = va_arg(ap, char*);
             if (arg == NULL) break;
-
             if (sdslen(cmd) != 0) cmd = sdscatlen(cmd," ",1);
             cmd = sdscat(cmd,arg);
         }
@@ -595,6 +594,7 @@ int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, i
                   "error state (reply: %s)", reply);
     }
     sdsfree(reply);
+    crdtReplicationDiscardCachedMaster(masterInstance);
     return PSYNC_NOT_SUPPORTED;
 }
 
@@ -1115,6 +1115,8 @@ void crdtReplicationCacheMaster(client *c) {
     }
     if (c->flags & CLIENT_MULTI) discardTransaction(c);
     listEmpty(c->reply);
+    c->sentlen = 0;
+    c->reply_bytes = 0;
     c->bufpos = 0;
     resetClient(c);
 
@@ -1277,7 +1279,6 @@ void replicationFeedAllSlaves(int dictid, robj **argv, int argc) {
 //    if (server.repl_backlog == NULL && listLength(server.slaves) == 0
 //        && crdtServer.repl_backlog == NULL && listLength(crdtServer.slaves) == 0)
 //        return;
-
 
         /* Send SELECT command to every slave if needed. */
     if (server.slaveseldb != dictid || crdtServer.slaveseldb != dictid) {
