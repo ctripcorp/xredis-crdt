@@ -252,8 +252,8 @@ struct redisCommand redisCommandTable[] = {
     {"sync",syncCommand,1,"ars",0,NULL,0,0,0,0,0},
     {"psync",syncCommand,3,"ars",0,NULL,0,0,0,0,0},
     {"replconf",replconfCommand,-1,"aslt",0,NULL,0,0,0,0,0},
-//    {"flushdb",flushdbCommand,-1,"w",0,NULL,0,0,0,0,0},
-//    {"flushall",flushallCommand,-1,"w",0,NULL,0,0,0,0,0},
+   {"flushdb",flushdbCommand,-1,"w",0,NULL,0,0,0,0,0},
+   {"flushall",flushallCommand,-1,"w",0,NULL,0,0,0,0,0},
 //    {"sort",sortCommand,-2,"wm",0,sortGetKeys,1,1,1,0,0},
     {"info",infoCommand,-1,"lt",0,NULL,0,0,0,0,0},
     {"monitor",monitorCommand,1,"as",0,NULL,0,0,0,0,0},
@@ -3030,7 +3030,7 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
         info = sdscatprintf(info,
             "# Server\r\n"
             "redis_version:%s\r\n"
-        	"xredis_version:%s\r\n"
+        	"xredis_crdt_version:%s\r\n"
             "redis_git_sha1:%s\r\n"
             "redis_git_dirty:%d\r\n"
             "redis_build_id:%llx\r\n"
@@ -3050,7 +3050,7 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
             "executable:%s\r\n"
             "config_file:%s\r\n",
             REDIS_VERSION,
-			XREDIS_VERSION,
+			XREDIS_CRDT_VERSION,
             redisGitSHA1(),
             strtol(redisGitDirty(),NULL,10) > 0,
             (unsigned long long) redisBuildId(),
