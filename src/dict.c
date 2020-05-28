@@ -60,7 +60,7 @@
  * the number of elements and the buckets > dict_force_resize_ratio. */
 static int dict_can_resize = 1;
 static unsigned int dict_force_resize_ratio = 5;
-static unsigned long dict_expand_max_idle_size = 64 * 1024 * 1024;
+static unsigned long dict_expand_max_idle_size = 128 * 1024 * 1024;
 
 /* -------------------------- private prototypes ---------------------------- */
 

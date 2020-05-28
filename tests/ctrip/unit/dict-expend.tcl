@@ -52,7 +52,7 @@ proc wait { client index type log}  {
 start_server {tags {"crdt-dict"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
 
     test {"set config dict-expand-max-idle-size"} {
-        assert_equal [lindex [r config get dict-expand-max-idle-size] 1] 67108864
+        assert_equal [lindex [r config get dict-expand-max-idle-size] 1] 134217728
         r config set dict-expand-max-idle-size 32
         assert_equal [lindex [r config get dict-expand-max-idle-size] 1] 32
     }
