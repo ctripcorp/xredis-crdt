@@ -376,7 +376,6 @@ int mergeCrdtObjectCommand(client *c, DictFindFunc find, DictAddFunc add, DictDe
     
     long long et = getExpire(c->db, key);
     if(et != -1) {
-        serverLog(LL_WARNING, "merge old expire:%lld, expire: %lld", et, expireTime);
         expireTime = max(et, expireTime);
     }
     /* Merge the new object in the hash table */
