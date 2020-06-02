@@ -296,7 +296,7 @@ crdtMergeEndCommand(client *c) {
 
 err:
     serverLog(LL_NOTICE, "[CRDT][crdtMergeEndCommand][crdtCancelReplicationHandshake] master gid: %lld", sourceGid);
-    if (!server.masterhost) {
+    if (isMasterMySelf() == C_OK) {
         crdtCancelReplicationHandshake(sourceGid);
     }
     return;

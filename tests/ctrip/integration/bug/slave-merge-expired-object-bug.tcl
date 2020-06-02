@@ -65,18 +65,18 @@ start_redis [list overrides [list repl-diskless-sync-delay 1 "dir"  $server_path
                 [lindex $peers 0] hset hash key value 
                 [lindex $peers 0] expire hash 5
                 [lindex $peers 1] set key value1
-                [lindex $peers 1] set tombstone value1
-                [lindex $peers 1] hset hash key value1
-                after 5000
+                [lindex $peers 1] set tombstone value2
+                [lindex $peers 1] hset hash key value3
                 assert_equal [[lindex $peers 0] dbsize] 3
                 [lindex $peers 1] crdt.del_reg tombstone 2 [clock milliseconds] "2:2;3:1" 
                 [lindex $peers 0] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
                 # [lindex $peers 1] del tombstone
                 wait [lindex $peers 1] 0 crdt.info [lindex $peer_stdouts 0]
+                after 5000
                 print_log_file [lindex $peer_stdouts 0]
                 assert_equal [[lindex $peers 0] get key] ""
                 assert_equal [[lindex $peers 0] hget hash key] ""
-                assert_equal [[lindex $peers 0] dbsize] 2
+                assert_equal [[lindex $peers 0] dbsize] 0
 
             }
         }
