@@ -21,7 +21,7 @@ proc run {script level} {
     catch [uplevel $level $script ] result
     return $result
 }
-proc wait { client index type}  {
+proc wait { client index type log}  {
     set retry 50
     set match_str ""
     append match_str "*slave" $index ":*state=online*"
@@ -35,6 +35,7 @@ proc wait { client index type}  {
         }
     }
     if {$retry == 0} {
+        log_file_matches $log
         error "assertion: Master-Slave not correctly synchronized"
     }
 }
@@ -62,7 +63,7 @@ proc basic_test { type create check delete} {
             [lindex $peers 0] config crdt.set repl-diskless-sync-delay 1
             [lindex $peers 0] config set repl-diskless-sync-delay 1
             [lindex $peers 0] slaveof $master_host $master_port
-            wait $master 0 info
+            wait $master 0 info $master_stdout
             test [format "%s-readonly" $type] {
                 set argv {key field value} 
                 if { [catch {
