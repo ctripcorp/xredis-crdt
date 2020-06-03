@@ -2212,7 +2212,7 @@ rdbSaveInfo *rdbPopulateSaveInfo(rdbSaveInfo *rsi) {
      * connects to us, the NULL repl_backlog will trigger a full
      * synchronization, at the same time we will use a new replid and clear
      * replid2. */
-    if (!server.masterhost && server.repl_backlog) {
+    if (isMasterMySelf() == C_OK && server.repl_backlog) {
         /* Note that when server.slaveseldb is -1, it means that this master
          * didn't apply any write commands after a full synchronization.
          * So we can let repl_stream_db be 0, this allows a restarted slave

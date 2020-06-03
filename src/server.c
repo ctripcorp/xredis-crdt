@@ -919,9 +919,9 @@ void clientsCron(void) {
 void databasesCron(void) {
     /* Expire keys by random sampling. Not required for slaves
      * as master will synthesize DELs for us. */
-    if (server.active_expire_enabled && server.masterhost == NULL) {
+    if (server.active_expire_enabled && isMasterMySelf() == C_OK) {
         activeExpireCycle(ACTIVE_EXPIRE_CYCLE_SLOW);
-    } else if (server.masterhost != NULL) {
+    } else if ((isMasterMySelf() != C_OK)) {
         expireSlaveKeys();
     }
 
@@ -1294,7 +1294,7 @@ void beforeSleep(struct aeEventLoop *eventLoop) {
 
     /* Run a fast expire cycle (the called function will return
      * ASAP if a fast cycle is not needed). */
-    if (server.active_expire_enabled && server.masterhost == NULL)
+    if (server.active_expire_enabled && isMasterMySelf() == C_OK)
         activeExpireCycle(ACTIVE_EXPIRE_CYCLE_FAST);
 
     activeGcCycle(ACTIVE_GC_CYCLE_FAST);
@@ -2577,7 +2577,7 @@ int processCommand(client *c) {
           server.saveparamslen > 0 &&
           server.lastbgsave_status == C_ERR) ||
           server.aof_last_write_status == C_ERR) &&
-        server.masterhost == NULL &&
+        isMasterMySelf() == C_OK &&
         (c->cmd->flags & CMD_WRITE ||
          c->cmd->proc == pingCommand))
     {
@@ -2607,7 +2607,7 @@ int processCommand(client *c) {
 
     /* Don't accept write commands if this is a read only slave. But
      * accept write commands if this is our master. */
-    if (!(isMasterMySelf() == C_OK) && server.repl_slave_ro &&
+    if ((isMasterMySelf() != C_OK) && server.repl_slave_ro &&
         !(c->flags & CLIENT_MASTER) &&
         c->cmd->flags & CMD_WRITE)
     {
@@ -2632,7 +2632,7 @@ int processCommand(client *c) {
 
     /* Only allow INFO and SLAVEOF when slave-serve-stale-data is no and
      * we are a slave with a broken link with master. */
-    if (server.masterhost && server.repl_state != REPL_STATE_CONNECTED &&
+    if ((isMasterMySelf() != C_OK) && server.repl_state != REPL_STATE_CONNECTED &&
         server.repl_serve_stale_data == 0 &&
         !(c->cmd->flags & CMD_STALE))
     {
