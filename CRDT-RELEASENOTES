@@ -14,10 +14,11 @@ XRedis-CRDT 1.0.1  Released Tue Jun  2 16:50:51 CST 2020
 ================================================================================
 Upgrade urgency LOW: Compared with the previous version, there are some improvements, mainly:
 Major things:
-* support non-crdt master synchronization data to crdt redis.
-* support loading RDB files with non-crdt data and crdt data.
-* Optimize kv data structure.
-* Increase crdt expire function.
+* Support non-crdt redis syncing data to crdt redis as master.
+* Support loading RDB files with non-crdt data and crdt data.
+* Optimize kv data structure to shrink down mem use.
+* Support for expire functionalities under CRDT mode.
+* Optimize vector clock to decrease mem use.
 
 
 
