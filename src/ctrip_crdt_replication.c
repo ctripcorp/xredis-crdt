@@ -1556,7 +1556,7 @@ void crdtReplicationCron(void) {
      * without sub-slaves attached should still accumulate data into the
      * backlog, in order to reply to PSYNC queries if they are turned into
      * masters after a failover. */
-    if (isMasterMySelf() != C_OK && listLength(crdtServer.slaves) == 0 && crdtServer.repl_backlog_time_limit &&
+    if (isMasterMySelf() == C_OK && listLength(crdtServer.slaves) == 0 && crdtServer.repl_backlog_time_limit &&
         crdtServer.repl_backlog)
     {
         time_t idle = server.unixtime - crdtServer.repl_no_slaves_since;

@@ -1143,14 +1143,14 @@ int crdtPropagateExpire(redisDb *db, robj *key, int lazy) {
             if(isModuleCrdt(val) == C_OK) {
                 struct moduleValue* rm = (struct moduleValue*)val->ptr;
                 CrdtObject* obj = ((CrdtObject*)(rm->value));
-                mk = GetModuleKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE, 1);
+                mk = getModuleKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE, 1);
                 if(mk != NULL) {
                     CrdtDataMethod* method = getCrdtDataMethod(obj);
                     if(method == NULL) {
                         return C_ERR;
                     }
                     method->propagateDel(db->id, key, mk, obj);
-                    CloseModuleKey(mk);
+                    closeModuleKey(mk);
                 }
                 crdtServer.stat_expiredkeys++;
                 return C_OK;

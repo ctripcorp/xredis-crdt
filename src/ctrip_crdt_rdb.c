@@ -35,7 +35,6 @@
 #include "rdb.h"
 #include "rio.h"
 
-
 /**---------------------------CRDT RDB Send Functions--------------------------------*/
 /* Spawn an RDB child that writes the RDB to the sockets of the slaves
  * that are currently in SLAVE_STATE_WAIT_BGSAVE_START state. */
@@ -326,14 +325,15 @@ void addTombstone(redisDb *db, robj *key, robj *value) {
 int checkTombstoneType(void* current, void* other, robj* key) {
     CrdtObject* c = (CrdtObject*)current;
     CrdtObject* o = (CrdtObject*)other;
-    if(c->type != o->type) {
-        serverLog(LL_WARNING, "[INCONSIS][MERGE TOMBSTONE] key: %s, tombstone type: %d, merge type %d",
-                key->ptr, c->type, o->type);
-        return C_ERR;
-    }
     if(!isTombstone(c)) {
         serverLog(LL_WARNING, "[INCONSIS][MERGE TOMBSTONE TYPE] key: %s, tombstone type: %d",
                 key->ptr, c->type);
+        return C_ERR;
+    }
+    if(c->type != o->type) {
+        serverLog(LL_WARNING, "[INCONSIS][MERGE TOMBSTONE] key: %s, tombstone type: %d, merge type %d",
+                key->ptr, c->type, o->type);
+        incrCrdtConflict(MERGECONFLICT | TYPECONFLICT);
         return C_ERR;
     }
     return C_OK;
@@ -394,6 +394,7 @@ int mergeCrdtObjectCommand(client *c, DictFindFunc find, DictAddFunc add, DictDe
     if (currentVal) {
         CrdtObject *ccm = retrieveCrdtObject(currentVal);
         if(checktype(ccm, common, key) != C_OK) {
+
             decrRefCount(obj);
             return C_ERR;
         }
@@ -448,6 +449,7 @@ int checkDataType(void* current, void* other, robj* key) {
     if (c->type != o->type) {
         serverLog(LL_WARNING, "[INCONSIS][MERGE DATA] key: %s, local type: %d, merge type %d",
                 key->ptr, getDataType(c), getDataType(o));
+        incrCrdtConflict(MERGECONFLICT | TYPECONFLICT);
         return C_ERR;
     }
     

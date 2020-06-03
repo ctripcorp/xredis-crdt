@@ -1915,7 +1915,10 @@ void resetServerStats(struct redisServer *srv) {
     srv->stat_fork_rate = 0;
     srv->stat_rejected_conn = 0;
     srv->stat_sync_full = 0;
-    srv->crdt_conflict = 0;
+    srv->crdt_type_conflict = 0;
+    srv->crdt_non_type_conflict = 0;
+    srv->crdt_modify_conflict = 0;
+    srv->crdt_merge_conflict = 0;
     srv->stat_sync_partial_ok = 0;
     srv->stat_sync_partial_err = 0;
     for (j = 0; j < STATS_METRIC_COUNT; j++) {
@@ -3452,12 +3455,18 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                             "sync_partial_ok:%lld\r\n"
                             "sync_partial_err:%lld\r\n"
                             "latest_fork_usec:%lld\r\n"
-                            "crdt_conflict:%lld\r\n",
+                            "crdt_type_conflict:%lld\r\n"
+                            "crdt_non_type_conflict:%lld\r\n"
+                            "crdt_modify_conflict:%lld\r\n"
+                            "crdt_merge_conflict:%lld\r\n",
                             crdtServer.stat_sync_full,
                             crdtServer.stat_sync_partial_ok,
                             crdtServer.stat_sync_partial_err,
                             crdtServer.stat_fork_time,
-                            crdtServer.crdt_conflict);
+                            crdtServer.crdt_type_conflict,
+                            crdtServer.crdt_non_type_conflict,
+                            crdtServer.crdt_modify_conflict,
+                            crdtServer.crdt_merge_conflict);
     }
 
     /* CRDT Replication */
