@@ -17,6 +17,12 @@ proc get_info_replication_attr_value {client type attr} {
     regexp $regstr $info match value 
     set _ $value
 }
+proc get_conflict {client type} {
+    set info [$client crdt.info stats]
+    set regstr [format "\r\n%s:(.*?)\r\n" $type]
+    regexp $regstr $info match value 
+    set _ $value
+}
 proc run {script level} {
     catch [uplevel $level $script ] result opts
 }
@@ -99,7 +105,6 @@ proc basic_test { type create check delete} {
             set result {key-del field1 {} 1 100000 "1:2" }
             run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
         }
-
         start_server {tags {[format "crdt-basic-%s" $type]} overrides {crdt-gid 2} config {crdt.conf} module {crdt.so} } {
             lappend peers [srv 0 client]
             lappend peer_hosts [srv 0 host]
@@ -108,11 +113,25 @@ proc basic_test { type create check delete} {
             lappend peer_stdouts [srv 0 stdout]
             [lindex $peers 1] config crdt.set repl-diskless-sync-delay 1
             [lindex $peers 1] config set repl-diskless-sync-delay 1
+
+            set conflict_argv1 {conflict field value 1 100000 "1:3"}
+            set conflict_argv2 {conflict field value 2 100000 "2:3"}
+            run [replace [replace_client $create {[lindex $peers 0]}] $conflict_argv1] 1
+            run [replace [replace_client $create {[lindex $peers 1]}] $conflict_argv2] 1
+            set conflict_argv1 {conflict2 field value 1 100000 {"1:3;3:1"}}
+            set conflict_argv2 {conflict2 field value 2 100000 {"2:3;3:1"}}
+            run [replace [replace_client $delete {[lindex $peers 0]}] $conflict_argv1] 1
+            run [replace [replace_client $delete {[lindex $peers 1]}] $conflict_argv2] 1
+
             [lindex $peers 1] peerof  [lindex $peer_gids 0] [lindex $peer_hosts 0] [lindex $peer_ports 0]
             [lindex $peers 0] peerof  [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
             wait [lindex $peers 0] 0 crdt.info [lindex $peer_stdouts 1]
             wait [lindex $peers 1] 0 crdt.info [lindex $peer_stdouts 0]
-            
+            test [format "%s-merge-conflict" $type] {
+                assert {[get_conflict [lindex $peers 0] crdt_non_type_conflict] == 2 ||
+                [get_conflict [lindex $peers 1] crdt_non_type_conflict] == 2}
+                # assert_equal [get_conflict [lindex $peers 0] crdt_merge_conflict] 1;
+            }
             test [format "%s-peerof-create" $type] {
                 set argv2 {key field value 1 100000 "1:2"}
                 run [replace [replace_client $create {[lindex $peers 0]}] $argv2] 1
@@ -210,11 +229,13 @@ proc basic_test { type create check delete} {
         set peer_hosts {}
         set peer_ports {}
         set peer_gids {}
+        set peer_stdouts {}
 
         lappend peers [srv 0 client]
         lappend peer_hosts [srv 0 host]
         lappend peer_ports [srv 0 port]
         lappend peer_gids 3
+        lappend peer_stdouts [srv 0 stdout]
         [lindex $peers 0] config crdt.set repl-diskless-sync-delay 1
         [lindex $peers 0] config set repl-diskless-sync-delay 1
 
@@ -621,6 +642,8 @@ proc basic_test { type create check delete} {
         #     run [replace [replace_client $checkHash {[lindex $peers 0]}] $result] 1
     
         # }
+        
+
     }
     start_server {tags {[format "crdt-create-%s" $type]} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so}} {
         set peers {}
@@ -886,7 +909,8 @@ proc basic_test { type create check delete} {
                     run [replace [replace_client $create {[lindex $peers 0]}] $argv1] 1
                     set argv2 {key field v2 2 100000 {"1:99;2:100"} }
                     run [replace [replace_client $create {[lindex $peers 0]}] $argv2] 1
-                    
+                    assert_equal [get_conflict [lindex $peers 0] crdt_non_type_conflict] 1
+                    assert_equal [get_conflict [lindex $peers 0] crdt_modify_conflict] 1
                     assert {
                         $old 
                         !=
