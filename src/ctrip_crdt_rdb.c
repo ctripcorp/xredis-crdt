@@ -600,7 +600,7 @@ int initedCrdtServer() {
     return 1;
 }
 int isMasterMySelf() {
-    if(crdt_mode && !server.master_is_crdt && server.masterhost ) {
+    if(crdt_enabled && !server.master_is_crdt && server.masterhost ) {
         return C_OK;
     }
     if(!server.masterhost) {
@@ -608,20 +608,20 @@ int isMasterMySelf() {
     }
     return C_ERR;
 }
-int isMasterSlaveReplVerDiff() {
-    if(crdt_mode && server.master_is_crdt) {
+int isSameTypeWithMaster() {
+    if(crdt_enabled && server.master_is_crdt) {
         return C_OK;
     }
-    if(!crdt_mode && !server.master_is_crdt) {
+    if(!crdt_enabled && !server.master_is_crdt) {
         return C_OK;
     }
     return C_ERR;
 }
-int isRdbReplVerDiff(int isCrdtRdb) {
-    if(crdt_mode && isCrdtRdb) {
+int verifyRdbType(int isCrdtRdb) {
+    if(crdt_enabled && isCrdtRdb) {
         return C_OK;
     }
-    if(!crdt_mode && !isCrdtRdb) {
+    if(!crdt_enabled && !isCrdtRdb) {
         return C_OK;
     }
     return C_ERR;

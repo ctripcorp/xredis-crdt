@@ -1272,7 +1272,7 @@ void replicationFeedAllSlaves(int dictid, robj **argv, int argc) {
      * propagate *identical* replication stream. In this way this slave can
      * advertise the same replication ID as the master (since it shares the
      * master replication history and has the same backlog and offsets). */
-    if (server.masterhost != NULL && !server.repl_slave_repl_all && isMasterSlaveReplVerDiff() == C_OK ) return;
+    if (server.masterhost != NULL && !server.repl_slave_repl_all && isSameTypeWithMaster() == C_OK ) return;
     /* If there aren't slaves, and there is no backlog buffer to populate,
      * we can return ASAP. */
 //    if (server.repl_backlog == NULL && listLength(server.slaves) == 0
@@ -1557,7 +1557,7 @@ void crdtReplicationCron(void) {
      * backlog, in order to reply to PSYNC queries if they are turned into
      * masters after a failover. */
     if (isMasterMySelf() == C_OK && listLength(crdtServer.slaves) == 0 && crdtServer.repl_backlog_time_limit &&
-        crdtServer.repl_backlog)
+        crdtServer.repl_backlog && listLength(server.slaves) == 0 && server.repl_backlog_time_limit && server.repl_backlog)
     {
         time_t idle = server.unixtime - crdtServer.repl_no_slaves_since;
 
@@ -1577,8 +1577,11 @@ void crdtReplicationCron(void) {
              *    master that will accept our PSYNC request by second
              *    replication ID, but there will be data inconsistency
              *    because we received writes. */
+            changeReplicationId(&server);
             changeReplicationId(&crdtServer);
+            clearReplicationId2(&server);
             clearReplicationId2(&crdtServer);
+            freeReplicationBacklog(&server);
             freeReplicationBacklog(&crdtServer);
             serverLog(LL_NOTICE,
                       "[CRDT] Replication backlog freed after %d seconds "

@@ -82,7 +82,14 @@ start_redis [list overrides [list repl-diskless-sync-delay 1 "dir"  $server_path
             
             set retry 50
             while {$retry} {
-                if {[[lindex $peers 0] dbsize] == 0 && [[lindex $peers 0] expiresize] == 0 && [[lindex $peers 0] tombstonesize] == 0} {
+                if {
+                    [[lindex $peers 0] dbsize] == 0 && 
+                    [[lindex $peers 0] expiresize] == 0 && 
+                    [[lindex $peers 0] tombstonesize] == 0 &&
+                    [[lindex $peers 1] dbsize] == 0 &&
+                    [[lindex $peers 1] expiresize] == 0 &&
+                    [[lindex $peers 1] tombstonesize] == 0
+                } {
                     break
                 } else {
                     assert_equal [$client ping] PONG

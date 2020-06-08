@@ -554,7 +554,9 @@ void debugCommand(client *c) {
     } else if (!strcasecmp(c->argv[1]->ptr,"change-repl-id") && c->argc == 2) {
         serverLog(LL_WARNING,"Changing replication IDs after receiving DEBUG change-repl-id");
         changeReplicationId(&server);
+        changeReplicationId(&crdtServer);
         clearReplicationId2(&server);
+        clearReplicationId2(&crdtServer);
         addReply(c,shared.ok);
     } else if (!strcasecmp(c->argv[1]->ptr,"set-crdt-ovc") && c->argc == 3) {
         crdtServer.active_crdt_ovc = atoi(c->argv[2]->ptr);
