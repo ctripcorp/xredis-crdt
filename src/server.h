@@ -1358,7 +1358,7 @@ typedef struct {
 
 extern struct redisServer server;
 extern struct redisServer crdtServer;
-extern int crdt_mode;
+extern int crdt_enabled;
 extern struct sharedObjectsStruct shared;
 extern dictType objectKeyPointerValueDictType;
 extern dictType setDictType;
@@ -1584,7 +1584,7 @@ int masterTryPartialResynchronization(struct redisServer *srv, client *c);
 void putSlaveOnline(client *slave);
 void createReplicationBacklog(struct redisServer *srv);
 void feedReplicationBacklogWithObject(struct redisServer *srv, robj *o);
-int isMasterSlaveReplVerDiff();
+int isSameTypeWithMaster();
 int isMasterMySelf();
 
 /* CRDT Replications */

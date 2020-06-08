@@ -14,6 +14,7 @@ source tests/support/util.tcl
 
 
 set ::all_tests { 
+    ctrip/master-not-crdt/crdt_replid_reuse
     ctrip/integration/bug/not_remember_slave_key_with_expire_when_master_is_non_crdt
     ctrip/unit/crdt_command
     ctrip/readonly/basic_crdt_type
