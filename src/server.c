@@ -72,7 +72,7 @@ double R_Zero, R_PosInf, R_NegInf, R_Nan;
 /* Global vars */
 struct redisServer server; /* Server global state */
 struct redisServer crdtServer;
-int crdt_mode = 1;
+int crdt_enabled = 1;
 volatile unsigned long lru_clock; /* Server global current LRU time. */
 
 /* Our command table.
@@ -2259,7 +2259,7 @@ void propagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
     if (server.aof_state != AOF_OFF && flags & PROPAGATE_AOF)
         feedAppendOnlyFile(cmd,dbid,argv,argc);
     if (flags & PROPAGATE_CRDT_REPL) {
-        if (server.master && isMasterSlaveReplVerDiff() == C_OK) {
+        if (server.master && isSameTypeWithMaster() == C_OK) {
             feedCrdtBacklog(argv, argc);
         } else {
             replicationFeedAllSlaves(dbid, argv, argc);
@@ -2289,7 +2289,7 @@ void alsoPropagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
     int j;
 
     if (server.loading) {
-        if(server.masterhost == NULL || isMasterSlaveReplVerDiff() == C_OK) {
+        if(server.masterhost == NULL || isSameTypeWithMaster() == C_OK) {
             return;
         } 
     }  /* No propagation during loading. */
