@@ -72,7 +72,7 @@ double R_Zero, R_PosInf, R_NegInf, R_Nan;
 /* Global vars */
 struct redisServer server; /* Server global state */
 struct redisServer crdtServer;
-int crdt_mode = 1;
+int crdt_enabled = 1;
 volatile unsigned long lru_clock; /* Server global current LRU time. */
 
 /* Our command table.
@@ -919,9 +919,9 @@ void clientsCron(void) {
 void databasesCron(void) {
     /* Expire keys by random sampling. Not required for slaves
      * as master will synthesize DELs for us. */
-    if (server.active_expire_enabled && server.masterhost == NULL) {
+    if (server.active_expire_enabled && isMasterMySelf() == C_OK) {
         activeExpireCycle(ACTIVE_EXPIRE_CYCLE_SLOW);
-    } else if (server.masterhost != NULL) {
+    } else if ((isMasterMySelf() != C_OK)) {
         expireSlaveKeys();
     }
 
@@ -1294,7 +1294,7 @@ void beforeSleep(struct aeEventLoop *eventLoop) {
 
     /* Run a fast expire cycle (the called function will return
      * ASAP if a fast cycle is not needed). */
-    if (server.active_expire_enabled && server.masterhost == NULL)
+    if (server.active_expire_enabled && isMasterMySelf() == C_OK)
         activeExpireCycle(ACTIVE_EXPIRE_CYCLE_FAST);
 
     activeGcCycle(ACTIVE_GC_CYCLE_FAST);
@@ -1915,7 +1915,10 @@ void resetServerStats(struct redisServer *srv) {
     srv->stat_fork_rate = 0;
     srv->stat_rejected_conn = 0;
     srv->stat_sync_full = 0;
-    srv->crdt_conflict = 0;
+    srv->crdt_type_conflict = 0;
+    srv->crdt_non_type_conflict = 0;
+    srv->crdt_modify_conflict = 0;
+    srv->crdt_merge_conflict = 0;
     srv->stat_sync_partial_ok = 0;
     srv->stat_sync_partial_err = 0;
     for (j = 0; j < STATS_METRIC_COUNT; j++) {
@@ -2256,7 +2259,7 @@ void propagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
     if (server.aof_state != AOF_OFF && flags & PROPAGATE_AOF)
         feedAppendOnlyFile(cmd,dbid,argv,argc);
     if (flags & PROPAGATE_CRDT_REPL) {
-        if (server.master && isMasterSlaveReplVerDiff() == C_OK) {
+        if (server.master && isSameTypeWithMaster() == C_OK) {
             feedCrdtBacklog(argv, argc);
         } else {
             replicationFeedAllSlaves(dbid, argv, argc);
@@ -2286,7 +2289,7 @@ void alsoPropagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
     int j;
 
     if (server.loading) {
-        if(server.masterhost == NULL || isMasterSlaveReplVerDiff() == C_OK) {
+        if(server.masterhost == NULL || isSameTypeWithMaster() == C_OK) {
             return;
         } 
     }  /* No propagation during loading. */
@@ -2577,7 +2580,7 @@ int processCommand(client *c) {
           server.saveparamslen > 0 &&
           server.lastbgsave_status == C_ERR) ||
           server.aof_last_write_status == C_ERR) &&
-        server.masterhost == NULL &&
+        isMasterMySelf() == C_OK &&
         (c->cmd->flags & CMD_WRITE ||
          c->cmd->proc == pingCommand))
     {
@@ -2607,7 +2610,7 @@ int processCommand(client *c) {
 
     /* Don't accept write commands if this is a read only slave. But
      * accept write commands if this is our master. */
-    if (!(isMasterMySelf() == C_OK) && server.repl_slave_ro &&
+    if ((isMasterMySelf() != C_OK) && server.repl_slave_ro &&
         !(c->flags & CLIENT_MASTER) &&
         c->cmd->flags & CMD_WRITE)
     {
@@ -2632,7 +2635,7 @@ int processCommand(client *c) {
 
     /* Only allow INFO and SLAVEOF when slave-serve-stale-data is no and
      * we are a slave with a broken link with master. */
-    if (server.masterhost && server.repl_state != REPL_STATE_CONNECTED &&
+    if ((isMasterMySelf() != C_OK) && server.repl_state != REPL_STATE_CONNECTED &&
         server.repl_serve_stale_data == 0 &&
         !(c->cmd->flags & CMD_STALE))
     {
@@ -3452,12 +3455,18 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                             "sync_partial_ok:%lld\r\n"
                             "sync_partial_err:%lld\r\n"
                             "latest_fork_usec:%lld\r\n"
-                            "crdt_conflict:%lld\r\n",
+                            "crdt_type_conflict:%lld\r\n"
+                            "crdt_non_type_conflict:%lld\r\n"
+                            "crdt_modify_conflict:%lld\r\n"
+                            "crdt_merge_conflict:%lld\r\n",
                             crdtServer.stat_sync_full,
                             crdtServer.stat_sync_partial_ok,
                             crdtServer.stat_sync_partial_err,
                             crdtServer.stat_fork_time,
-                            crdtServer.crdt_conflict);
+                            crdtServer.crdt_type_conflict,
+                            crdtServer.crdt_non_type_conflict,
+                            crdtServer.crdt_modify_conflict,
+                            crdtServer.crdt_merge_conflict);
     }
 
     /* CRDT Replication */

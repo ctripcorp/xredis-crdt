@@ -25,6 +25,13 @@ proc wait { client index type log}  {
         error "assertion: Master-Slave not correctly synchronized"
     }
 }
+proc get_dataset { client } {
+    set info [$client memory stats]
+    if {[regexp {dataset.bytes ([0-9]+)} $info _ value] == 1} {
+        return $value
+    }
+    return 0
+}
 set server_path [tmpdir "slave-merge-expired-object-bug"]
 start_redis [list overrides [list repl-diskless-sync-delay 1 "dir"  $server_path ]] {
     set master [srv 0 client]
@@ -54,31 +61,48 @@ start_redis [list overrides [list repl-diskless-sync-delay 1 "dir"  $server_path
             lappend peer_stdouts [srv 0 stdout]
             lappend peer_gids 2
             [lindex $peers 1] config crdt.set repl-diskless-sync-delay 1
-            [lindex $peers 1] config set repl-diskless-sync-delay 1 
+            [lindex $peers 1] config set repl-diskless-sync-delay 1
+            $master config set repl-backlog-size 1mb
+            set size1 [get_dataset [lindex $peers 0]]
+            set size2 [get_dataset [lindex $peers 1]]
+             for {set i 0} {$i < 20} {incr i} {
+                $master set $i v ex 10
+                [lindex $peers 1] set $i v ex 10
+            }
+            
             [lindex $peers 0] slaveof $master_host $master_port  
+            [lindex $peers 0] config set slave-read-only no
             wait $master 0 info $master_stdout
             
+            
             # print_log_file [lindex $peer_stdouts 0]
-            test "test" {
-                [lindex $peers 0] set key value ex 5
-                [lindex $peers 0] set tombstone value ex 5
-                [lindex $peers 0] hset hash key value 
-                [lindex $peers 0] expire hash 5
-                [lindex $peers 1] set key value1
-                [lindex $peers 1] set tombstone value2
-                [lindex $peers 1] hset hash key value3
-                assert_equal [[lindex $peers 0] dbsize] 3
-                [lindex $peers 1] crdt.del_reg tombstone 2 [clock milliseconds] "2:2;3:1" 
-                [lindex $peers 0] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
-                # [lindex $peers 1] del tombstone
-                wait [lindex $peers 1] 0 crdt.info [lindex $peer_stdouts 0]
-                after 5000
-                print_log_file [lindex $peer_stdouts 0]
-                assert_equal [[lindex $peers 0] get key] ""
-                assert_equal [[lindex $peers 0] hget hash key] ""
-                assert_equal [[lindex $peers 0] dbsize] 0
-
+            [lindex $peers 0] slaveof no one
+            after 10000
+            
+            
+            set retry 50
+            while {$retry} {
+                if {
+                    [[lindex $peers 0] dbsize] == 0 && 
+                    [[lindex $peers 0] expiresize] == 0 && 
+                    [[lindex $peers 0] tombstonesize] == 0 &&
+                    [[lindex $peers 1] dbsize] == 0 &&
+                    [[lindex $peers 1] expiresize] == 0 &&
+                    [[lindex $peers 1] tombstonesize] == 0
+                } {
+                    break
+                } else {
+                    assert_equal [$client ping] PONG
+                    incr retry -1
+                    after 100
+                }
             }
+            if {$retry == 0} {
+                error "wait expire free all momory fail"
+            }
+            # set size2 [get_dataset [lindex $peers 0]]
+            assert_equal [expr [expr  [get_dataset [lindex $peers 0]] -$size1] - [expr [get_dataset [lindex $peers 1]] -$size2]] 32
+            
         }
     }
 }

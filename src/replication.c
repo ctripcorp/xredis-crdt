@@ -182,7 +182,7 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
      * propagate *identical* replication stream. In this way this slave can
      * advertise the same replication ID as the master (since it shares the
      * master replication history and has the same backlog and offsets). */
-    if (server.masterhost != NULL && !server.repl_slave_repl_all && isMasterSlaveReplVerDiff() == C_OK) return;
+    if (server.masterhost != NULL && !server.repl_slave_repl_all && isSameTypeWithMaster() == C_OK) return;
 
     /* If there aren't slaves, and there is no backlog buffer to populate,
      * we can return ASAP. */
@@ -642,14 +642,16 @@ void refullSyncWithSlaves(struct redisServer *srv, client *c) {
     listAddNodeTail(srv->slaves,c);
 
     /* Create the replication backlog if needed. */
-    if (listLength(srv->slaves) == 1 && srv->repl_backlog == NULL) {
+    if (listLength(crdtServer.slaves) + listLength(server.slaves) == 1 && server.repl_backlog == NULL &&  crdtServer.repl_backlog == NULL) {
         /* When we create the backlog from scratch, we always use a new
          * replication ID and clear the ID2, since there is no valid
          * past history. */
-        if (srv == &server) {
-            changeReplicationId(srv);
-            clearReplicationId2(srv);
-        }
+        changeReplicationId(&server);
+        changeReplicationId(&crdtServer);
+        clearReplicationId2(&server);
+        clearReplicationId2(&crdtServer);
+        createReplicationBacklog(srv);
+    } else if(srv->repl_backlog == NULL) {
         createReplicationBacklog(srv);
     }
 
@@ -719,7 +721,7 @@ void refullSyncWithSlaves(struct redisServer *srv, client *c) {
 void syncCommand(client *c) {
     /* ignore SYNC if already slave or in monitor mode */
     if (c->flags & CLIENT_SLAVE || c->flags & CLIENT_CRDT_SLAVE) return;
-    if (crdt_mode && !(c->slave_capa & SLAVE_CAPA_CRDT)) {
+    if (crdt_enabled && !(c->slave_capa & SLAVE_CAPA_CRDT)) {
         addReplySds(c,sdsnew("-NOMASTERLINK Slave is not crdt\r\n"));
         return;
     }
@@ -1095,8 +1097,13 @@ void updateSlavesWaitingBgsave(struct redisServer *srv, int bgsaveerr, int type)
  * slaves, so the command should be called when something happens that
  * alters the current story of the dataset. */
 void changeReplicationId(struct redisServer *srv) {
-    getRandomHexChars(srv->replid,CONFIG_RUN_ID_SIZE);
-    srv->replid[CONFIG_RUN_ID_SIZE] = '\0';
+    if(srv == &server) {
+        getRandomHexChars(srv->replid,CONFIG_RUN_ID_SIZE);
+        srv->replid[CONFIG_RUN_ID_SIZE] = '\0';
+    } else {
+        //server.replid reuse 
+        memcpy(srv->replid, server.replid, sizeof(server.replid));
+    }
 }
 
 /* Clear (invalidate) the secondary replication ID. This happens, for
@@ -1266,7 +1273,7 @@ void readSyncBulkPayload(aeEventLoop *el, int fd, void *privdata, int mask) {
      * sync command success free ReplicationBacklog
      * sync command fail, keep ReplicationBacklog
      */
-    if(isMasterSlaveReplVerDiff() == C_OK) {
+    if(isSameTypeWithMaster() == C_OK) {
         freeReplicationBacklog(&server);
     }
 
@@ -1379,11 +1386,14 @@ void readSyncBulkPayload(aeEventLoop *el, int fd, void *privdata, int mask) {
         /* After a full resynchroniziation we use the replication ID and
          * offset of the master. The secondary ID / offset are cleared since
          * we are starting a new history. */
-        if(isMasterSlaveReplVerDiff() == C_OK) {
+        if(isSameTypeWithMaster() == C_OK) {
             memcpy(server.replid,server.master->replid,sizeof(server.replid));
             server.master_repl_offset = server.master->reploff;
+            //server.replid reuse
+            memcpy(crdtServer.replid, server.master->replid, sizeof(server.replid));
+            clearReplicationId2(&server);
+            clearReplicationId2(&crdtServer);
         }
-        clearReplicationId2(&server);
         /* Let's create the replication backlog if needed. Slaves need to
          * accumulate the backlog regardless of the fact they have sub-slaves
          * or not, in order to behave correctly if they are promoted to
@@ -1617,13 +1627,18 @@ int slaveTryPartialResynchronization(int fd, int read_reply) {
                 
                 /* Update the cached master ID and our own primary ID to the
                  * new one. */
-                if(isMasterSlaveReplVerDiff() == C_OK) {
+                if(isSameTypeWithMaster() == C_OK) {
                     /* Set the old ID as our ID2, up to the current offset+1. */
                     memcpy(server.replid2,server.cached_master->replid,
                         sizeof(server.replid2));
                     server.second_replid_offset = server.master_repl_offset+1;
 
                     memcpy(server.replid,new,sizeof(server.replid));
+                    //replid reuse
+                    memcpy(crdtServer.replid2,server.cached_master->replid,
+                        sizeof(server.replid2));
+                    crdtServer.second_replid_offset = crdtServer.master_repl_offset+1;
+                    memcpy(crdtServer.replid,new,sizeof(server.replid));
                 }
                 memcpy(server.cached_master->replid,new,sizeof(server.replid));
                 /* Disconnect all the sub-slaves: they need to be notified. */
@@ -1845,7 +1860,7 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
                                   "REPLCONF capa: %s", err);
         }
         sdsfree(err);
-        if(crdt_mode) {
+        if(crdt_enabled) {
             server.repl_state = REPL_STATE_SEND_CRDT;
         } else {
             server.repl_state = REPL_STATE_SEND_PSYNC;
@@ -1914,7 +1929,7 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
         return;
     }
 
-    if(!server.master_is_crdt && initedCrdtServer() && crdt_mode && psync_result == PSYNC_FULLRESYNC) {
+    if(!server.master_is_crdt && initedCrdtServer() && crdt_enabled && psync_result == PSYNC_FULLRESYNC) {
         serverLog(LL_NOTICE, "[CRDT] Master is not crdt and slave is inited\n");
         sdsfree(err);
         goto error;
@@ -1924,8 +1939,8 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
      * entirely different data set and we have no way to incrementally feed
      * our slaves after that. */
 	disconnectSlaves(); /* Force our slaves to resync with us as well. */
-    if(crdt_mode) { disconnectCrdtSlaves(); } 
-    if (psync_result == PSYNC_FULLRESYNC && isMasterSlaveReplVerDiff() == C_OK) {
+    if(crdt_enabled) { disconnectCrdtSlaves(); } 
+    if (psync_result == PSYNC_FULLRESYNC && isSameTypeWithMaster() == C_OK) {
         freeReplicationBacklog(&server); /* Don't allow our chained slaves to PSYNC. */
     }
 
@@ -2760,36 +2775,39 @@ void replicationCron(void) {
      * without sub-slaves attached should still accumulate data into the
      * backlog, in order to reply to PSYNC queries if they are turned into
      * masters after a failover. */
-    if (listLength(server.slaves) == 0 && server.repl_backlog_time_limit &&
-        server.repl_backlog && server.masterhost == NULL)
-    {
-        time_t idle = server.unixtime - server.repl_no_slaves_since;
+    if(!crdt_enabled) {
+        if (listLength(server.slaves) == 0 && server.repl_backlog_time_limit &&
+            server.repl_backlog && server.masterhost == NULL)
+        {
+            time_t idle = server.unixtime - server.repl_no_slaves_since;
 
-        if (idle > server.repl_backlog_time_limit) {
-            /* When we free the backlog, we always use a new
-             * replication ID and clear the ID2. This is needed
-             * because when there is no backlog, the master_repl_offset
-             * is not updated, but we would still retain our replication
-             * ID, leading to the following problem:
-             *
-             * 1. We are a master instance.
-             * 2. Our slave is promoted to master. It's repl-id-2 will
-             *    be the same as our repl-id.
-             * 3. We, yet as master, receive some updates, that will not
-             *    increment the master_repl_offset.
-             * 4. Later we are turned into a slave, connecto to the new
-             *    master that will accept our PSYNC request by second
-             *    replication ID, but there will be data inconsistency
-             *    because we received writes. */
-            changeReplicationId(&server);
-            clearReplicationId2(&server);
-            freeReplicationBacklog(&server);
-            serverLog(LL_NOTICE,
-                "Replication backlog freed after %d seconds "
-                "without connected slaves.",
-                (int) server.repl_backlog_time_limit);
+            if (idle > server.repl_backlog_time_limit) {
+                /* When we free the backlog, we always use a new
+                * replication ID and clear the ID2. This is needed
+                * because when there is no backlog, the master_repl_offset
+                * is not updated, but we would still retain our replication
+                * ID, leading to the following problem:
+                *
+                * 1. We are a master instance.
+                * 2. Our slave is promoted to master. It's repl-id-2 will
+                *    be the same as our repl-id.
+                * 3. We, yet as master, receive some updates, that will not
+                *    increment the master_repl_offset.
+                * 4. Later we are turned into a slave, connecto to the new
+                *    master that will accept our PSYNC request by second
+                *    replication ID, but there will be data inconsistency
+                *    because we received writes. */
+                changeReplicationId(&server);
+                clearReplicationId2(&server);
+                freeReplicationBacklog(&server);
+                serverLog(LL_NOTICE,
+                    "Replication backlog freed after %d seconds "
+                    "without connected slaves.",
+                    (int) server.repl_backlog_time_limit);
+            }
         }
     }
+    
 
     /* If AOF is disabled and we no longer have attached slaves, we can
      * free our Replication Script Cache as there is no need to propagate

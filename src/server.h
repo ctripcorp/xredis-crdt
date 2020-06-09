@@ -1265,7 +1265,10 @@ struct redisServer {
     VectorClock gcVectorClock;
     list *crdtMasters;
     int active_crdt_ovc;      /* Can be disabled for testing purposes. */
-    long long crdt_conflict;
+    long long crdt_type_conflict;
+    long long crdt_non_type_conflict;
+    long long crdt_modify_conflict;
+    long long crdt_merge_conflict;
     long long local_clock;
 }redisServer;
 
@@ -1355,7 +1358,7 @@ typedef struct {
 
 extern struct redisServer server;
 extern struct redisServer crdtServer;
-extern int crdt_mode;
+extern int crdt_enabled;
 extern struct sharedObjectsStruct shared;
 extern dictType objectKeyPointerValueDictType;
 extern dictType setDictType;
@@ -1581,7 +1584,7 @@ int masterTryPartialResynchronization(struct redisServer *srv, client *c);
 void putSlaveOnline(client *slave);
 void createReplicationBacklog(struct redisServer *srv);
 void feedReplicationBacklogWithObject(struct redisServer *srv, robj *o);
-int isMasterSlaveReplVerDiff();
+int isSameTypeWithMaster();
 int isMasterMySelf();
 
 /* CRDT Replications */
@@ -1653,8 +1656,13 @@ void receiveChildInfo(struct redisServer *srv);
 #define REDISMODULE_READ (1<<0)
 #define REDISMODULE_WRITE (1<<1)
 #define REDISMODULE_TOMBSTONE (1<<2)
-void *GetModuleKey(redisDb *db, robj *keyname, int mode, int needCheck);
-void CloseModuleKey(void *moduleKey);
+void *getModuleKey(redisDb *db, robj *keyname, int mode, int needCheck);
+void closeModuleKey(void *moduleKey);
+#define TYPECONFLICT (1<<0)
+#define NONTYPECONFLICT (1<<1)
+#define MODIFYCONFLICT (1<<2)
+#define MERGECONFLICT (1<<3)
+int incrCrdtConflict(int type);
 
 /* Sorted sets data type */
 

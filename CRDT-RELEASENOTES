@@ -9,9 +9,38 @@ MODERATE: Program an upgrade of the server, but it's not urgent.
 HIGH:     There is a critical bug that may affect a subset of users. Upgrade!
 CRITICAL: There is a critical bug affecting MOST USERS. Upgrade ASAP.
 --------------------------------------------------------------------------------
+================================================================================
+XRedis-CRDT 1.0.3  Released Tue Jun  9 15:58:31 CST 2020
+================================================================================
+Upgrade urgency LOW: Compared with the previous version, there are some improvements, mainly:
+Major things:
+* crdtServer and server now shares a same repl_id and repl_id2
+* reduce log by ignoring expire conflict when merge
+* crdt slave now will consider it as master if its master is norm redis
+
+The last change includes a little tricky change that, though we consider the crdt redis slave as a master(when its master is a original redis), 
+there's still a piece of special logic for stable expire data.
+Which, as a consequnce, redis will create another global dict to store keys when receiving expire commands as a slave, 
+and the dict will never be freed once the redis turning into a master.
+In this circumstance, we surely will cause a mem leak, as we're actually transfering the RDB into commands, to make original redis'
+RDB compitable for CRDT ones, thus, expire command is executing on crdt server which will consider itself as a slave previously.
+Finally, the fix is simple, we make crdt redis thought it was a master when it's actually a slave of an original redis.
+
+================================================================================
+XRedis-CRDT 1.0.1  Released Tue Jun  2 16:50:51 CST 2020
+================================================================================
+Upgrade urgency LOW: Compared with the previous version, there are some improvements, mainly:
+Major things:
+* Support non-crdt redis syncing data to crdt redis as master.
+* Support loading RDB files with non-crdt data and crdt data.
+* Optimize kv data structure to shrink down mem use.
+* Support for expire functionalities under CRDT mode.
+* Optimize vector clock to decrease mem use.
+
 
 ================================================================================
 XRedis-CRDT 1.0.2  Released Thu Nov 14 11:17:40 CST 2019
+(should be version 0.0.2 updated by Tue Jun  2 16:50:51 CST 2020)
 ================================================================================
 This version aim to address the issue, that a crash would happen due to networking writing when full sync with peers.
 Root cause of this issue, is because the author(which is me) stupidly considered the write work as an "must-be" stuff. The idea comes from the piece of code that I copied from 'cluster.c', which, after serious struggling understanding the proposal of the original code, that I finally figure it out, was actually writing into a rio wrapped 'sds'. Of course, it'll work, as if a writing failure with mem means Redis is predictable not working any more.
