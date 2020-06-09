@@ -1395,9 +1395,24 @@ int RM_ReplicationFeedAllSlaves(int id, const char *cmdname, const char* fmt, ..
 }
 
 
-int RM_IncrCrdtConflict() {
-    crdtServer.crdt_conflict++;
+int incrCrdtConflict(int type) {
+    if (type & TYPECONFLICT) {
+        crdtServer.crdt_type_conflict++;
+    }
+    if (type & NONTYPECONFLICT) {
+        crdtServer.crdt_non_type_conflict++;
+    }
+    if (type & MODIFYCONFLICT) {
+        crdtServer.crdt_modify_conflict++;
+    }
+    if (type & MERGECONFLICT) {
+        crdtServer.crdt_merge_conflict++;
+    
+    }
     return REDISMODULE_OK;
+}
+int RM_IncrCrdtConflict(int type) {
+    return incrCrdtConflict(type);
 }
 
 /* Send a MULTI command to all the slaves and AOF file. Check the execCommand
@@ -1594,7 +1609,7 @@ int RM_SelectDb(RedisModuleCtx *ctx, int newid) {
 }
 
 
-void *GetModuleKey(redisDb *db, robj *keyname, int mode, int needCheck) {
+void *getModuleKey(redisDb *db, robj *keyname, int mode, int needCheck) {
     RedisModuleKey *kp;
     robj *value, *tombstone = NULL;
  
@@ -1637,7 +1652,7 @@ void *GetModuleKey(redisDb *db, robj *keyname, int mode, int needCheck) {
  * call RedisModule_CloseKey() and RedisModule_KeyType() on a NULL
  * value. */
 void *RM_OpenKey(RedisModuleCtx *ctx, robj *keyname, int mode) {
-    RedisModuleKey *kp = GetModuleKey(ctx->client->db, keyname, mode, 0);
+    RedisModuleKey *kp = getModuleKey(ctx->client->db, keyname, mode, 0);
     if(kp == NULL) {
         return NULL;
     }
@@ -1646,7 +1661,7 @@ void *RM_OpenKey(RedisModuleCtx *ctx, robj *keyname, int mode) {
     return kp;
 }
 void *RM_GetKey(redisDb* db, robj* keyname, int mode) {
-    RedisModuleKey *kp = GetModuleKey(db, keyname, mode, 0);
+    RedisModuleKey *kp = getModuleKey(db, keyname, mode, 0);
     return kp;
 } 
 uint64_t RM_GetModuleTypeId(moduleType *t) {
@@ -1677,7 +1692,7 @@ int RM_SaveModuleValue(rio* rio, moduleType *t, void* value) {
     t->rdb_save(&io, value);
     return io.error? C_ERR: C_OK;
 }
-void CloseModuleKey(void* k) {
+void closeModuleKey(void* k) {
     RedisModuleKey *key = k;
     if (key == NULL) return;
     if (key->mode & REDISMODULE_WRITE) signalModifiedKey(key->db,key->key);
@@ -1692,7 +1707,7 @@ void CloseModuleKey(void* k) {
 
 /* Close a key handle. */
 void RM_CloseKey(RedisModuleKey *key) {
-    CloseModuleKey(key);
+    closeModuleKey(key);
 }
 
 /* Return the type of the key. If the key pointer is NULL then

@@ -902,7 +902,7 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
     for (j = 0; j < server.dbnum; j++) {
         redisDb *db = server.db+j;
         dict *d = db->dict;
-        if (dictSize(d) == 0 && !crdt_mode) continue;
+        if (dictSize(d) == 0 && !crdt_enabled) continue;
         if (dictSize(d) == 0 && 
             dictSize(db->deleted_keys) == 0 
         ) 
@@ -929,7 +929,7 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
         if (rdbSaveType(rdb,RDB_OPCODE_RESIZEDB) == -1) goto werr;
         if (rdbSaveLen(rdb,db_size) == -1) goto werr;
         if (rdbSaveLen(rdb,expires_size) == -1) goto werr;
-        if(crdt_mode) {
+        if(crdt_enabled) {
             if(rdbSaveCrdtDbSize(rdb, db) == C_ERR) goto werr;
         }
         /* Iterate this DB writing every entry */
@@ -960,7 +960,7 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
                 aofReadDiffFromParent();
             }
         }
-        if(crdt_mode) {
+        if(crdt_enabled) {
             if(rdbSaveCrdtData(rdb, db, keys, flags, &processed) == C_ERR) {
                 goto werr;
             }
@@ -1554,14 +1554,14 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
     }
 
     int isCrdtRdb = rdbver > CTRIP_RDB_PREFIX;
-    if(!isCrdtRdb && crdt_mode && initedCrdtServer()) {
+    if(!isCrdtRdb && crdt_enabled && initedCrdtServer()) {
         serverLog(LL_WARNING,"Can't Load Redis RDB");
         errno = EINVAL;
         return C_ERR;
     } 
 
     CRDT_Master_Instance *currentMasterInstance = NULL;
-    if (isCrdtRdb && crdt_mode ) {
+    if (isCrdtRdb && crdt_enabled ) {
         if(crdtServer.crdtMasters == NULL) {
             crdtServer.crdtMasters = listCreate();
         }
@@ -1613,7 +1613,7 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                 exit(1);
             }
             db = server.db+dbid;
-            if(!isCrdtRdb && crdt_mode) {
+            if(!isCrdtRdb && crdt_enabled) {
                 crdtSelectDb(fakeClient, dbid);
             }
             continue; /* Read type again. */
@@ -1651,12 +1651,12 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
             } else if (!strcasecmp(auxkey->ptr,"repl-stream-db")) {
                 if (rsi) rsi->repl_stream_db = atoi(auxval->ptr);
             } else if (!strcasecmp(auxkey->ptr,"repl-id")) {
-                if (isRdbReplVerDiff(isCrdtRdb) == C_OK && rsi && sdslen(auxval->ptr) == CONFIG_RUN_ID_SIZE) {
+                if (verifyRdbType(isCrdtRdb) == C_OK && rsi && sdslen(auxval->ptr) == CONFIG_RUN_ID_SIZE) {
                     memcpy(rsi->repl_id,auxval->ptr,CONFIG_RUN_ID_SIZE+1);
                     rsi->repl_id_is_set = 1;
                 }
             } else if (!strcasecmp(auxkey->ptr,"repl-offset")) {
-                if (isRdbReplVerDiff(isCrdtRdb) == C_OK && rsi) rsi->repl_offset = strtoll(auxval->ptr,NULL,10);
+                if (verifyRdbType(isCrdtRdb) == C_OK && rsi) rsi->repl_offset = strtoll(auxval->ptr,NULL,10);
             } else if (!strcasecmp(auxkey->ptr,"lua")) {
                 /* Load the script back in memory. */
                 if (luaCreateFunction(NULL,server.lua,auxval) == NULL) {
@@ -1736,7 +1736,7 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
         * snapshot taken by the master may not be reflected on the slave. */
         
         /* Add the new object in the hash table */
-        if(!isCrdtRdb && crdt_mode) {
+        if(!isCrdtRdb && crdt_enabled) {
             if(data2CrdtData(fakeClient, key, val) == C_ERR) {
                 decrRefCount(key);
                 freeFakeClient(fakeClient);
@@ -1765,7 +1765,7 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                 2. B slaveof A
                     a. C->B add sync (B expire must send C)
             */
-            if(!isCrdtRdb && crdt_mode) {
+            if(!isCrdtRdb && crdt_enabled) {
                 expire2CrdtExpire(fakeClient, key, expiretime);
             }else{
                 setExpire(NULL,db,key,expiretime);
@@ -2212,7 +2212,7 @@ rdbSaveInfo *rdbPopulateSaveInfo(rdbSaveInfo *rsi) {
      * connects to us, the NULL repl_backlog will trigger a full
      * synchronization, at the same time we will use a new replid and clear
      * replid2. */
-    if (!server.masterhost && server.repl_backlog) {
+    if (isMasterMySelf() == C_OK && server.repl_backlog) {
         /* Note that when server.slaveseldb is -1, it means that this master
          * didn't apply any write commands after a full synchronization.
          * So we can let repl_stream_db be 0, this allows a restarted slave

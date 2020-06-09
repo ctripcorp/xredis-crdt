@@ -59,7 +59,7 @@ rdbSaveRioWithCrdtMerge(rio *rdb, int *error, void *rsi);
 int initedCrdtServer();
 ssize_t rdbSaveAuxFieldStrInt(rio *rdb, char *key, long long val);
 int data2CrdtData(client* fakeClient, robj* key, robj* val);
-int isRdbReplVerDiff(int isCrdtRdb);
+int verifyRdbType(int isCrdtRdb);
 int expire2CrdtExpire(client* client, robj* key, long long expiretime);
 /* CRDT RDB */
 int rdbSaveCrdtData(rio *rdb,redisDb* db, dict* keys, int flags, size_t* processed);
