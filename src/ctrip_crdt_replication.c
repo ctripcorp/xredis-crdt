@@ -72,7 +72,10 @@ void freePeerMaster(CRDT_Master_Instance *masterInstance) {
     listNode *ln = listSearchKey(l, masterInstance);
     serverAssert(ln != NULL);
     listDelNode(l,ln);
-
+    if(masterInstance->masterhost) {
+        sdsfree(masterInstance->masterhost);
+        masterInstance->masterhost = NULL;
+    }
     if(!isNullVectorClock(masterInstance->vectorClock)) {
         freeVectorClock(masterInstance->vectorClock);
         masterInstance->vectorClock = newVectorClock(0);
