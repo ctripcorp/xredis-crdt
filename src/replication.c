@@ -1635,6 +1635,9 @@ int slaveTryPartialResynchronization(int fd, int read_reply) {
 
                     memcpy(server.replid,new,sizeof(server.replid));
                     //replid reuse
+                    memcpy(crdtServer.replid2,server.cached_master->replid,
+                        sizeof(server.replid2));
+                    crdtServer.second_replid_offset = crdtServer.master_repl_offset+1;
                     memcpy(crdtServer.replid,new,sizeof(server.replid));
                 }
                 memcpy(server.cached_master->replid,new,sizeof(server.replid));
