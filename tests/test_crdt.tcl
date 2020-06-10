@@ -14,6 +14,7 @@ source tests/support/util.tcl
 
 
 set ::all_tests { 
+    ctrip/integration/bug/free-replication-blocklog
     ctrip/master-not-crdt/crdt_replid_reuse
     ctrip/integration/bug/not_remember_slave_key_with_expire_when_master_is_non_crdt
     ctrip/unit/crdt_command
@@ -87,7 +88,7 @@ set ::all_tests {
     ctrip/integration/master-slave/rdb2
     ctrip/integration/master-slave/psync2
     ctrip/integration/master-slave/replication-psync
-    ctrip/integration/master-master/change_to_slave 
+    ctrip/integration/master-master/change_to_slave
 }
 set ::temp_tests { 
     #####

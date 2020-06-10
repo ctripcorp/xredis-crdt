@@ -646,6 +646,8 @@ void refullSyncWithSlaves(struct redisServer *srv, client *c) {
         /* When we create the backlog from scratch, we always use a new
          * replication ID and clear the ID2, since there is no valid
          * past history. */
+        serverLog(LL_NOTICE, 
+                        "[CRDT] changeReplicationId when with connected frist slave");
         changeReplicationId(&server);
         changeReplicationId(&crdtServer);
         clearReplicationId2(&server);
@@ -2137,6 +2139,7 @@ void replicationUnsetMaster(void) {
      * starting from now. Otherwise the backlog will be freed after a
      * failover if slaves do not connect immediately. */
     server.repl_no_slaves_since = server.unixtime;
+    crdtServer.repl_no_slaves_since = server.unixtime;
 }
 
 /* This function is called when the slave lose the connection with the
@@ -2780,7 +2783,6 @@ void replicationCron(void) {
             server.repl_backlog && server.masterhost == NULL)
         {
             time_t idle = server.unixtime - server.repl_no_slaves_since;
-
             if (idle > server.repl_backlog_time_limit) {
                 /* When we free the backlog, we always use a new
                 * replication ID and clear the ID2. This is needed
