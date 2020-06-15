@@ -209,6 +209,7 @@ int REDISMODULE_API_FUNC(RedisModule_ReplicateStraightForward)(RedisModuleCtx *c
 int REDISMODULE_API_FUNC(RedisModule_CrdtReplicate)(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...);
 int REDISMODULE_API_FUNC(RedisModule_CrdtReplicateAlsoNormReplicate)(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...);
 int REDISMODULE_API_FUNC(RedisModule_ReplicationFeedAllSlaves)(int dbId, const char *cmdname, const char *fmt, ...);
+int REDISMODULE_API_FUNC(RedisModule_ReplicationFeedStringToAllSlaves)(int dbId, RedisModuleString* cmd);
 int REDISMODULE_API_FUNC(RedisModule_IncrCrdtConflict)(int type);
 int REDISMODULE_API_FUNC(RedisModule_CrdtMultiWrappedReplicate)(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...);
 const char *REDISMODULE_API_FUNC(RedisModule_CallReplyStringPtr)(RedisModuleCallReply *reply, size_t *len);
@@ -262,6 +263,7 @@ float REDISMODULE_API_FUNC(RedisModule_LoadFloat)(RedisModuleIO *io);
 void REDISMODULE_API_FUNC(RedisModule_Log)(RedisModuleCtx *ctx, const char *level, const char *fmt, ...);
 void REDISMODULE_API_FUNC(RedisModule_Debug)( const char *level, const char *fmt, ...);
 size_t REDISMODULE_API_FUNC(RedisModule_UsedMemory)();
+size_t REDISMODULE_API_FUNC(RedisModule_ZmallocNum)();
 void REDISMODULE_API_FUNC(RedisModule_LogIOError)(RedisModuleIO *io, const char *levelstr, const char *fmt, ...);
 int REDISMODULE_API_FUNC(RedisModule_StringAppendBuffer)(RedisModuleCtx *ctx, RedisModuleString *str, const char *buf, size_t len);
 void REDISMODULE_API_FUNC(RedisModule_RetainString)(RedisModuleCtx *ctx, RedisModuleString *str);
@@ -363,6 +365,7 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(CrdtReplicate);
     REDISMODULE_GET_API(CrdtReplicateAlsoNormReplicate);
     REDISMODULE_GET_API(ReplicationFeedAllSlaves);
+    REDISMODULE_GET_API(ReplicationFeedStringToAllSlaves);
     REDISMODULE_GET_API(IncrCrdtConflict);
     REDISMODULE_GET_API(CrdtMultiWrappedReplicate);
     REDISMODULE_GET_API(DeleteKey);
@@ -415,6 +418,7 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(Log);
     REDISMODULE_GET_API(Debug);
     REDISMODULE_GET_API(UsedMemory);
+    REDISMODULE_GET_API(ZmallocNum);
     REDISMODULE_GET_API(LogIOError);
     REDISMODULE_GET_API(StringAppendBuffer);
     REDISMODULE_GET_API(RetainString);

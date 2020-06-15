@@ -245,6 +245,9 @@ void *RM_Alloc(size_t bytes) {
 size_t RM_UsedMemory() {
     return zmalloc_used_memory();
 }
+size_t RM_ZmallocNum() {
+    return zmalloc_num();
+}
 /* Use like calloc(). Memory allocated with this function is reported in
  * Redis INFO memory, used for keys eviction according to maxmemory settings
  * and in general is taken into account as memory allocated by Redis.
@@ -1051,7 +1054,7 @@ int RM_ReplyWithError(RedisModuleCtx *ctx, const char *err) {
  * The function always returns REDISMODULE_OK. */
 int RM_ReplyWithSimpleString(RedisModuleCtx *ctx, const char *msg) {
     return replyWithStatus(ctx,msg,"+");
-}
+} 
 
 /* Reply with an array type of 'len' elements. However 'len' other calls
  * to `ReplyWith*` style functions must follow in order to emit the elements
@@ -1349,7 +1352,19 @@ int RM_CrdtReplicate(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, 
     server.dirty++;
     return REDISMODULE_OK;
 }
+// int RM_CrdtAlsoPropagate(RedisModuleCtx *ctx, robj **argv, int argc) {
+//     struct redisCommand *cmd;
+//     cmd = lookupCommandByCString((char*)cmdname);
+//     if (!cmd) return REDISMODULE_ERR;
+//     /* Replicate! */
+//     alsoPropagate(cmd, ctx->client->db->id,argv,argc,PROPAGATE_CRDT_REPL);
 
+//     /* Release the argv. */
+//     for (j = 0; j < argc; j++) decrRefCount(argv[j]);
+//     zfree(argv);
+//     server.dirty++;
+//     return REDISMODULE_OK;
+// }
 int RM_CrdtReplicateAlsoNormReplicate(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...) {
     struct redisCommand *cmd;
     robj **argv = NULL;
@@ -1372,6 +1387,11 @@ int RM_CrdtReplicateAlsoNormReplicate(RedisModuleCtx *ctx, const char *cmdname, 
     for (j = 0; j < argc; j++) decrRefCount(argv[j]);
     zfree(argv);
     server.dirty++;
+    return REDISMODULE_OK;
+}
+int RM_ReplicationFeedStringToAllSlaves(int id, RedisModuleString* cmd) {
+    // serverLog(LL_WARNING, "cmd: %s", cmd->ptr);
+    replicationFeedStringToAllSlaves(id, cmd);
     return REDISMODULE_OK;
 }
 
@@ -1621,7 +1641,7 @@ void *getModuleKey(redisDb *db, robj *keyname, int mode, int needCheck) {
             return NULL;
         }
     }
-    if (mode & REDISMODULE_TOMBSTONE) {
+    if (mode & REDISMODULE_TOMBSTONE && value == NULL) {
         tombstone = lookupTombstoneKey(db,keyname);
     }
     kp = zmalloc(sizeof(*kp));
@@ -4325,6 +4345,7 @@ void moduleRegisterCoreAPI(void) {
     server.moduleapi = dictCreate(&moduleAPIDictType,NULL);
     REGISTER_API(Alloc);
     REGISTER_API(UsedMemory);
+    REGISTER_API(ZmallocNum);
     REGISTER_API(Calloc);
     REGISTER_API(Realloc);
     REGISTER_API(Free);
@@ -4381,6 +4402,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(ReplicateVerbatim);
     REGISTER_API(CrdtReplicateVerbatim);
     REGISTER_API(ReplicationFeedAllSlaves);
+    REGISTER_API(ReplicationFeedStringToAllSlaves);
     REGISTER_API(DeleteKey);
     REGISTER_API(UnlinkKey);
     REGISTER_API(StringSet);

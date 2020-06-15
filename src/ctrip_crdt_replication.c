@@ -395,7 +395,7 @@ char *crdtSendSynchronousCommand(CRDT_Master_Instance *crdtMaster, int flags, in
             return sdscatprintf(sdsempty(),"-Reading from ip: %s port: %d, error: %s",
                                 crdtMaster->masterhost, crdtMaster->masterport, strerror(errno));
         }
-        crdtServer.repl_transfer_lastio = server.unixtime;
+        crdtMaster->repl_transfer_lastio = server.unixtime;
         return sdsnew(buf);
     }
     return NULL;
@@ -1257,7 +1257,61 @@ void feedCrdtBacklog(robj **argv, int argc) {
 
 
 }
+void replicationFeedString(robj* cmd) {
+    listNode *ln;
+    listIter li;
+    int j, len;
 
+
+    /* Add the SELECT command into the both backlogs. */
+    if (server.repl_backlog) {
+        feedReplicationBacklogWithObject(&server, cmd);
+    }
+
+    if (crdtServer.repl_backlog) {
+        feedReplicationBacklogWithObject(&crdtServer, cmd);
+    }
+
+    /* Send it to slaves. */
+    listRewind(server.slaves,&li);
+    while((ln = listNext(&li))) {
+        client *slave = ln->value;
+        if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) continue;
+        addReply(slave,cmd);
+    }
+
+    /* Send it to crdt slaves. */
+    listRewind(crdtServer.slaves,&li);
+    while((ln = listNext(&li))) {
+        client *slave = ln->value;
+        if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) continue;
+        addReply(slave,cmd);
+    }
+}
+void replicationFeedStringToAllSlaves(int dictid, robj* cmd) {
+    listNode *ln;
+    listIter li;
+    int j, len;
+    char llstr[LONG_STR_SIZE];
+    char gidstr[LONG_STR_SIZE];
+    if (server.masterhost != NULL && !server.repl_slave_repl_all && isSameTypeWithMaster() == C_OK ) return;
+    if (server.slaveseldb != dictid || crdtServer.slaveseldb != dictid) {
+        robj *selectcmd;
+
+        int dictid_len, gid_len;
+
+        dictid_len = ll2string(llstr,sizeof(llstr),dictid);
+        gid_len = ll2string(gidstr,sizeof(gidstr),crdtServer.crdt_gid);
+
+        selectcmd = createObject(OBJ_STRING,
+                                 sdscatprintf(sdsempty(),
+                                              "*3\r\n$11\r\nCRDT.SELECT\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n",
+                                              gid_len, gidstr, dictid_len, llstr));
+        replicationFeedString(selectcmd);
+        decrRefCount(selectcmd);
+    }
+    replicationFeedString(cmd);
+}
 /* Propagate write commands to slaves, and populate the replication backlog
  * as well. This function is used if the instance is a master: we use
  * the commands received by our clients in order to create the replication
