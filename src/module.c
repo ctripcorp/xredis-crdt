@@ -689,6 +689,7 @@ long long RM_Milliseconds(void) {
     return mstime();
 }
 
+
 /* --------------------------------------------------------------------------
  * Automatic memory management for modules
  * -------------------------------------------------------------------------- */
@@ -1055,6 +1056,12 @@ int RM_ReplyWithError(RedisModuleCtx *ctx, const char *err) {
 int RM_ReplyWithSimpleString(RedisModuleCtx *ctx, const char *msg) {
     return replyWithStatus(ctx,msg,"+");
 } 
+int RM_ReplyWithOk(RedisModuleCtx *ctx) {
+    client *c = moduleGetReplyClient(ctx);
+    if (c == NULL) return REDISMODULE_OK;
+    addReply(c, shared.ok);
+    return REDISMODULE_OK;
+}
 
 /* Reply with an array type of 'len' elements. However 'len' other calls
  * to `ReplyWith*` style functions must follow in order to emit the elements
@@ -1389,9 +1396,13 @@ int RM_CrdtReplicateAlsoNormReplicate(RedisModuleCtx *ctx, const char *cmdname, 
     server.dirty++;
     return REDISMODULE_OK;
 }
-int RM_ReplicationFeedStringToAllSlaves(int id, RedisModuleString* cmd) {
+int RM_ReplicationFeedStringToAllSlaves(int id, void* cmdbuf, size_t cmdlen) {
     // serverLog(LL_WARNING, "cmd: %s", cmd->ptr);
-    replicationFeedStringToAllSlaves(id, cmd);
+    replicationFeedStringToAllSlaves(id, cmdbuf, cmdlen);
+    return REDISMODULE_OK;
+}
+int RM_ReplicationFeedRobjToAllSlaves(int id, RedisModuleString* cmd) {
+    replicationFeedRobjToAllSlaves(id, cmd);
     return REDISMODULE_OK;
 }
 
@@ -4354,6 +4365,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(SetModuleAttribs);
     REGISTER_API(IsModuleNameBusy);
     REGISTER_API(WrongArity);
+    REGISTER_API(ReplyWithOk);
     REGISTER_API(ReplyWithLongLong);
     REGISTER_API(ReplyWithError);
     REGISTER_API(ReplyWithSimpleString);
@@ -4403,6 +4415,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(CrdtReplicateVerbatim);
     REGISTER_API(ReplicationFeedAllSlaves);
     REGISTER_API(ReplicationFeedStringToAllSlaves);
+     REGISTER_API(ReplicationFeedRobjToAllSlaves);
     REGISTER_API(DeleteKey);
     REGISTER_API(UnlinkKey);
     REGISTER_API(StringSet);
