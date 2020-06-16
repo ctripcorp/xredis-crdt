@@ -3507,6 +3507,7 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                                     "#Peer_Master_%d\r\n"
                                     "peer%d_host:%s\r\n"
                                     "peer%d_port:%d\r\n"
+                                    "peer%d_gid:%d\r\n"
                                     "peer%d_link_status:%s\r\n"
                                     "peer%d_last_io_seconds_ago:%d\r\n"
                                     "peer%d_sync_in_progress:%d\r\n"
@@ -3514,6 +3515,7 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                                     masterid,
                                     masterid, masterInstance->masterhost,
                                     masterid, masterInstance->masterport,
+                                    masterid, masterInstance->gid,
                                     masterid, (masterInstance->repl_state == REPL_STATE_CONNECTED) ?
                                     "up" : "down",
                                     masterid, masterInstance->master ?
