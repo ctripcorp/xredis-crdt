@@ -736,9 +736,35 @@ int main(int argc, const char **argv) {
             free(cmd);
         }
 
+        if (test_is_selected("expire")) {
+            len = redisFormatCommand(&cmd,"EXPIRE key:__rand_int__ 1000");
+            benchmark("EXPIRE",cmd,len);
+            free(cmd);
+        }
+
+        if (test_is_selected("del")) {
+            len = redisFormatCommand(&cmd,"del key:__rand_int__");
+            benchmark("DEL",cmd,len);
+            free(cmd);
+        }
+
+        if (test_is_selected("crdt.set")) {
+            len = redisFormatCommand(&cmd,"CRDT.SET key:__rand_int__ %s 1 10000 1:1",data);
+            benchmark("CRDT.SET",cmd,len);
+            free(cmd);
+        }
+
         if (test_is_selected("get")) {
             len = redisFormatCommand(&cmd,"GET key:__rand_int__");
             benchmark("GET",cmd,len);
+            free(cmd);
+        }
+        
+        
+
+        if (test_is_selected("crdt.get")) {
+            len = redisFormatCommand(&cmd,"CRDT.GET key:__rand_int__");
+            benchmark("CRDT.GET",cmd,len);
             free(cmd);
         }
 
@@ -783,6 +809,26 @@ int main(int argc, const char **argv) {
             len = redisFormatCommand(&cmd,
                 "HSET myset:__rand_int__ element:__rand_int__ %s",data);
             benchmark("HSET",cmd,len);
+            free(cmd);
+        }
+
+        if (test_is_selected("hget")) {
+            len = redisFormatCommand(&cmd,"HGET myset:__rand_int__ element:__rand_int__");
+            benchmark("HGET",cmd,len);
+            free(cmd);
+        }
+
+        if (test_is_selected("hdel")) {
+            len = redisFormatCommand(&cmd,
+                "HDEL myset:__rand_int__ element:__rand_int__");
+            benchmark("HDEL",cmd,len);
+            free(cmd);
+        }
+
+        if (test_is_selected("del-hash")) {
+            len = redisFormatCommand(&cmd,
+                "DEL myset:__rand_int__");
+            benchmark("DEL",cmd,len);
             free(cmd);
         }
 
@@ -836,6 +882,19 @@ int main(int argc, const char **argv) {
             }
             len = redisFormatCommandArgv(&cmd,21,argv,NULL);
             benchmark("MSET (10 keys)",cmd,len);
+            free(cmd);
+        }
+
+        if (test_is_selected("hmset")) {
+            const char *argv[21];
+            argv[0] = "HMSET";
+            argv[1] = "hash:__rand_int__";
+            for (i = 2; i < 22; i += 2) {
+                argv[i] = "key:__rand_int__";
+                argv[i+1] = data;
+            }
+            len = redisFormatCommandArgv(&cmd,22,argv,NULL);
+            benchmark("HMSET (10 keys)",cmd,len);
             free(cmd);
         }
 

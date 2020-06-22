@@ -892,6 +892,7 @@ const char *RM_StringPtrLen(const RedisModuleString *str, size_t *len) {
     return str->ptr;
 }
 
+
 /* --------------------------------------------------------------------------
  * Higher level string operations
  * ------------------------------------------------------------------------- */
@@ -1652,7 +1653,7 @@ void *getModuleKey(redisDb *db, robj *keyname, int mode, int needCheck) {
             return NULL;
         }
     }
-    if (mode & REDISMODULE_TOMBSTONE && value == NULL) {
+    if (mode & REDISMODULE_TOMBSTONE) {
         tombstone = lookupTombstoneKey(db,keyname);
     }
     kp = zmalloc(sizeof(*kp));
@@ -1690,6 +1691,75 @@ void *RM_OpenKey(RedisModuleCtx *ctx, robj *keyname, int mode) {
     kp->ctx = ctx;
     autoMemoryAdd(ctx,REDISMODULE_AM_KEY,kp);
     return kp;
+}
+void* RM_DbAddOrFind(RedisModuleCtx *ctx, RedisModuleString *keyname, moduleType* type) {
+    dict* d = ctx->client->db->dict;
+    // dictEntry* de = dictFind(d,keyname->ptr);
+    dictEntry *old;
+    dictEntry* de = dictAddRaw(d, keyname->ptr, &old);
+    if(de != NULL) {
+        dictSetKey(d, de, sdsdup(keyname->ptr));
+        dictSetSignedIntegerVal(de, 0);
+        return de;
+    }
+    if(old == NULL) {
+        exit(0);
+    }
+    robj* value = dictGetVal(old);
+    if(value == NULL) {
+        return old;
+    } 
+    if(value->type != OBJ_MODULE) {
+        return NULL;
+    } 
+    moduleValue *mt = value->ptr;
+    if(mt->type != type) {
+        return NULL;
+    }
+    return old;
+}
+int RM_DbDelete(RedisModuleCtx *ctx, RedisModuleString* keyname) {
+    return dictDelete(ctx->client->db->dict, keyname->ptr);
+}
+void* RM_DbEntryGetVal(RedisModuleCtx *ctx, dictEntry* de) {
+    robj* val = dictGetVal(de);
+    if(val == NULL) {
+        return NULL;
+    }
+    moduleValue *mt = val->ptr;
+    return mt->value;
+}
+int RM_DbEntrySetVal(RedisModuleCtx *ctx, RedisModuleString* keyname, dictEntry* de, moduleType* type, void* val) {
+    robj *o = createModuleObject(type,val);
+    redisDb *db= ctx->client->db;
+    dictSetVal(db->dict, de, o);
+    signalModifiedKey(db, keyname);
+    return 0;
+}
+void * RM_DbGetValue(RedisModuleCtx *ctx, RedisModuleString *keyname, moduleType* type, int* error) {
+    robj* value = lookupKeyWrite(ctx->client->db,keyname);
+    if(value == NULL) {
+        return NULL;
+    }
+    if(value->type != OBJ_MODULE) {
+        *error = 1;
+        return NULL;
+    }
+    moduleValue *mt = value->ptr;
+    if(mt->type != type) {
+        *error = 1;
+        return NULL;
+    }
+    return mt->value;
+}
+int RM_DbSetValue(RedisModuleCtx *ctx, RedisModuleString *keyname, moduleType* type, void* val) {
+    robj *o = createModuleObject(type,val);
+    setKey(ctx->client->db, keyname,o);
+    decrRefCount(o);
+    // redisDb* db = ctx->client->db;
+    // dbAdd(db,keyname,o);
+    // signalModifiedKey(db,keyname);
+    return REDISMODULE_OK;
 }
 void *RM_GetKey(redisDb* db, robj* keyname, int mode) {
     RedisModuleKey *kp = getModuleKey(db, keyname, mode, 0);
@@ -1730,7 +1800,7 @@ void closeModuleKey(void* k) {
     /* TODO: if (key->iter) RM_KeyIteratorStop(kp); */
     RM_ZsetRangeStop(key);
     decrRefCount(key->key);
-    if(key->ctx != NULL) {
+    if(key->ctx != NULL && key->ctx->flags & REDISMODULE_CTX_AUTO_MEMORY) {
         autoMemoryFreed(key->ctx,REDISMODULE_AM_KEY,key);
     }
     zfree(key);
@@ -4379,6 +4449,12 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(GetSelectedDb);
     REGISTER_API(SelectDb);
     REGISTER_API(OpenKey);
+    REGISTER_API(DbAddOrFind);
+    REGISTER_API(DbDelete);
+    REGISTER_API(DbEntryGetVal);
+    REGISTER_API(DbEntrySetVal);
+    REGISTER_API(DbGetValue);
+    REGISTER_API(DbSetValue);
     REGISTER_API(GetKey);
     REGISTER_API(GetModuleTypeId);
     REGISTER_API(GetModuleTypeById);

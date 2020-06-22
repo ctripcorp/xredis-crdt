@@ -164,6 +164,12 @@ int REDISMODULE_API_FUNC(RedisModule_ReplyWithLongLong)(RedisModuleCtx *ctx, lon
 int REDISMODULE_API_FUNC(RedisModule_GetSelectedDb)(RedisModuleCtx *ctx);
 int REDISMODULE_API_FUNC(RedisModule_SelectDb)(RedisModuleCtx *ctx, int newid);
 void *REDISMODULE_API_FUNC(RedisModule_OpenKey)(RedisModuleCtx *ctx, RedisModuleString *keyname, int mode);
+void *REDISMODULE_API_FUNC(RedisModule_DbGetValue)(RedisModuleCtx *ctx, RedisModuleString *keyname, RedisModuleType* type,int* error);
+void *REDISMODULE_API_FUNC(RedisModule_DbDelete)(RedisModuleCtx *ctx, void* keyname);
+void *REDISMODULE_API_FUNC(RedisModule_DbEntryGetVal)(RedisModuleCtx *ctx, void* de);
+void *REDISMODULE_API_FUNC(RedisModule_DbEntrySetVal)(RedisModuleCtx *ctx, RedisModuleString* keyname, void* de, RedisModuleType* type, void* val);
+void *REDISMODULE_API_FUNC(RedisModule_DbAddOrFind)(RedisModuleCtx *ctx, RedisModuleString *keyname, RedisModuleType* type);
+int REDISMODULE_API_FUNC(RedisModule_DbSetValue)(RedisModuleCtx *ctx, RedisModuleString *keyname, RedisModuleType* type,void* val);
 void *REDISMODULE_API_FUNC(RedisModule_GetKey)(void *db, RedisModuleString *keyname, int mode);
 uint64_t REDISMODULE_API_FUNC(RedisModule_GetModuleTypeId)(RedisModuleType* moduletype);
 int REDISMODULE_API_FUNC(RedisModule_SaveModuleValue)(void* rdb, RedisModuleType* moduletype, void* data);
@@ -330,6 +336,12 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(GetSelectedDb);
     REDISMODULE_GET_API(SelectDb);
     REDISMODULE_GET_API(OpenKey);
+    REDISMODULE_GET_API(DbAddOrFind);
+    REDISMODULE_GET_API(DbDelete);
+    REDISMODULE_GET_API(DbEntryGetVal);
+    REDISMODULE_GET_API(DbEntrySetVal);
+    REDISMODULE_GET_API(DbGetValue);
+    REDISMODULE_GET_API(DbSetValue);
     REDISMODULE_GET_API(SaveModuleValue);
     REDISMODULE_GET_API(GetModuleTypeId);
     REDISMODULE_GET_API(LoadLen);
