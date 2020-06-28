@@ -25,6 +25,8 @@ start_server {tags {"crdt-hash"} overrides {crdt-gid 1} config {crdt.conf} modul
 
     test {"[crdt_hash.tcl]basic hset and hget"} {
         r hset k-hash f1 v1
+        set info [r crdt.dataInfo k-hash]
+        assert_equal [string match  "type: lww_hash,  last-vc: 1:1" [lindex $info 0]] 1
         r hget k-hash f1
     } {v1}
 
@@ -81,6 +83,8 @@ start_server {tags {"crdt-hash-more"} overrides {crdt-gid 1} config {crdt.conf} 
         r CRDT.HSET k-hash-1 1 [clock milliseconds] "1:100" 4 f v f1 v1
         after 1
         r CRDT.HSET k-hash-1 1 [clock milliseconds] "1:101" 4 f v2
+        set info [r crdt.dataInfo k-hash-1]
+        assert_equal [string match  "type: lww_hash,  last-vc: 1:101" [lindex $info 0]] 1
         r hget k-hash-1 f
     } {v2}
 
@@ -110,6 +114,9 @@ start_server {tags {"crdt-hash-more"} overrides {crdt-gid 1} config {crdt.conf} 
         r CRDT.HSET k-hash-6 1 [clock milliseconds] "1:100;2:100" 6 f v f1 v1 f2 v2
         r CRDT.DEL_HASH k-hash-6 2 [clock milliseconds] "1:101;2:101" "1:101;2:100"
         r CRDT.DEL_HASH k-hash-6 1 [clock milliseconds] "1:101;2:100" "1:101;2:100"
+        set info [r crdt.dataInfo k-hash-6]
+        assert_equal [string match  "type: lww_hash_tombstone,  last-vc: 1:101;2:101, max-del-gid: 2, max-del-time: *, max-del-vc: 1:101;2:101" [lindex $info 0]] 1
+        # puts $info
         r hget k-hash-6 f
     } {}
 

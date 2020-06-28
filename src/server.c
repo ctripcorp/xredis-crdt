@@ -610,10 +610,11 @@ dictType zsetDictType = {
 /* Db->dict, keys are sds strings, vals are Redis objects. */
 dictType dbDictType = {
     dictSdsHash,                /* hash function */
-    NULL,                       /* key dup */
+    dictDupKeyStatMemory,       /* key dup */
     NULL,                       /* val dup */
     dictSdsKeyCompare,          /* key compare */
-    dictSdsDestructor,          /* key destructor */
+    dictDestructorKeyStatMemory,/* key destructor */
+    // dictSdsDestructor,          
     dictObjectDestructor   /* val destructor */
 };
 

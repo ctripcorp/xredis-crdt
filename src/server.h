@@ -1963,6 +1963,8 @@ unsigned long LFUDecrAndReturn(robj *o);
 uint64_t dictSdsHash(const void *key);
 int dictSdsKeyCompare(void *privdata, const void *key1, const void *key2);
 void dictSdsDestructor(void *privdata, void *val);
+void* dictDupKeyStatMemory(void *privdata, const void *key);
+void dictDestructorKeyStatMemory(void *privdata, void *key);
 
 /* Git SHA1 */
 char *redisGitSHA1(void);
