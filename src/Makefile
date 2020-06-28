@@ -125,7 +125,7 @@ ifeq ($(MALLOC),jemalloc)
 	FINAL_LIBS+= ../deps/jemalloc/lib/libjemalloc.a
 endif
 
-ifeq ($(TEST),tcl)
+ifeq ($(uname_S),Darwin)
 	FINAL_CFLAGS+= -DTCL_TEST
 endif
 REDIS_CC=$(QUIET_CC)$(CC) $(FINAL_CFLAGS)
