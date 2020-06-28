@@ -34,6 +34,7 @@
 #define REDISMODULE_CORE 1
 #include "redismodule.h"
 #include "ctrip_crdt_common.h"
+#include "atomicvar.h"
 
 /* --------------------------------------------------------------------------
  * Private data structures used by the modules system. Those are data
@@ -239,35 +240,102 @@ static void zsetKeyReset(RedisModuleKey *key);
  * Redis INFO memory, used for keys eviction according to maxmemory settings
  * and in general is taken into account as memory allocated by Redis.
  * You should avoid using malloc(). */
+static size_t module_memory = 0;
+#define add_module_memory_stat_alloc(__n) do { \
+    if(__n < 0) { \
+        atomicDecr(module_memory,__n); \
+    } else {    \
+        atomicIncr(module_memory,__n); \
+    } \
+} while(0)
+
+
 void *RM_Alloc(size_t bytes) {
-    return zmalloc(bytes);
+    size_t old_size = zmalloc_used_memory();
+    void* r = zmalloc(bytes);
+    add_module_memory_stat_alloc(zmalloc_used_memory() - old_size);
+    return r;
+}
+size_t RM_ModuleMemory() {
+    size_t um;
+    atomicGet(module_memory,um);
+    return um;
 }
 size_t RM_UsedMemory() {
     return zmalloc_used_memory();
 }
-size_t RM_ZmallocNum() {
-    return zmalloc_num();
+size_t sds_memory(sds ptr) {
+    #ifdef HAVE_MALLOC_SIZE
+         return zmalloc_size(sdsAllocPtr(ptr));
+    #else
+        // size_t old_size = zmalloc_used_memory();
+        // void* d = sdsdup(ptr);
+        // size_t used = zmalloc_used_memory() - old_size;
+        // sdsfree(d);
+        // return used;
+        void *realptr = (char*)(sdsAllocPtr(ptr))-PREFIX_SIZE;
+        size_t oldsize = *((size_t*)realptr);
+        return oldsize + PREFIX_SIZE;
+    #endif
+}
+size_t key_size = 0;
+size_t key_memory = 0;
+void* dictDupKeyStatMemory(void *privdata, const void *key) {
+    key_memory += sds_memory(key);
+    key_size += 1;
+    return key;
+}
+void dictDestructorKeyStatMemory(void *privdata, void *key) {
+    key_memory -= sds_memory(key);
+    key_size -= 1;
+    dictSdsDestructor(privdata, key);
+}
+size_t RM_ModuleAllKeySize() {
+    return key_size;
+}
+size_t RM_ModuleAllKeyMemory() {
+    return key_memory;
+}
+size_t robj_and_module = 0;
+size_t RM_GetModuleValueMemorySize() {
+    if(robj_and_module == 0) {
+        size_t old_size = zmalloc_used_memory();
+        void* m = zmalloc(sizeof(moduleValue));
+        robj_and_module = zmalloc_used_memory() - old_size;
+        free(m);
+    }
+    return robj_and_module;
 }
 /* Use like calloc(). Memory allocated with this function is reported in
  * Redis INFO memory, used for keys eviction according to maxmemory settings
  * and in general is taken into account as memory allocated by Redis.
  * You should avoid using calloc() directly. */
 void *RM_Calloc(size_t nmemb, size_t size) {
-    return zcalloc(nmemb*size);
+    size_t old_size = zmalloc_used_memory();
+    void* r = zcalloc(nmemb*size);
+    add_module_memory_stat_alloc(zmalloc_used_memory() - old_size);
+    return r;
 }
 
 /* Use like realloc() for memory obtained with RedisModule_Alloc(). */
 void* RM_Realloc(void *ptr, size_t bytes) {
-    return zrealloc(ptr,bytes);
+    size_t old_size = zmalloc_used_memory();
+    void* r = zrealloc(ptr,bytes);
+    add_module_memory_stat_alloc(zmalloc_used_memory() - old_size);
+    return r;
 }
 
 /* Use like free() for memory obtained by RedisModule_Alloc() and
  * RedisModule_Realloc(). However you should never try to free with
  * RedisModule_Free() memory allocated with malloc() inside your module. */
 void RM_Free(void *ptr) {
+    size_t old_size = zmalloc_used_memory();
+    zfree(ptr);
+    add_module_memory_stat_alloc(zmalloc_used_memory() - old_size);
+}
+void RM_ZFree(void *ptr) {
     zfree(ptr);
 }
-
 /* Like strdup() but returns memory allocated with RedisModule_Alloc(). */
 char *RM_Strdup(const char *str) {
     return zstrdup(str);
@@ -4425,11 +4493,15 @@ size_t moduleCount(void) {
 void moduleRegisterCoreAPI(void) {
     server.moduleapi = dictCreate(&moduleAPIDictType,NULL);
     REGISTER_API(Alloc);
+    REGISTER_API(ModuleMemory);
     REGISTER_API(UsedMemory);
-    REGISTER_API(ZmallocNum);
+    REGISTER_API(GetModuleValueMemorySize);
+    REGISTER_API(ModuleAllKeySize);
+    REGISTER_API(ModuleAllKeyMemory);
     REGISTER_API(Calloc);
     REGISTER_API(Realloc);
     REGISTER_API(Free);
+    REGISTER_API(ZFree);
     REGISTER_API(Strdup);
     REGISTER_API(CreateCommand);
     REGISTER_API(SetModuleAttribs);
