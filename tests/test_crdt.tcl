@@ -10,6 +10,7 @@ source tests/support/server.tcl
 source tests/support/tmpfile.tcl
 source tests/support/test.tcl
 source tests/support/util.tcl
+source tests/support/aof.tcl
 
 
 
@@ -33,11 +34,12 @@ set ::all_tests {
     ctrip/master-not-crdt/full-sync-error-datatype
     ctrip/master-not-crdt/load-redis-rdb
     ctrip/master-not-crdt/master-redis-slave-crdt
-    ctrip/master-not-crdt/add-sync-stop 
+    ctrip/master-not-crdt/add-sync-stop
     ctrip/master-not-crdt/full-sync-error-datatype2
-    ctrip/master-not-crdt/full-sync-stop 
+    ctrip/master-not-crdt/full-sync-stop
     ctrip/master-not-crdt/slave-redis
     ctrip/unit/aof
+
     ctrip/unit/expire
     ctrip/basic/basic_crdt_type_del
     ctrip/integration/composite/master-slave-failover
@@ -48,14 +50,14 @@ set ::all_tests {
     ctrip/integration/bug/redis-unfree-client-when-master-to-slave
     ctrip/integration/bug/hash-miss-send-when-full-sync
     ctrip/integration/bug/full-sync-timeout
-    
+
     ctrip/basic/basic_crdt_type
     ctrip/basic/basic_type
     ctrip/basic/basic_crdt_type_del
 
- 
+
     ctrip/unit/crdt_hash
-    ctrip/unit/crdt_del 
+    ctrip/unit/crdt_del
     ctrip/unit/crdt_register
     ctrip/unit/merge_different_type
     ctrip/integration/composite/master-slave-failover
@@ -89,6 +91,7 @@ set ::all_tests {
     ctrip/integration/master-slave/replication-psync
 
 }
+
 set ::temp_tests { 
     #####
     ctrip/integration/bug/redis-crash-when-full-sync-hash-merge
@@ -629,19 +632,4 @@ if {$::client} {
             exit 1
         }
     }
-}
-
-
-##### aof special
-proc cp_crdt_so_for_aof {server_path} {
-    set module_path [exec pwd]
-    append module_path "/tests/assets/"
-    set uname_S [exec uname -s]
-    if {$uname_S eq "Darwin"} {
-        append module_path "mac/"
-    } elseif {$uname_S eq "Linux"} {
-        append module_path "linux/"
-    }
-    append module_path "crdt.so"
-    [exec cp $module_path $server_path]
 }

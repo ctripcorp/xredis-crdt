@@ -2,7 +2,7 @@ set defaults { appendonly {yes} appendfilename {appendonly.aof} }
 set server_path [tmpdir master-master.server.aof]
 set aof_path "$server_path/appendonly.aof"
 #exec cp tests/assets/crdt.so $server_path
-[cp_crdt_so_for_aof $server_path]
+cp_crdt_so_for_aof $server_path
 proc append_to_aof {str} {
     upvar fp fp
     puts -nonewline $fp $str
