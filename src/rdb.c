@@ -1674,7 +1674,17 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                 crdtServer.crdt_gid = gid;
                 // update config file, to persist crdt-gid
                 rewriteConfig(server.configfile);
-            } else if (!strcasecmp(auxkey->ptr,"vclock")) {
+            } else if (!strcasecmp(auxkey->ptr,"crdt-crc")) {
+                int crc = atoi(auxval->ptr);
+                if(!check_crc(crc)) {
+                    rdbExitReportCorruptRDB(
+                        "Can't load crc from RDB file! "
+                        "BODY: %d", crc);
+                }
+                crdtServer.crdt_crc = crc;
+                // update config file, to persist crdt-gid
+                rewriteConfig(server.configfile);
+            }else if (!strcasecmp(auxkey->ptr,"vclock")) {
                 if (!isNullVectorClock(crdtServer.vectorClock)) {
                     freeVectorClock(crdtServer.vectorClock);
                 }

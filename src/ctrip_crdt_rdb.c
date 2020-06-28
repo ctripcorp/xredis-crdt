@@ -576,6 +576,8 @@ int rdbSaveAuxFieldCrdt(rio *rdb) {
 int rdbSaveCrdtInfoAuxFields(rio* rdb) {
     if (rdbSaveAuxFieldStrInt(rdb,"crdt-gid",crdtServer.crdt_gid)
         == -1) return -1;
+    if (rdbSaveAuxFieldStrInt(rdb,"crdt-crc",crdtServer.crdt_crc)
+        == -1) return -1;
     sds vclockSds = vectorClockToSds(crdtServer.vectorClock);
     if (rdbSaveAuxFieldStrStr(rdb,"vclock",vclockSds)
         == -1) return -1;

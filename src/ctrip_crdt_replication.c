@@ -455,6 +455,11 @@ char *crdtSendSynchronousCommand(CRDT_Master_Instance *crdtMaster, int flags, in
 #define PSYNC_FULLRESYNC 3
 #define PSYNC_NOT_SUPPORTED 4
 #define PSYNC_TRY_LATER 5
+struct checkPeer {
+    unsigned long long  crc:CRCSIZE;
+    unsigned long long  _: (64-CRCSIZE-GIDSIZE);
+    unsigned long long  gid:GIDSIZE;
+} checkPeer;
 int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, int fd, int read_reply) {
     char *psync_replid;
     char psync_offset[32];
@@ -669,7 +674,12 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
         crdtMaster->repl_state = REPL_STATE_SEND_GID;
     }
     if(crdtMaster->repl_state == REPL_STATE_SEND_GID) {
-        sds gid = sdsfromlonglong(crdtMaster->gid);
+        struct checkPeer v = {
+            crc:  crdtServer.crdt_crc,
+            _: 0,
+            gid:  crdtMaster->gid
+        };
+        sds gid = sdsfromlonglong(*(long long*)(&v));
         err = crdtSendSynchronousCommand(crdtMaster, SYNC_CMD_WRITE, fd, "CRDT.AUTHGID", gid, NULL);
         sdsfree(gid);
         if (err) {
@@ -1168,7 +1178,33 @@ void sendObservedVectorClock() {
     decrRefCount(crdt_ovc_argv[1]);
     decrRefCount(crdt_ovc_argv[2]);
 }
-
+void crdtCrcCommand(client *c) {
+    if (!strcasecmp(c->argv[1]->ptr,"set")) {
+        if (c->argc != 3) {
+            addReply(c, shared.syntaxerr);
+            return;
+        }
+        if(listLength(crdtServer.slaves) != 0) {
+            addReplyError(c, "There are other peers currently connecting. Cannot modify crc");
+            return;
+        }
+        long long crc = 0;
+        if (getLongLongFromObject(c->argv[2], &crc) != C_OK) {
+            return addReply(c, shared.syntaxerr);
+        }
+        crdtServer.crdt_crc = crc;
+        rewriteConfig(server.configfile);
+        server.dirty ++;
+        return addReply(c, shared.ok);
+    } else if (!strcasecmp(c->argv[1]->ptr,"get")) {
+        if (c->argc != 2) {
+            addReply(c, shared.syntaxerr);
+            return;
+        }
+        return addReplyBulkLongLong(c, crdtServer.crdt_crc);
+    }
+    
+}
 void crdtOvcCommand(client *c) {
     if (c->argc != 3) {
         addReply(c, shared.syntaxerr);
@@ -1218,8 +1254,13 @@ void crdtAuthGidCommand(client *c) {
         addReply(c, shared.syntaxerr);
         return;
     }
-    if (gid != crdtServer.crdt_gid) {
+    struct checkPeer cp = *(struct checkPeer*)(&gid);
+    if (cp.gid != crdtServer.crdt_gid) {
         addReplyError(c,"invalid gid");
+        return;
+    }
+    if (cp.crc != crdtServer.crdt_crc) {
+        addReplyError(c,"invalid crc");
         return;
     }
     addReply(c, shared.ok);

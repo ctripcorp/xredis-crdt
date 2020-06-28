@@ -164,6 +164,7 @@ typedef long long mstime_t; /* millisecond time type. */
 #define CONFIG_DEFAULT_DEFRAG_CYCLE_MAX 75 /* 75% CPU max (at upper threshold) */
 #define CONFIG_DEFAULT_PROTO_MAX_BULK_LEN (512ll*1024*1024) /* Bulk request max size */
 #define CONFIG_DEFAULT_GID -1
+#define CONFIG_DEFAULT_CRC 0
 #define CONFIG_DEFAULT_VECTORCLOCK_UNIT 0
 
 #define ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP 20 /* Loopkups per loop. */
@@ -1261,6 +1262,7 @@ struct redisServer {
 
     /*crdt stuff*/
     int crdt_gid;
+    int crdt_crc;
     VectorClock vectorClock;
     VectorClock gcVectorClock;
     list *crdtMasters;
@@ -1609,6 +1611,7 @@ void debugCancelCrdt(client *c);
 void crdtRoleCommand(client *c);
 CRDT_Master_Instance *createPeerMaster(client *c, int gid);
 void crdtOvcCommand(client *c);
+void crdtCrcCommand(client *c);
 void crdtAuthGidCommand(client *c);
 void feedCrdtBacklog(robj **argv, int argc);
 void replicationFeedAllSlaves(int dictid, robj **argv, int argc);

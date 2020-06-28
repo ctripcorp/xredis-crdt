@@ -54,6 +54,12 @@ int check_gid(int gid) {
     }
     return 0;
 }
+int check_crc(int crc) {
+    if (crc > 0 && crc < (1 << CRCSIZE)) {
+        return 1;
+    }
+    return 1;
+}
 void* getMethod(void* obj, const char* name) {
     void* (*getmethod)(void*);
     getmethod = (void* (*)(void*))(unsigned long)getModuleFunction(CRDT_MODULE, (char*)name);

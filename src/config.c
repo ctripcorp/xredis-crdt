@@ -752,6 +752,12 @@ void loadServerConfigFromString(char *config) {
             }
         } else if(!strcasecmp(argv[0], "dict-expand-max-idle-size")) {
             setDictExpandMaxIdle(atoll(argv[1]));
+        } else if(!strcasecmp(argv[0], "crdt-crc")) {
+            int crc = atoi(argv[1]);           
+            if(!check_crc(crc)) {
+                err = "Invalid value for crdt_crc."; goto loaderr;
+            }
+            crdtServer.crdt_crc = crc;
         }else {
             err = "Bad directive or wrong number of arguments"; goto loaderr;
         }
@@ -1791,6 +1797,8 @@ void rewriteConfigSlaveofOption(struct rewriteConfigState *state) {
     rewriteConfigRewriteLine(state,option,line,1);
 }
 
+
+
 /* Rewrite the notify-keyspace-events option. */
 void rewriteConfigNotifykeyspaceeventsOption(struct rewriteConfigState *state) {
     int force = server.notify_keyspace_events != 0;
@@ -2087,6 +2095,7 @@ int rewriteConfig(char *path) {
     rewriteConfigYesNoOption(state,"slave-lazy-flush",server.repl_slave_lazy_flush,CONFIG_DEFAULT_SLAVE_LAZY_FLUSH);
 
     rewriteConfigNumericalOption(state,"crdt-gid", crdtServer.crdt_gid, CONFIG_DEFAULT_GID);
+    rewriteConfigNumericalOption(state,"crdt-crc", crdtServer.crdt_crc, CONFIG_DEFAULT_CRC);
     VectorClockUnit unit = getVectorClockUnit(crdtServer.vectorClock,crdtServer.crdt_gid);
     
     if(!isNullVectorClockUnit(unit)) {

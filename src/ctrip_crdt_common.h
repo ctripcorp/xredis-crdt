@@ -37,10 +37,12 @@
 
 #include "sds.h"
 #include "ctrip_vector_clock.h"
+#define CRCSIZE 20
 typedef struct CrdtObject {
     unsigned char type;
 } CrdtObject;
 int check_gid(int gid);
+int check_crc(int crc);
 typedef void *(*crdtMergeFunc)(void *curVal, void *value);
 // RM_CrdtMultiWrappedReplicate should be called during this
 typedef int (*crdtPropagateDelFunc)(int db_id, void *keyRobj, void *key, void *crdtObj);
