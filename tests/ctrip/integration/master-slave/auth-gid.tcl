@@ -15,6 +15,12 @@ proc wait { client index type}  {
         error "assertion: Master-Slave not correctly synchronized"
     }
 }
+proc get_info_replication_attr_value {client type attr} {
+    set info [$client $type replication]
+    set regstr [format "\r\n%s:(.*?)\r\n" $attr]
+    regexp $regstr $info match value 
+    set _ $value
+}
 start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskless-sync-delay 1} module {./crdt.so}} {
     set peers {}
     set peer_hosts {}
@@ -49,6 +55,8 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
             [lindex $peers 0] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
             wait [lindex $peers 1] 0 crdt.info 
             assert_equal [[lindex $peers 0] get key] value
+            assert_equal [get_info_replication_attr_value [lindex $peers 0] crdt.info "peer0_gid" ] 3
+            assert_equal [get_info_replication_attr_value [lindex $peers 0] crdt.info "peer1_gid" ] 2
         }
     }   
 }
