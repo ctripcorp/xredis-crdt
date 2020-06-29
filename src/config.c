@@ -1170,7 +1170,7 @@ void configSetCommand(client *c, struct redisServer *srv) {
     } config_set_memory_field(
       "client-query-buffer-limit",srv->client_max_querybuf_len) {
     } config_set_memory_field("repl-backlog-size",ll) {
-            resizeReplicationBacklog(&server, ll);
+            resizeReplicationBacklog(srv, ll);
     } config_set_memory_field("auto-aof-rewrite-min-size",ll) {
         srv->aof_rewrite_min_size = ll;
 
