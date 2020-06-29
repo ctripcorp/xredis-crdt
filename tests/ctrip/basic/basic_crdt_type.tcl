@@ -960,6 +960,26 @@ basic_test "kv" {
 } {
     $redis crdt.del_reg $0 $3 $4 $5
 }
+# key field value gid timestamp vc
+#  0   1     2    3    4        5
+#CRDT.MSET <gid> <time> {k v vc} ...
+
+basic_test "mset" {
+    catch [$redis crdt.mset $3 $4 $0 $2 $5] error
+} {
+    set r [ $redis crdt.get $0 ]
+    if { {$2} == {} } {
+        assert {$r == {}}
+    } else {
+        assert { [lindex $r 0] == {$2} }
+        assert { [lindex $r 1] == {$3} }
+        assert { [lindex $r 2] == {$4} }
+        assert { [lindex $r 3] == [format "%s" $5] }
+    }
+    unset r
+} {
+    $redis crdt.del_reg $0 $3 $4 $5
+}
 
 # key field value gid timestamp vc
 #  0   1     2    3    4        5

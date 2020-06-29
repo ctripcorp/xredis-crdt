@@ -75,6 +75,9 @@ void zlibc_free(void *ptr) {
     if (_n&(sizeof(long)-1)) _n += sizeof(long)-(_n&(sizeof(long)-1)); \
     atomicIncr(used_memory,__n); \
 } while(0)
+#define add_zmalloc_num() do {\
+    atomicIncr(malloc_num, 1); \
+} while(0)
 
 #define update_zmalloc_stat_free(__n) do { \
     size_t _n = (__n); \
@@ -83,6 +86,7 @@ void zlibc_free(void *ptr) {
 } while(0)
 
 static size_t used_memory = 0;
+static size_t malloc_num = 0;
 pthread_mutex_t used_memory_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 static void zmalloc_default_oom(size_t size) {
@@ -93,11 +97,12 @@ static void zmalloc_default_oom(size_t size) {
 }
 
 static void (*zmalloc_oom_handler)(size_t) = zmalloc_default_oom;
-
+ 
 void *zmalloc(size_t size) {
     void *ptr = malloc(size+PREFIX_SIZE);
 
     if (!ptr) zmalloc_oom_handler(size);
+    add_zmalloc_num();
 #ifdef HAVE_MALLOC_SIZE
     update_zmalloc_stat_alloc(zmalloc_size(ptr));
     return ptr;
@@ -212,6 +217,12 @@ char *zstrdup(const char *s) {
 size_t zmalloc_used_memory(void) {
     size_t um;
     atomicGet(used_memory,um);
+    return um;
+}
+
+size_t zmalloc_num(void) {
+    size_t um;
+    atomicGet(malloc_num, um);
     return um;
 }
 

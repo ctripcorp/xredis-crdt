@@ -245,6 +245,9 @@ void *RM_Alloc(size_t bytes) {
 size_t RM_UsedMemory() {
     return zmalloc_used_memory();
 }
+size_t RM_ZmallocNum() {
+    return zmalloc_num();
+}
 /* Use like calloc(). Memory allocated with this function is reported in
  * Redis INFO memory, used for keys eviction according to maxmemory settings
  * and in general is taken into account as memory allocated by Redis.
@@ -686,6 +689,7 @@ long long RM_Milliseconds(void) {
     return mstime();
 }
 
+
 /* --------------------------------------------------------------------------
  * Automatic memory management for modules
  * -------------------------------------------------------------------------- */
@@ -888,6 +892,7 @@ const char *RM_StringPtrLen(const RedisModuleString *str, size_t *len) {
     return str->ptr;
 }
 
+
 /* --------------------------------------------------------------------------
  * Higher level string operations
  * ------------------------------------------------------------------------- */
@@ -1051,6 +1056,12 @@ int RM_ReplyWithError(RedisModuleCtx *ctx, const char *err) {
  * The function always returns REDISMODULE_OK. */
 int RM_ReplyWithSimpleString(RedisModuleCtx *ctx, const char *msg) {
     return replyWithStatus(ctx,msg,"+");
+} 
+int RM_ReplyWithOk(RedisModuleCtx *ctx) {
+    client *c = moduleGetReplyClient(ctx);
+    if (c == NULL) return REDISMODULE_OK;
+    addReply(c, shared.ok);
+    return REDISMODULE_OK;
 }
 
 /* Reply with an array type of 'len' elements. However 'len' other calls
@@ -1349,7 +1360,19 @@ int RM_CrdtReplicate(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, 
     server.dirty++;
     return REDISMODULE_OK;
 }
+// int RM_CrdtAlsoPropagate(RedisModuleCtx *ctx, robj **argv, int argc) {
+//     struct redisCommand *cmd;
+//     cmd = lookupCommandByCString((char*)cmdname);
+//     if (!cmd) return REDISMODULE_ERR;
+//     /* Replicate! */
+//     alsoPropagate(cmd, ctx->client->db->id,argv,argc,PROPAGATE_CRDT_REPL);
 
+//     /* Release the argv. */
+//     for (j = 0; j < argc; j++) decrRefCount(argv[j]);
+//     zfree(argv);
+//     server.dirty++;
+//     return REDISMODULE_OK;
+// }
 int RM_CrdtReplicateAlsoNormReplicate(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...) {
     struct redisCommand *cmd;
     robj **argv = NULL;
@@ -1372,6 +1395,15 @@ int RM_CrdtReplicateAlsoNormReplicate(RedisModuleCtx *ctx, const char *cmdname, 
     for (j = 0; j < argc; j++) decrRefCount(argv[j]);
     zfree(argv);
     server.dirty++;
+    return REDISMODULE_OK;
+}
+int RM_ReplicationFeedStringToAllSlaves(int id, void* cmdbuf, size_t cmdlen) {
+    // serverLog(LL_WARNING, "cmd: %s", cmd->ptr);
+    replicationFeedStringToAllSlaves(id, cmdbuf, cmdlen);
+    return REDISMODULE_OK;
+}
+int RM_ReplicationFeedRobjToAllSlaves(int id, RedisModuleString* cmd) {
+    replicationFeedRobjToAllSlaves(id, cmd);
     return REDISMODULE_OK;
 }
 
@@ -1660,6 +1692,75 @@ void *RM_OpenKey(RedisModuleCtx *ctx, robj *keyname, int mode) {
     autoMemoryAdd(ctx,REDISMODULE_AM_KEY,kp);
     return kp;
 }
+void* RM_DbAddOrFind(RedisModuleCtx *ctx, RedisModuleString *keyname, moduleType* type) {
+    dict* d = ctx->client->db->dict;
+    // dictEntry* de = dictFind(d,keyname->ptr);
+    dictEntry *old;
+    dictEntry* de = dictAddRaw(d, keyname->ptr, &old);
+    if(de != NULL) {
+        dictSetKey(d, de, sdsdup(keyname->ptr));
+        dictSetSignedIntegerVal(de, 0);
+        return de;
+    }
+    if(old == NULL) {
+        exit(0);
+    }
+    robj* value = dictGetVal(old);
+    if(value == NULL) {
+        return old;
+    } 
+    if(value->type != OBJ_MODULE) {
+        return NULL;
+    } 
+    moduleValue *mt = value->ptr;
+    if(mt->type != type) {
+        return NULL;
+    }
+    return old;
+}
+int RM_DbDelete(RedisModuleCtx *ctx, RedisModuleString* keyname) {
+    return dictDelete(ctx->client->db->dict, keyname->ptr);
+}
+void* RM_DbEntryGetVal(RedisModuleCtx *ctx, dictEntry* de) {
+    robj* val = dictGetVal(de);
+    if(val == NULL) {
+        return NULL;
+    }
+    moduleValue *mt = val->ptr;
+    return mt->value;
+}
+int RM_DbEntrySetVal(RedisModuleCtx *ctx, RedisModuleString* keyname, dictEntry* de, moduleType* type, void* val) {
+    robj *o = createModuleObject(type,val);
+    redisDb *db= ctx->client->db;
+    dictSetVal(db->dict, de, o);
+    signalModifiedKey(db, keyname);
+    return 0;
+}
+void * RM_DbGetValue(RedisModuleCtx *ctx, RedisModuleString *keyname, moduleType* type, int* error) {
+    robj* value = lookupKeyWrite(ctx->client->db,keyname);
+    if(value == NULL) {
+        return NULL;
+    }
+    if(value->type != OBJ_MODULE) {
+        *error = 1;
+        return NULL;
+    }
+    moduleValue *mt = value->ptr;
+    if(mt->type != type) {
+        *error = 1;
+        return NULL;
+    }
+    return mt->value;
+}
+int RM_DbSetValue(RedisModuleCtx *ctx, RedisModuleString *keyname, moduleType* type, void* val) {
+    robj *o = createModuleObject(type,val);
+    setKey(ctx->client->db, keyname,o);
+    decrRefCount(o);
+    // redisDb* db = ctx->client->db;
+    // dbAdd(db,keyname,o);
+    // signalModifiedKey(db,keyname);
+    return REDISMODULE_OK;
+}
 void *RM_GetKey(redisDb* db, robj* keyname, int mode) {
     RedisModuleKey *kp = getModuleKey(db, keyname, mode, 0);
     return kp;
@@ -1699,7 +1800,7 @@ void closeModuleKey(void* k) {
     /* TODO: if (key->iter) RM_KeyIteratorStop(kp); */
     RM_ZsetRangeStop(key);
     decrRefCount(key->key);
-    if(key->ctx != NULL) {
+    if(key->ctx != NULL && key->ctx->flags & REDISMODULE_CTX_AUTO_MEMORY) {
         autoMemoryFreed(key->ctx,REDISMODULE_AM_KEY,key);
     }
     zfree(key);
@@ -4325,6 +4426,7 @@ void moduleRegisterCoreAPI(void) {
     server.moduleapi = dictCreate(&moduleAPIDictType,NULL);
     REGISTER_API(Alloc);
     REGISTER_API(UsedMemory);
+    REGISTER_API(ZmallocNum);
     REGISTER_API(Calloc);
     REGISTER_API(Realloc);
     REGISTER_API(Free);
@@ -4333,6 +4435,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(SetModuleAttribs);
     REGISTER_API(IsModuleNameBusy);
     REGISTER_API(WrongArity);
+    REGISTER_API(ReplyWithOk);
     REGISTER_API(ReplyWithLongLong);
     REGISTER_API(ReplyWithError);
     REGISTER_API(ReplyWithSimpleString);
@@ -4346,6 +4449,12 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(GetSelectedDb);
     REGISTER_API(SelectDb);
     REGISTER_API(OpenKey);
+    REGISTER_API(DbAddOrFind);
+    REGISTER_API(DbDelete);
+    REGISTER_API(DbEntryGetVal);
+    REGISTER_API(DbEntrySetVal);
+    REGISTER_API(DbGetValue);
+    REGISTER_API(DbSetValue);
     REGISTER_API(GetKey);
     REGISTER_API(GetModuleTypeId);
     REGISTER_API(GetModuleTypeById);
@@ -4381,6 +4490,8 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(ReplicateVerbatim);
     REGISTER_API(CrdtReplicateVerbatim);
     REGISTER_API(ReplicationFeedAllSlaves);
+    REGISTER_API(ReplicationFeedStringToAllSlaves);
+     REGISTER_API(ReplicationFeedRobjToAllSlaves);
     REGISTER_API(DeleteKey);
     REGISTER_API(UnlinkKey);
     REGISTER_API(StringSet);
