@@ -1562,9 +1562,9 @@ void crdtReplicationCron(void) {
     if (isMasterMySelf() == C_OK && listLength(crdtServer.slaves) == 0 && crdtServer.repl_backlog_time_limit &&
         crdtServer.repl_backlog && listLength(server.slaves) == 0 && server.repl_backlog_time_limit && server.repl_backlog)
     {
-        time_t idle = server.unixtime - crdtServer.repl_no_slaves_since;
-
-        if (idle > crdtServer.repl_backlog_time_limit) {
+        time_t crdt_idle = server.unixtime - crdtServer.repl_no_slaves_since;
+        time_t idle = server.unixtime - server.repl_no_slaves_since;
+        if (crdt_idle > crdtServer.repl_backlog_time_limit && idle > server.repl_backlog_time_limit) {
             /* When we free the backlog, we always use a new
              * replication ID and clear the ID2. This is needed
              * because when there is no backlog, the master_repl_offset
@@ -1590,6 +1590,8 @@ void crdtReplicationCron(void) {
                       "[CRDT] Replication backlog freed after %d seconds "
                       "without connected slaves.",
                       (int) crdtServer.repl_backlog_time_limit);
+            serverLog(LL_NOTICE, 
+                        "[CRDT] changeReplicationId when Replication backlog freed");
         }
     }
 
