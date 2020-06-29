@@ -66,10 +66,17 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
         wait [lindex $peers 0] 0 crdt.info
         test "mset" {
             [lindex $peers 0] mset k v k1 v2
+            [lindex $peers 0] mset a 1 b 2 c 3 d 4 c 5 e 6 f 7 g 8 h 9 i 10 l 11 m 12 n 13 o 14 p 15 q 16
             after 1000
             assert_equal [[lindex $peers 1] get k ] v
-            assert_equal [[lindex $peers 0] get k1 ] v2
+            assert_equal [[lindex $peers 1] get k1 ] v2
+            assert_equal [[lindex $peers 1] mget a b c d e f g h i l m n o p q] {1 2 5 4 6 7 8 9 10 11 12 13 14 15 16}
         }
-        
+        test "mset2" {
+            [lindex $peers 0] set k1 v 
+            [lindex $peers 0] mset k1 v1 k1 v2
+            after 1000
+            assert_equal [[lindex $peers 1] get k1] v2
+        }
     }
 }

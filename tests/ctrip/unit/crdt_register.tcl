@@ -86,6 +86,11 @@ start_server {tags {"crdt-register"} overrides {crdt-gid 1} config {crdt.conf} m
         assert_equal [r get k1] v1
         assert_equal [r get k2] v2
     } {}
+    test {"[crdt_register.tcl]mset1"} {
+        r set k1 v1
+        r mset k1 v2 k1 v3
+        assert_equal [r get k1] v3
+    } {}
     test {"[crdt_register.tcl]mget"} {
         r mset k11 v11 k12 v12
         assert_equal [r mget k11 k13 k12] {v11 {} v12}
