@@ -66,7 +66,7 @@ proc replace { str argv } {
     return $str
 }
 proc save {add check server_path dl} {
-    exec cp tests/assets/crdt.so $server_path
+    cp_crdt_so $server_path
     start_server {tags {"master"} overrides {crdt-gid 1} module {./crdt.so} } {
         set peers {}
         set peer_hosts {}

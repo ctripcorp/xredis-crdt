@@ -38,7 +38,7 @@ proc read_file_matches {log pattern} {
 }
 set server_path [tmpdir "jump-vectorclock"]
 exec cp tests/assets/redis/dump.rdb $server_path
-exec cp tests/assets/crdt.so $server_path
+cp_crdt_so $server_path
 start_server [list overrides [list crdt-gid 1 loadmodule ./crdt.so  "dir"  $server_path ]]  {
     set master [srv 0 client]
     set master_host [srv 0 host]

@@ -62,7 +62,7 @@ proc check_peer {peerMaster  peerSlave masteindex} {
 
 
 set server_path [tmpdir "master-redis-slave-crdt"]
-exec cp tests/assets/crdt.so $server_path
+cp_crdt_so $server_path
 proc run {script level} {
     catch [uplevel $level $script ] result opts
 }

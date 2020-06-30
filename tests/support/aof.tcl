@@ -1,4 +1,4 @@
-proc cp_crdt_so_for_aof {server_path} {
+proc cp_crdt_so {server_path} {
     set module_path [exec pwd]
     append module_path "/tests/assets/"
     set uname_S [exec uname -s]
