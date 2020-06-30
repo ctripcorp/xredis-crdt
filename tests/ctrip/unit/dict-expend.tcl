@@ -83,7 +83,6 @@ start_server {tags {"crdt-dict"} overrides {crdt-gid 1 dict-expand-max-idle-size
             $master set $i $i
         }
         wait $master 0 info $master_stdout 
-        print_file $master_stdout
         for {set i 10} {$i < 20} {incr i} {
             $master set $i $i
         }

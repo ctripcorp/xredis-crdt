@@ -331,7 +331,8 @@ struct redisCommand redisCommandTable[] = {
     {"tombstoneSize",tombstoneSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
     {"expireSize",expireSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
     {"crdt.ovc",crdtOvcCommand,3,"rF",0,NULL,0,0,0,0,0},
-    {"crdt.authGid", crdtAuthGidCommand,2,"rF", 0, NULL,0,0,0,0,0}
+    {"crdt.authGid", crdtAuthGidCommand,2,"rF", 0, NULL,0,0,0,0,0},
+    {"crdt.authnamespace", crdtAuthNamespaceCommand, 3, "rF", 0,NULL,0,0,0,0,0}
 };
 
 /*============================ CRDT functions ============================ */
@@ -1061,7 +1062,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
                 /* dictPrintStats(server.dict); */
             }
         }
-        rewriteConfig(server.configfile);
+        updateConfigFileVectorUnit(server.configfile);
     }
 
     /* Show information about connected clients */

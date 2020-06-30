@@ -15,6 +15,7 @@ source tests/support/aof.tcl
 
 
 set ::all_tests { 
+    ctrip/unit/namespace
     ctrip/integration/bug/free-replication-blocklog
     ctrip/master-not-crdt/crdt_replid_reuse
     ctrip/integration/bug/not_remember_slave_key_with_expire_when_master_is_non_crdt

@@ -293,16 +293,16 @@ typedef long long mstime_t; /* millisecond time type. */
 #define REPL_STATE_RECEIVE_PONG 3 /* Wait for PING reply */
 #define REPL_STATE_SEND_GID 4 /* Send Gid to master */
 #define REPL_STATE_RECEIVE_GID 5 /* Wait for Gid reply */
-#define REPL_STATE_SEND_AUTH 6 /* Send AUTH to master */
-#define REPL_STATE_RECEIVE_AUTH 7 /* Wait for AUTH reply */
-#define REPL_STATE_SEND_PORT 8 /* Send REPLCONF listening-port */
-#define REPL_STATE_RECEIVE_PORT 9 /* Wait for REPLCONF reply */
-#define REPL_STATE_SEND_IP 10 /* Send REPLCONF ip-address */
-#define REPL_STATE_RECEIVE_IP 11 /* Wait for REPLCONF reply */
-#define REPL_STATE_SEND_CAPA 12 /* Send REPLCONF capa */
-#define REPL_STATE_RECEIVE_CAPA 13 /* Wait for REPLCONF reply */
-#define REPL_STATE_SEND_CRDT 14
-#define REPL_STATE_RECEIVE_CRDT 15
+#define REPL_STATE_SEND_NAMESPACE 6 /* Send Namespace to master */
+#define REPL_STATE_RECEIVE_NAMESPACE 7 /* Wait for Namespace reply */
+#define REPL_STATE_SEND_AUTH 8 /* Send AUTH to master */
+#define REPL_STATE_RECEIVE_AUTH 9 /* Wait for AUTH reply */
+#define REPL_STATE_SEND_PORT 10 /* Send REPLCONF listening-port */
+#define REPL_STATE_RECEIVE_PORT 11 /* Wait for REPLCONF reply */
+#define REPL_STATE_SEND_IP 12 /* Send REPLCONF ip-address */
+#define REPL_STATE_RECEIVE_IP 13 /* Wait for REPLCONF reply */
+#define REPL_STATE_SEND_CAPA 14 /* Send REPLCONF capa */
+#define REPL_STATE_RECEIVE_CAPA 15 /* Wait for REPLCONF reply */
 #define REPL_STATE_SEND_VC 16 /* Send Vector Clock */
 #define REPL_STATE_RECEIVE_VC 17 /* Wait for Vector Clock reply */
 #define REPL_STATE_SEND_PSYNC 18 /* Send PSYNC */
@@ -1261,6 +1261,7 @@ struct redisServer {
 
     /*crdt stuff*/
     int crdt_gid;
+    char* crdt_namespace;
     VectorClock vectorClock;
     VectorClock gcVectorClock;
     list *crdtMasters;
@@ -1610,6 +1611,8 @@ void crdtRoleCommand(client *c);
 CRDT_Master_Instance *createPeerMaster(client *c, int gid);
 void crdtOvcCommand(client *c);
 void crdtAuthGidCommand(client *c);
+
+void crdtAuthNamespaceCommand(client *c);
 void feedCrdtBacklog(robj **argv, int argc);
 void replicationFeedAllSlaves(int dictid, robj **argv, int argc);
 void replicationFeedStringToAllSlaves(int dictid, void* cmdbuf, size_t cmdlen);
@@ -1831,6 +1834,7 @@ void resetServerSaveParams(struct redisServer *srv);
 struct rewriteConfigState; /* Forward declaration to export API. */
 void rewriteConfigRewriteLine(struct rewriteConfigState *state, const char *option, sds line, int force);
 int rewriteConfig(char *path);
+int updateConfigFileVectorUnit(char *path);
 
 /* db.c -- Keyspace access API */
 int removeExpire(redisDb *db, robj *key);
