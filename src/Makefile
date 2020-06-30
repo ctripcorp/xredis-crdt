@@ -125,7 +125,7 @@ ifeq ($(MALLOC),jemalloc)
 	FINAL_LIBS+= ../deps/jemalloc/lib/libjemalloc.a
 endif
 
-ifeq ($(TEST),tcl)
+ifeq ($(uname_S),Darwin)
 	FINAL_CFLAGS+= -DTCL_TEST
 endif
 REDIS_CC=$(QUIET_CC)$(CC) $(FINAL_CFLAGS)
@@ -286,6 +286,13 @@ bench: $(REDIS_BENCHMARK_NAME)
 
 gcov:
 	$(MAKE) REDIS_CFLAGS="-fprofile-arcs -ftest-coverage -DCOVERAGE_TEST" REDIS_LDFLAGS="-fprofile-arcs -ftest-coverage"
+
+
+coverage:
+	$(MAKE) gcov
+	@(set -e; cd ..; ./runtest-crdt --clients 1)
+	@geninfo -o crdt-redis.info .
+	@genhtml --legend -o lcov-html crdt-redis.info
 
 noopt:
 	$(MAKE) OPTIMIZATION="-O0"
