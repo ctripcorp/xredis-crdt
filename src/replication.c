@@ -915,7 +915,10 @@ void replconfCommand(client *c) {
             }
             /* Note: this command does not reply anything! */
             return;
-        } else {
+        }   else if(!strcasecmp(c->argv[j]->ptr,"crdt")) {
+            c->slave_capa |= SLAVE_CAPA_CRDT;
+           
+        }  else {
             addReplyErrorFormat(c,"Unrecognized REPLCONF option: %s",
                 (char*)c->argv[j]->ptr);
             return;
@@ -1890,8 +1893,37 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
                                   "REPLCONF capa: %s", err);
         }
         sdsfree(err);
+        if(crdt_enabled) {
+            server.repl_state = REPL_STATE_SEND_CRDT;
+        } else {
+            server.repl_state = REPL_STATE_SEND_PSYNC;
+        }
+    }
+
+    if (server.repl_state == REPL_STATE_SEND_CRDT) {
+        err = sendSynchronousCommand(SYNC_CMD_WRITE, fd, "REPLCONF",
+                                    "crdt", "1", NULL);
+        if (err) goto write_error;
+        sdsfree(err);
+        server.repl_state = REPL_STATE_RECEIVE_CRDT;
+        return;
+    }
+    
+    if (server.repl_state == REPL_STATE_RECEIVE_CRDT) {
+        err = sendSynchronousCommand(SYNC_CMD_READ, fd, NULL);
+        /* Ignore the error if any, not all the Redis versions support
+         * REPLCONF capa. */
+        if (err[0] == '-') {
+            serverLog(LL_NOTICE,"(Non critical) Master does not understand "
+                                  "REPLCONF capa: %s", err);
+            server.master_is_crdt = 0;
+        } else {
+            server.master_is_crdt = 1;
+        }
+        sdsfree(err);
         server.repl_state = REPL_STATE_SEND_PSYNC;
     }
+
 
     /* Try a partial resynchonization. If we don't have a cached master
      * slaveTryPartialResynchronization() will at least try to use PSYNC

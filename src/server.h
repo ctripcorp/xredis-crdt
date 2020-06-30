@@ -304,13 +304,15 @@ typedef long long mstime_t; /* millisecond time type. */
 #define REPL_STATE_SEND_CAPA 14 /* Send REPLCONF capa */
 #define REPL_STATE_RECEIVE_CAPA 15 /* Wait for REPLCONF reply */
 #define REPL_STATE_SEND_VC 16 /* Send Vector Clock */
-#define REPL_STATE_RECEIVE_VC 17 /* Wait for Vector Clock reply */
-#define REPL_STATE_SEND_PSYNC 18 /* Send PSYNC */
-#define REPL_STATE_RECEIVE_PSYNC 19 /* Wait for PSYNC reply */
+#define REPL_STATE_SEND_CRDT 17
+#define REPL_STATE_RECEIVE_CRDT 18
+#define REPL_STATE_RECEIVE_VC 19 /* Wait for Vector Clock reply */
+#define REPL_STATE_SEND_PSYNC 20 /* Send PSYNC */
+#define REPL_STATE_RECEIVE_PSYNC 21 /* Wait for PSYNC reply */
 
 /* --- End of handshake states --- */
-#define REPL_STATE_TRANSFER 20 /* Receiving .rdb from master */
-#define REPL_STATE_CONNECTED 21 /* Connected to master */
+#define REPL_STATE_TRANSFER 22 /* Receiving .rdb from master */
+#define REPL_STATE_CONNECTED 23 /* Connected to master */
 
 /* State of slaves from the POV of the master. Used in client->replstate.
  * In SEND_BULK and ONLINE state the slave receives new updates
