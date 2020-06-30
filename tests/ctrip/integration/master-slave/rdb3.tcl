@@ -53,7 +53,7 @@ set server_path [tmpdir "server.rdb3"]
 
 # Copy RDB with different encodings in server path
 # exec cp tests/assets/encodings.rdb $server_path
-exec cp tests/assets/crdt.so $server_path
+cp_crdt_so $server_path
 exec cp tests/assets/crdt_1.0.0.rdb $server_path
 proc run {script level} {
     catch [uplevel $level $script ] result opts
