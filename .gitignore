@@ -6,7 +6,7 @@ compile_commands.json
 tmp
 .settings
 
-*.so
+
 *.json
 .*.swp
 *.o
