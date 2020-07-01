@@ -6,7 +6,6 @@ build:
   stage: build
   image: hub.cloud.ctripcorp.com/xredis_crdt/xredis_test_base:v0.0.1
   script:
-    - ls /usr/local
-    - yum install -y tcl
+    - tcl
     - make
     
