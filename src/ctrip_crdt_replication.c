@@ -666,25 +666,27 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
         }
         sdsfree(err);
         // crdtMaster->repl_state = REPL_STATE_SEND_AUTH;
-        crdtMaster->repl_state = REPL_STATE_SEND_GID;
+        crdtMaster->repl_state = REPL_STATE_SEND_CRDT_AUTH;
     }
-    if(crdtMaster->repl_state == REPL_STATE_SEND_GID) {
+    if(crdtMaster->repl_state == REPL_STATE_SEND_CRDT_AUTH) {
         sds gid = sdsfromlonglong(crdtMaster->gid);
-        err = crdtSendSynchronousCommand(crdtMaster, SYNC_CMD_WRITE, fd, "CRDT.AUTHGID", gid, NULL);
+        sds namespace = sdsnew(crdtServer.crdt_namespace);
+        err = crdtSendSynchronousCommand(crdtMaster, SYNC_CMD_WRITE, fd, "CRDT.AUTH", namespace, gid, NULL);
         sdsfree(gid);
+        sdsfree(namespace);
         if (err) {
             sdsfree(err);
             goto write_error;
         }
-        crdtMaster->repl_state = REPL_STATE_RECEIVE_GID;
+        crdtMaster->repl_state = REPL_STATE_RECEIVE_CRDT_AUTH;
         return;
     } 
 
-    if(crdtMaster->repl_state == REPL_STATE_RECEIVE_GID) {
+    if(crdtMaster->repl_state == REPL_STATE_RECEIVE_CRDT_AUTH) {
         err = crdtSendSynchronousCommand(crdtMaster, SYNC_CMD_READ, fd, NULL);
         if (err[0] == '-') {
-            serverLog(LL_NOTICE,"[CRDT] Unable to GID to MASTER gid: %lld , error: '%s'", 
-                    crdtMaster->gid, err);
+            serverLog(LL_NOTICE,"[CRDT] Unable to Namespace and GID to MASTER namespace :%s, gid: %lld , error: '%s'", 
+                    crdtServer.crdt_namespace,crdtMaster->gid, err);
             sdsfree(err);
             goto error;
         }
@@ -1215,6 +1217,27 @@ void crdtAuthGidCommand(client *c) {
     }
     long long gid;
     if (getLongLongFromObject(c->argv[1], &gid) != C_OK) {
+        addReply(c, shared.syntaxerr);
+        return;
+    }
+    if (gid != crdtServer.crdt_gid) {
+        addReplyError(c,"invalid gid");
+        return;
+    }
+    c->slave_capa |= SLAVE_CAPA_CRDT;
+    addReply(c, shared.ok);
+}
+void crdtAuthCommand(client *c) {
+    if (c->argc != 3) {
+        addReply(c, shared.syntaxerr);
+        return;
+    }
+    if (!!strcasecmp(crdtServer.crdt_namespace, c->argv[1]->ptr)) {
+        addReplyError(c,"invalid namespace");
+        return;
+    }
+    long long gid;
+    if (getLongLongFromObject(c->argv[2], &gid) != C_OK) {
         addReply(c, shared.syntaxerr);
         return;
     }
