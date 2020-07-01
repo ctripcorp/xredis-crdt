@@ -1,11 +1,10 @@
 stages:
   - build
-  - test
  
 # build
 build:
   stage: build
-  image: hub.cloud.ctripcorp.com/devops/centos7.2:latest
+  image: hub.cloud.ctripcorp.com/devops/redis:4.0.8
   script:
     - make
     
