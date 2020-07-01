@@ -331,7 +331,8 @@ struct redisCommand redisCommandTable[] = {
     {"tombstoneSize",tombstoneSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
     {"expireSize",expireSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
     {"crdt.ovc",crdtOvcCommand,3,"rF",0,NULL,0,0,0,0,0},
-    {"crdt.authGid", crdtAuthGidCommand,2,"rF", 0, NULL,0,0,0,0,0}
+    {"crdt.authGid", crdtAuthGidCommand,2,"rF", 0, NULL,0,0,0,0,0},
+    {"crdt.auth", crdtAuthCommand, 3, "rF", 0,NULL,0,0,0,0,0}
 };
 
 /*============================ CRDT functions ============================ */
@@ -1061,7 +1062,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
                 /* dictPrintStats(server.dict); */
             }
         }
-        rewriteConfig(server.configfile);
+        updateConfigFileVectorUnit(server.configfile);
     }
 
     /* Show information about connected clients */
@@ -1643,6 +1644,7 @@ void initServerConfig(struct redisServer *srv) {
 
     //TODO: Specialize Crdt Server Configs
     srv->crdt_gid = CONFIG_DEFAULT_GID;
+    srv->crdt_namespace = NULL;
     if (srv == &crdtServer) {
         srv->repl_syncio_timeout = CONFIG_REPL_SYNCIO_TIMEOUT;
         srv->repl_timeout = CONFIG_DEFAULT_REPL_TIMEOUT;
@@ -3507,7 +3509,7 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                                     "#Peer_Master_%d\r\n"
                                     "peer%d_host:%s\r\n"
                                     "peer%d_port:%d\r\n"
-                                    "peer%d_gid:%d\r\n"
+                                    "peer%d_gid:%lld\r\n"
                                     "peer%d_link_status:%s\r\n"
                                     "peer%d_last_io_seconds_ago:%d\r\n"
                                     "peer%d_sync_in_progress:%d\r\n"

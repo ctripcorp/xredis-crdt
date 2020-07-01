@@ -1664,17 +1664,7 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                         "Can't load Lua script from RDB file! "
                         "BODY: %s", auxval->ptr);
                 }
-            } else if (!strcasecmp(auxkey->ptr,"crdt-gid")) {
-                int gid = atoi(auxval->ptr);
-                if(!check_gid(gid)) {
-                    rdbExitReportCorruptRDB(
-                        "Can't load gid from RDB file! "
-                        "BODY: %d", gid);
-                }
-                crdtServer.crdt_gid = gid;
-                // update config file, to persist crdt-gid
-                rewriteConfig(server.configfile);
-            } else if (!strcasecmp(auxkey->ptr,"vclock")) {
+            }  else if (!strcasecmp(auxkey->ptr,"vclock")) {
                 if (!isNullVectorClock(crdtServer.vectorClock)) {
                     freeVectorClock(crdtServer.vectorClock);
                 }

@@ -162,7 +162,7 @@ proc start_redis_server {server options {code undefined}} {
     set module ""
     set overrides {}
     set tags {}
-
+    set namespace "default"
     # parse options
     foreach {option value} $options {
         switch $option {
@@ -175,6 +175,9 @@ proc start_redis_server {server options {code undefined}} {
                 set ::tags [concat $::tags $value] }
             "module" {
                 set module $value }
+            "namespace" {
+                set namespace $value
+                }
             default {
                 error "Unknown option $option" }
         }
@@ -214,7 +217,11 @@ proc start_redis_server {server options {code undefined}} {
 
     # apply overrides from global space and arguments
     foreach {directive arguments} [concat $::global_overrides $overrides] {
-        dict set config $directive $arguments
+        if {$directive eq "crdt-gid"} {
+            dict set config $directive $namespace $arguments
+        } else {
+            dict set config $directive $arguments
+        }
     }
 
     # write new configuration to temporary file
