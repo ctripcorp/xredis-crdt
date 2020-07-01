@@ -7,5 +7,5 @@ build:
   image: hub.cloud.ctripcorp.com/xredis_crdt/xredis_test_base:v0.0.1
   script:
     - which tclsh
-    - make crdt-test
+    - make
     
