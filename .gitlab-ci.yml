@@ -13,5 +13,5 @@ test:
   stage: test
   image: hub.cloud.ctripcorp.com/devops/centos7.2:latest
   script:
-    - sudo yum install -y tcl
+    - yum install -y tcl
     - make crdt-test
