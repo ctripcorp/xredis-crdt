@@ -9,9 +9,3 @@ build:
   script:
     - make
     
-test:
-  stage: test
-  image: hub.cloud.ctripcorp.com/devops/centos7.2:latest
-  script:
-    - yum install -y tcl
-    - make crdt-test
