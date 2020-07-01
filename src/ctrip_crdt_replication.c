@@ -666,23 +666,23 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
         }
         sdsfree(err);
         // crdtMaster->repl_state = REPL_STATE_SEND_AUTH;
-        crdtMaster->repl_state = REPL_STATE_SEND_NAMESPACE;
+        crdtMaster->repl_state = REPL_STATE_SEND_CRDT_AUTH;
     }
-    if(crdtMaster->repl_state == REPL_STATE_SEND_NAMESPACE) {
+    if(crdtMaster->repl_state == REPL_STATE_SEND_CRDT_AUTH) {
         sds gid = sdsfromlonglong(crdtMaster->gid);
         sds namespace = sdsnew(crdtServer.crdt_namespace);
-        err = crdtSendSynchronousCommand(crdtMaster, SYNC_CMD_WRITE, fd, "CRDT.AUTHNAMESPACE", namespace, gid, NULL);
+        err = crdtSendSynchronousCommand(crdtMaster, SYNC_CMD_WRITE, fd, "CRDT.AUTH", namespace, gid, NULL);
         sdsfree(gid);
         sdsfree(namespace);
         if (err) {
             sdsfree(err);
             goto write_error;
         }
-        crdtMaster->repl_state = REPL_STATE_RECEIVE_NAMESPACE;
+        crdtMaster->repl_state = REPL_STATE_RECEIVE_CRDT_AUTH;
         return;
     } 
 
-    if(crdtMaster->repl_state == REPL_STATE_RECEIVE_NAMESPACE) {
+    if(crdtMaster->repl_state == REPL_STATE_RECEIVE_CRDT_AUTH) {
         err = crdtSendSynchronousCommand(crdtMaster, SYNC_CMD_READ, fd, NULL);
         if (err[0] == '-') {
             serverLog(LL_NOTICE,"[CRDT] Unable to Namespace and GID to MASTER namespace :%s, gid: %lld , error: '%s'", 
@@ -1227,7 +1227,7 @@ void crdtAuthGidCommand(client *c) {
     c->slave_capa |= SLAVE_CAPA_CRDT;
     addReply(c, shared.ok);
 }
-void crdtAuthNamespaceCommand(client *c) {
+void crdtAuthCommand(client *c) {
     if (c->argc != 3) {
         addReply(c, shared.syntaxerr);
         return;

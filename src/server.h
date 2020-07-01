@@ -293,8 +293,8 @@ typedef long long mstime_t; /* millisecond time type. */
 #define REPL_STATE_RECEIVE_PONG 3 /* Wait for PING reply */
 #define REPL_STATE_SEND_GID 4 /* Send Gid to master */
 #define REPL_STATE_RECEIVE_GID 5 /* Wait for Gid reply */
-#define REPL_STATE_SEND_NAMESPACE 6 /* Send Namespace to master */
-#define REPL_STATE_RECEIVE_NAMESPACE 7 /* Wait for Namespace reply */
+#define REPL_STATE_SEND_CRDT_AUTH 6 /* Send Namespace to master */
+#define REPL_STATE_RECEIVE_CRDT_AUTH 7 /* Wait for Namespace reply */
 #define REPL_STATE_SEND_AUTH 8 /* Send AUTH to master */
 #define REPL_STATE_RECEIVE_AUTH 9 /* Wait for AUTH reply */
 #define REPL_STATE_SEND_PORT 10 /* Send REPLCONF listening-port */
@@ -1614,7 +1614,7 @@ CRDT_Master_Instance *createPeerMaster(client *c, int gid);
 void crdtOvcCommand(client *c);
 void crdtAuthGidCommand(client *c);
 
-void crdtAuthNamespaceCommand(client *c);
+void crdtAuthCommand(client *c);
 void feedCrdtBacklog(robj **argv, int argc);
 void replicationFeedAllSlaves(int dictid, robj **argv, int argc);
 void replicationFeedStringToAllSlaves(int dictid, void* cmdbuf, size_t cmdlen);

@@ -332,7 +332,7 @@ struct redisCommand redisCommandTable[] = {
     {"expireSize",expireSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
     {"crdt.ovc",crdtOvcCommand,3,"rF",0,NULL,0,0,0,0,0},
     {"crdt.authGid", crdtAuthGidCommand,2,"rF", 0, NULL,0,0,0,0,0},
-    {"crdt.authnamespace", crdtAuthNamespaceCommand, 3, "rF", 0,NULL,0,0,0,0,0}
+    {"crdt.auth", crdtAuthCommand, 3, "rF", 0,NULL,0,0,0,0,0}
 };
 
 /*============================ CRDT functions ============================ */
@@ -1644,6 +1644,7 @@ void initServerConfig(struct redisServer *srv) {
 
     //TODO: Specialize Crdt Server Configs
     srv->crdt_gid = CONFIG_DEFAULT_GID;
+    srv->crdt_namespace = NULL;
     if (srv == &crdtServer) {
         srv->repl_syncio_timeout = CONFIG_REPL_SYNCIO_TIMEOUT;
         srv->repl_timeout = CONFIG_DEFAULT_REPL_TIMEOUT;

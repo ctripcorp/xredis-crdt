@@ -738,7 +738,7 @@ void loadServerConfigFromString(char *config) {
             }
         } else if (!strcasecmp(argv[0],"crdt-gid")) {
             // server.crdt_gid is used for crdt module
-            zfree(crdtServer.crdt_namespace);
+            if(crdtServer.crdt_namespace != NULL) zfree(crdtServer.crdt_namespace);
             crdtServer.crdt_namespace = zstrdup(argv[1]);
             int gid = atoi(argv[2]);
             if(!check_gid(gid)) {
@@ -918,7 +918,7 @@ void configSetCommand(client *c, struct redisServer *srv) {
             }
         }
     } config_set_special_field("crdt-gid") {
-        zfree(srv->crdt_namespace);
+        if(srv->crdt_namespace != NULL) zfree(srv->crdt_namespace);
         srv->crdt_namespace = zstrdup(c->argv[3]->ptr);
     } config_set_special_field("save") {
         int vlen, j;

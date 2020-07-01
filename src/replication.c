@@ -1772,7 +1772,6 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
         /* Ignore the error if any, not all the Redis versions support
          * REPLCONF capa. */
         if (err[0] == '-') {
-            serverLog(LL_NOTICE,"%s", err);
             if(!strncasecmp( err,"-ERR unknown command", 20)) {
                 serverLog(LL_NOTICE, "Master is not crdt");
                 server.master_is_crdt = 0;
