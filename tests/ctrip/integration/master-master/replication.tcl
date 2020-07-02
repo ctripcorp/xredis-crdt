@@ -99,6 +99,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
 
         test {PEEROF should start with link status "down"} {
             r peerof 1 [srv -1 host] [srv -1 port]
+            after 1000
             crdt_status r peer0_link_status
         } {down}
 
