@@ -7,10 +7,13 @@ proc decode_binary_str {binary_str size} {
     binary scan $binary_str $type result
     return $result
 }
+
 start_server {tags {"crdt-register"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
 
     test {"[crdt_register.tcl]SET and GET"} {
         r set x foobar
+        set info [r crdt.dataInfo x]
+        assert_equal [string match  "type: lww_register, gid: 1, timestamp: *, vector-clock: 1:1, val: foobar" [lindex $info 0]] 1
         r get x
     } {foobar}
 
@@ -38,6 +41,8 @@ start_server {tags {"crdt-register"} overrides {crdt-gid 1} config {crdt.conf} m
         r CRDT.SET key val 1 [clock milliseconds] "1:100" 
         after 1
         r CRDT.SET key val2 1 [clock milliseconds] "1:101" 
+        set info [r crdt.dataInfo key]
+        assert_equal [string match  "type: lww_register, gid: 1, timestamp: *, vector-clock: 1:101;2:100, val: val2" [lindex $info 0]] 1
         r get key
     } {val2}
 
@@ -97,4 +102,11 @@ start_server {tags {"crdt-register"} overrides {crdt-gid 1} config {crdt.conf} m
         r hset h11 k v 
         assert_equal [r mget h11] {{}}  
     } {}
+
+    test {"info tombstone"} {
+        r "CRDT.DEL_REG" k13 "2" [clock milliseconds] "2:101;3:100" "2:101;3:100"
+        set info [r crdt.dataInfo k13]
+        assert_equal [string match  "type: lww_reigster_tomsbtone, gid: 2, timestamp: *, vector-clock: 2:101;3:100" [lindex $info 0]] 1
+        puts $info
+    }
 }
