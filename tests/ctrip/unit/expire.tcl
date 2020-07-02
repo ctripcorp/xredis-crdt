@@ -138,15 +138,15 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
     test "crdt.persist" {
         set time [clock milliseconds]
         [lindex $peers 0] "CRDT.SET" "k1" "value" "2" $time "2:1"
-        [lindex $peers 0] "CRDT.persist" "k1" "3" "1"
+        [lindex $peers 0] "CRDT.persist" "k1" "3" "0"
         assert_equal [[lindex $peers 0] ttl k1] -1
-        [lindex $peers 0] "CRDT.expire" "k1" "2" [incr time -1]  [incr time 100000000] "1"
+        [lindex $peers 0] "CRDT.expire" "k1" "2" [incr time -1]  [incr time 100000000] "0"
         set ttl [[lindex $peers 0] ttl k1]
     }
     test "crdt.set" {
         set time [clock milliseconds]
         [lindex $peers 0] "CRDT.SET" "k2" "value" "2" $time "2:2;3:1" 1000
-        [lindex $peers 0] "CRDT.expire" "k2" "3" [incr time -1] [incr time 100000000] "1"
+        [lindex $peers 0] "CRDT.expire" "k2" "3" [incr time -1] [incr time 100000000] "0"
         if {[[lindex $peers 0] ttl k2] > 1000 } {
             error "crdt.set  expire conflict error"
         }
@@ -154,14 +154,14 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
     test "crdt.del" {
         set time [clock milliseconds]
         [lindex $peers 0] "CRDT.DEL_REG" k4 "2" $time "2:101;3:100" "2:101;3:100"
-        [lindex $peers 0] "CRDT.expire" k4 "3" [incr time -1] [incr time 2000000] "1"
+        [lindex $peers 0] "CRDT.expire" k4 "3" [incr time -1] [incr time 2000000] "0"
         assert_equal [[lindex $peers 0] ttl k4] -2
     }
     
     test "crdt.del2" {
         set time [clock milliseconds]
         [lindex $peers 0] "CRDT.DEL_REG" k5 2 $time "2:111;1:110" "2:111;1:110"
-        [lindex $peers 0] "CRDT.expire" k5 1 [incr time 100] [incr time 1000] "1"
+        [lindex $peers 0] "CRDT.expire" k5 1 [incr time 100] [incr time 1000] "0"
         [lindex $peers 0] hset k5 key value
         after 2000
         assert_equal [[lindex $peers 0] hget k5 key] value
@@ -172,7 +172,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
         [lindex $peers 0] debug set-crdt-ovc 0
         set time [clock milliseconds]
         [lindex $peers 0] "CRDT.DEL_REG" k6 2 $time "2:121;1:120" "2:111;1:120"
-        [lindex $peers 0] "CRDT.expire" k6 1 [incr time 100] [incr time 1000] "1"
+        [lindex $peers 0] "CRDT.expire" k6 1 [incr time 100] [incr time 1000] "0"
         [lindex $peers 0] hset k6 key value
         after 5000
         assert_equal [[lindex $peers 0] hget k6 key] value
