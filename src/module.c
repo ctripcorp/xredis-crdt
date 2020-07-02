@@ -278,8 +278,8 @@ size_t sds_memory(sds ptr) {
         return oldsize + PREFIX_SIZE;
     #endif
 }
-size_t key_size = 0;
-size_t key_memory = 0;
+static size_t key_size = 0;
+static size_t key_memory = 0;
 void* dictDupKeyStatMemory(void *privdata, const void *key) {
     key_memory += sds_memory(key);
     key_size += 1;
@@ -296,15 +296,15 @@ size_t RM_ModuleAllKeySize() {
 size_t RM_ModuleAllKeyMemory() {
     return key_memory;
 }
-size_t robj_and_module = 0;
+static size_t moduleValue_memory = 0;
 size_t RM_GetModuleValueMemorySize() {
-    if(robj_and_module == 0) {
+    if(moduleValue_memory == 0) {
         size_t old_size = zmalloc_used_memory();
         void* m = zmalloc(sizeof(moduleValue));
-        robj_and_module = zmalloc_used_memory() - old_size;
+        moduleValue_memory = zmalloc_used_memory() - old_size;
         free(m);
     }
-    return robj_and_module;
+    return moduleValue_memory;
 }
 /* Use like calloc(). Memory allocated with this function is reported in
  * Redis INFO memory, used for keys eviction according to maxmemory settings
