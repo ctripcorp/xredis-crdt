@@ -37,6 +37,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
+#include "zmalloc.h"
+
+#define vc_malloc zmalloc
+#define vc_free zfree
 
 // "<gid>:<clock>;<gid>:<clock>"
 #define VECTOR_CLOCK_SEPARATOR ";"
