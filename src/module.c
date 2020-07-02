@@ -264,7 +264,7 @@ size_t RM_ModuleMemory() {
 size_t RM_UsedMemory() {
     return zmalloc_used_memory();
 }
-size_t sds_memory(sds ptr) {
+size_t sds_memory(const sds ptr) {
     #ifdef HAVE_MALLOC_SIZE
          return zmalloc_size(sdsAllocPtr(ptr));
     #else
@@ -280,12 +280,13 @@ size_t sds_memory(sds ptr) {
 }
 static size_t key_size = 0;
 static size_t key_memory = 0;
-void* dictDupKeyStatMemory(void *privdata, const void *key) {
-    key_memory += sds_memory(key);
+void* dictDupKeyStatMemory(void * privdata, const void* key) {
+    DICT_NOTUSED(privdata);
+    key_memory += sds_memory((const sds)key);
     key_size += 1;
-    return key;
+    return (void*)key;
 }
-void dictDestructorKeyStatMemory(void *privdata, void *key) {
+void dictDestructorKeyStatMemory(void *privdata, void* key) {
     key_memory -= sds_memory(key);
     key_size -= 1;
     dictSdsDestructor(privdata, key);
@@ -302,7 +303,7 @@ size_t RM_GetModuleValueMemorySize() {
         size_t old_size = zmalloc_used_memory();
         void* m = zmalloc(sizeof(moduleValue));
         moduleValue_memory = zmalloc_used_memory() - old_size;
-        free(m);
+        zfree(m);
     }
     return moduleValue_memory;
 }
@@ -1790,6 +1791,7 @@ int RM_DbDelete(RedisModuleCtx *ctx, RedisModuleString* keyname) {
     return dictDelete(ctx->client->db->dict, keyname->ptr);
 }
 void* RM_DbEntryGetVal(RedisModuleCtx *ctx, dictEntry* de) {
+    UNUSED(ctx);
     robj* val = dictGetVal(de);
     if(val == NULL) {
         return NULL;
