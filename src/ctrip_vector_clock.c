@@ -431,7 +431,7 @@ stringToVectorClockUnit(char* vcUnitStr) {
 
 VectorClock 
 stringToVectorClock(char* buf) {
-    char* vcUnits[15];
+    char* vcUnits[2<<GIDSIZE];
     int clockNum = 0;
     split(buf,VECTOR_CLOCK_SEPARATOR,vcUnits,&clockNum);
     if(clockNum == 0) {
