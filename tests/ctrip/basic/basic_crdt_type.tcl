@@ -778,6 +778,7 @@ proc basic_test { type create check delete} {
                     
                     wait [lindex $peers 1] 0 crdt.info [lindex $peer_stdouts 0]
                     wait [lindex $peers 0] 0 crdt.info [lindex $peer_stdouts 1]
+                    after 1000
                     run [replace [replace_client $check {[lindex $peers 2]}] $argv2] 1
                 }
                 test [format "%s-before-del" $type] {
