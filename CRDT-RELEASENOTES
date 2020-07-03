@@ -15,9 +15,9 @@ XRedis-CRDT 1.0.4  Released Tue Jun  9 15:58:31 CST 2020
 Upgrade urgency LOW: Compared with the previous version, there are some improvements, mainly:
 Major things:
 * fix free crdtServer backlog bug when slave turning into master
-* optimize set, mset and hset command  
-* added namespace attribute to limit the scope of peer commands
-* added module memory statistics
+* speed up set, mset and hset command 
+* added namespace attribute to limit the scope of peer replication
+* add module memory statistics
 
 ================================================================================
 XRedis-CRDT 1.0.3  Released Tue Jun  9 15:58:31 CST 2020

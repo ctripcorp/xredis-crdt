@@ -82,12 +82,12 @@ proc basic_test { type create check delete} {
             wait [lindex $peers 0] 0 crdt.info
             test [format "%s-peerof-create" $type] {
                 run [replace [replace_client $create {[lindex $peers 0]}] $argv] 1
-                after 500
+                after 1000
                 run [replace [replace_client $check {[lindex $peers 1]}] $argv] 1
             }
             test [format "%s-peerof-del" $type] {
                 run [replace [replace_client $delete {[lindex $peers 0]}] $argv] 1
-                after 500
+                after 1000
                 set result {key, field, {}}
                 run [replace [replace_client $check {[lindex $peers 1]}] $result] 1
             }

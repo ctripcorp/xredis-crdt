@@ -44,7 +44,6 @@ set ::all_tests {
     ctrip/unit/aof
 
     ctrip/unit/expire
-    ctrip/basic/basic_crdt_type_del
     ctrip/integration/composite/master-slave-failover
     ctrip/unit/crdt_publish
     ctrip/integration/master-slave/rdb3
