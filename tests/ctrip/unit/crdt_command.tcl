@@ -124,8 +124,8 @@ start_server {tags {"crdt-command"} overrides {crdt-gid 1} config {crdt.conf} mo
     test "hgetall" {
         test "hgetall a" {
             r hset a b c d e 
-            r hgetall a 
-        } {b c d e}
+            lsort [r hgetall a]
+        } [lsort {b c d e}]
         test "hgetall b" {
             r hgetall b
         } {}
@@ -139,8 +139,8 @@ start_server {tags {"crdt-command"} overrides {crdt-gid 1} config {crdt.conf} mo
     test "hkeys" {
         test "hkeys a" {
             r hset a b c d e 
-            r hkeys a 
-        } {b d}
+            lsort [r hkeys a]
+        } [lsort {b d}]
         test "hkeys b" {
             r hkeys b
         } {}
@@ -154,8 +154,8 @@ start_server {tags {"crdt-command"} overrides {crdt-gid 1} config {crdt.conf} mo
     test "hvals" {
         test "hvals a" {
             r hset a b c d e 
-            r hvals a 
-        } {c e}
+            lsort [r hvals a]
+        } [lsort {c e}]
         test "hvals b" {
             r hvals b
         } {}

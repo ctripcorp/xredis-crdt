@@ -88,7 +88,7 @@ proc basic_test { type create check delete} {
                 run [replace [replace_client $check {[lindex $peers 0]}] $add1] 1
                 set delete1 {key field {} 1 100000 {"1:12;2:11"} }
                 [lindex $peers 0] del key
-                after 500
+                after 1000
                 run [replace [replace_client $check {[lindex $peers 1]}] $delete1] 1
                 run [replace [replace_client $create {[lindex $peers 1]}] $add1] 1
                 run [replace [replace_client $check {[lindex $peers 1]}] $delete1] 1
