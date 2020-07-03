@@ -1652,6 +1652,7 @@ void initServerConfig(struct redisServer *srv) {
         srv->repl_diskless_sync_delay = CONFIG_DEFAULT_REPL_DISKLESS_SYNC_DELAY;
         srv->repl_ping_slave_period = CONFIG_DEFAULT_REPL_PING_SLAVE_PERIOD;
         srv->repl_timeout = CONFIG_DEFAULT_REPL_TIMEOUT;
+        srv->repl_backlog_size = CRDT_CONFIG_DEFAULT_REPL_BACKLOG_SIZE;
     }
 }
 

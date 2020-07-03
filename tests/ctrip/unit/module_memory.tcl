@@ -132,6 +132,18 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
         wait_flushall [lindex $peers 0]
         assert_equal [get_module_all_memory [lindex $peers 0]] $m
     }
+    test "flushall" {
+        [lindex $peers 0] set k v 
+        assert {[get_module_all_memory [lindex $peers 0]] > 0}
+        [lindex $peers 0] flushall
+        assert {[get_module_all_memory [lindex $peers 0]] == 0}
+    }
+    test "flushdb" {
+        [lindex $peers 0] set k v 
+        assert {[get_module_all_memory [lindex $peers 0]] > 0}
+        [lindex $peers 0] flushdb
+        assert {[get_module_all_memory [lindex $peers 0]] == 0}
+    }
     test "add kv memory" {
         [lindex $peers 0] set k v
         set before_mm [get_module_all_memory [lindex $peers 0]]

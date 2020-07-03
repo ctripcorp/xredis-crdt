@@ -108,6 +108,23 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
                 fail "SET on master did not propagated on slave"
             }
         }
+        test {FLUSHALL should replicate} {
+            r -1 flushall
+            if {$::valgrind} {after 2000}
+            list [r -1 dbsize] [r 0 dbsize]
+        } {0 0}
+
+        test {FLUSHDB} {
+            set aux {}
+            r -1 set k v
+            lappend aux [r -1 dbsize]
+            after 1000
+            lappend aux [r dbsize]
+            r -1 flushdb
+            after 1000
+            lappend aux [r -1 dbsize]
+            lappend aux [r dbsize]
+        } {1 1 0 0}
 
         test {ROLE in master reports master with a slave} {
             set res [r -1 role]
