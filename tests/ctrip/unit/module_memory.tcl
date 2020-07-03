@@ -88,9 +88,12 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
     [lindex $peers 0] config set repl-diskless-sync-delay 1
     test "kv" {
         set m [get_module_all_memory [lindex $peers 0]]
+        set before_dataset [get_dataset [lindex $peers 0]]
         [lindex $peers 0] set k v
         set m1 [get_module_all_memory [lindex $peers 0]]
         assert {$m1 > 0}
+        puts  [[lindex $peers 0] crdt.memory]
+        puts  [expr [get_dataset [lindex $peers 0]] - $before_dataset]
         [lindex $peers 0] crdt.set k v1 2 [clock milliseconds] 2:1 
         set m2 [get_module_all_memory [lindex $peers 0]]
         assert {$m2 > $m1}

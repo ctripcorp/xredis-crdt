@@ -97,7 +97,7 @@ start_redis [list overrides [list repl-diskless-sync-delay 1  ]] {
                 [lindex $slave 1] slaveof [lindex $slave_hosts 0] [lindex $slave_ports 0]
                 wait [lindex $slave 0] 0 info [lindex $slave_stdouts 1]
                 [lindex $slave 0] slaveof no one 
-                after 1000
+                after 2000
                 assert_equal [get_info_replication_attr_value [lindex $slave 0] crdt.info master_replid] [get_info_replication_attr_value [lindex $slave 1] crdt.info master_replid]
                 assert_equal [get_info_replication_attr_value [lindex $slave 0] crdt.info master_replid2] [get_info_replication_attr_value [lindex $slave 1] crdt.info master_replid2]
                 #print_log_file [lindex $slave_stdouts 1] 
