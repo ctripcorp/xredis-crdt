@@ -294,7 +294,7 @@ struct redisCommand redisCommandTable[] = {
 //    {"evalsha",evalShaCommand,-3,"s",0,evalGetKeys,0,0,0,0,0},
     {"slowlog",slowlogCommand,-2,"a",0,NULL,0,0,0,0,0},
 //    {"script",scriptCommand,-2,"s",0,NULL,0,0,0,0,0},
-//    {"time",timeCommand,1,"RF",0,NULL,0,0,0,0,0},
+   {"time",timeCommand,1,"RF",0,NULL,0,0,0,0,0},
 //    {"bitop",bitopCommand,-4,"wm",0,NULL,2,-1,1,0,0},
 //    {"bitcount",bitcountCommand,-2,"r",0,NULL,1,1,1,0,0},
 //    {"bitpos",bitposCommand,-3,"r",0,NULL,1,1,1,0,0},
@@ -331,7 +331,8 @@ struct redisCommand redisCommandTable[] = {
     {"tombstoneSize",tombstoneSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
     {"expireSize",expireSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
     {"crdt.ovc",crdtOvcCommand,3,"rF",0,NULL,0,0,0,0,0},
-    {"crdt.authGid", crdtAuthGidCommand,2,"rF", 0, NULL,0,0,0,0,0}
+    {"crdt.authGid", crdtAuthGidCommand,2,"rF", 0, NULL,0,0,0,0,0},
+    {"crdt.auth", crdtAuthCommand, 3, "rF", 0,NULL,0,0,0,0,0}
 };
 
 /*============================ CRDT functions ============================ */
@@ -609,10 +610,11 @@ dictType zsetDictType = {
 /* Db->dict, keys are sds strings, vals are Redis objects. */
 dictType dbDictType = {
     dictSdsHash,                /* hash function */
-    NULL,                       /* key dup */
+    dictDupKeyStatMemory,       /* key dup */
     NULL,                       /* val dup */
     dictSdsKeyCompare,          /* key compare */
-    dictSdsDestructor,          /* key destructor */
+    dictDestructorKeyStatMemory,/* key destructor */
+    // dictSdsDestructor,          
     dictObjectDestructor   /* val destructor */
 };
 
@@ -1061,7 +1063,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
                 /* dictPrintStats(server.dict); */
             }
         }
-        rewriteConfig(server.configfile);
+        updateConfigFileVectorUnit(server.configfile);
     }
 
     /* Show information about connected clients */
@@ -1643,12 +1645,14 @@ void initServerConfig(struct redisServer *srv) {
 
     //TODO: Specialize Crdt Server Configs
     srv->crdt_gid = CONFIG_DEFAULT_GID;
+    srv->crdt_namespace = NULL;
     if (srv == &crdtServer) {
         srv->repl_syncio_timeout = CONFIG_REPL_SYNCIO_TIMEOUT;
         srv->repl_timeout = CONFIG_DEFAULT_REPL_TIMEOUT;
         srv->repl_diskless_sync_delay = CONFIG_DEFAULT_REPL_DISKLESS_SYNC_DELAY;
         srv->repl_ping_slave_period = CONFIG_DEFAULT_REPL_PING_SLAVE_PERIOD;
         srv->repl_timeout = CONFIG_DEFAULT_REPL_TIMEOUT;
+        srv->repl_backlog_size = CRDT_CONFIG_DEFAULT_REPL_BACKLOG_SIZE;
     }
 }
 
@@ -3507,7 +3511,7 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                                     "#Peer_Master_%d\r\n"
                                     "peer%d_host:%s\r\n"
                                     "peer%d_port:%d\r\n"
-                                    "peer%d_gid:%d\r\n"
+                                    "peer%d_gid:%lld\r\n"
                                     "peer%d_link_status:%s\r\n"
                                     "peer%d_last_io_seconds_ago:%d\r\n"
                                     "peer%d_sync_in_progress:%d\r\n"

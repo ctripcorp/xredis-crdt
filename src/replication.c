@@ -915,12 +915,10 @@ void replconfCommand(client *c) {
             }
             /* Note: this command does not reply anything! */
             return;
-        }
-        else if(!strcasecmp(c->argv[j]->ptr,"crdt")) {
+        }   else if(!strcasecmp(c->argv[j]->ptr,"crdt")) {
             c->slave_capa |= SLAVE_CAPA_CRDT;
            
-        }
-        else {
+        }  else {
             addReplyErrorFormat(c,"Unrecognized REPLCONF option: %s",
                 (char*)c->argv[j]->ptr);
             return;
@@ -1752,9 +1750,41 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
                 "Master replied to PING, replication can continue...");
         }
         sdsfree(err);
-        server.repl_state = REPL_STATE_SEND_AUTH;
+        if(crdt_enabled) {
+            server.repl_state = REPL_STATE_SEND_GID;
+        } else {
+            server.repl_state = REPL_STATE_SEND_AUTH;
+        }
+    }
+    if (server.repl_state == REPL_STATE_SEND_GID) {
+        sds gid = sdsfromlonglong(crdtServer.crdt_gid);
+        err = sendSynchronousCommand(SYNC_CMD_WRITE, fd, "CRDT.AUTHGID",
+                                     gid, NULL);
+        sdsfree(gid);
+        if (err) goto write_error;
+        sdsfree(err);
+        server.repl_state = REPL_STATE_RECEIVE_GID;
+        return;
     }
 
+    if (server.repl_state == REPL_STATE_RECEIVE_GID) {
+        err = sendSynchronousCommand(SYNC_CMD_READ, fd, NULL);
+        /* Ignore the error if any, not all the Redis versions support
+         * REPLCONF capa. */
+        if (err[0] == '-') {
+            if(!strncasecmp( err,"-ERR unknown command", 20)) {
+                serverLog(LL_NOTICE, "Master is not crdt");
+                server.master_is_crdt = 0;
+            } else {
+                sdsfree(err);
+                goto error;
+            }
+        } else {
+            server.master_is_crdt = 1;
+        }
+        sdsfree(err);
+        server.repl_state = REPL_STATE_SEND_AUTH;
+    }
     /* AUTH with the master if required. */
     if (server.repl_state == REPL_STATE_SEND_AUTH) {
         if (server.masterauth) {
@@ -1892,6 +1922,8 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
         sdsfree(err);
         server.repl_state = REPL_STATE_SEND_PSYNC;
     }
+
+
     /* Try a partial resynchonization. If we don't have a cached master
      * slaveTryPartialResynchronization() will at least try to use PSYNC
      * to start a full resynchronization so that we get the master run id

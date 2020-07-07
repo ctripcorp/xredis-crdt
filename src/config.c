@@ -738,11 +738,13 @@ void loadServerConfigFromString(char *config) {
             }
         } else if (!strcasecmp(argv[0],"crdt-gid")) {
             // server.crdt_gid is used for crdt module
-            int gid = atoll(argv[1]);
+            if(crdtServer.crdt_namespace != NULL) zfree(crdtServer.crdt_namespace);
+            crdtServer.crdt_namespace = zstrdup(argv[1]);
+            int gid = atoi(argv[2]);
             if(!check_gid(gid)) {
                 err = "Invalid value for crdt_gid."; goto loaderr;
             }
-            server.crdt_gid = atoll(argv[1]);
+            server.crdt_gid = gid;
             crdtServer.crdt_gid = server.crdt_gid;
         } else if(!strcasecmp(argv[0],"local-clock")) {
             server.local_clock = atoll(argv[1]);
@@ -915,6 +917,9 @@ void configSetCommand(client *c, struct redisServer *srv) {
                 return;
             }
         }
+    } config_set_special_field("crdt-gid") {
+        if(srv->crdt_namespace != NULL) zfree(srv->crdt_namespace);
+        srv->crdt_namespace = zstrdup(c->argv[3]->ptr);
     } config_set_special_field("save") {
         int vlen, j;
         sds *v = sdssplitlen(o->ptr,sdslen(o->ptr)," ",1,&vlen);
@@ -1316,8 +1321,6 @@ void configGetCommand(client *c, struct redisServer *srv) {
     config_get_numerical_field("cluster-slave-validity-factor",srv->cluster_slave_validity_factor);
     config_get_numerical_field("repl-diskless-sync-delay",srv->repl_diskless_sync_delay);
     config_get_numerical_field("tcp-keepalive",srv->tcpkeepalive);
-    // srv->crdt_gid
-    config_get_numerical_field("crdt-gid", srv->crdt_gid);
     config_get_numerical_field("local-clock", srv->local_clock);
     config_get_numerical_field("dict-expand-max-idle-size", getDictExpandMaxIdle());
     /* Bool (yes/no) values */
@@ -1455,6 +1458,15 @@ void configGetCommand(client *c, struct redisServer *srv) {
         addReplyBulkCString(c,"bind");
         addReplyBulkCString(c,aux);
         sdsfree(aux);
+        matches++;
+    }
+    if (stringmatch(pattern, "crdt-gid",1)) {
+        char buf[256];
+
+        addReplyBulkCString(c,"crdt-gid");
+        snprintf(buf,sizeof(buf),"%s %d",
+            srv->crdt_namespace, srv->crdt_gid);
+        addReplyBulkCString(c,buf);
         matches++;
     }
     setDeferredMultiBulkLength(c,replylen,matches*2);
@@ -1762,7 +1774,21 @@ void rewriteConfigSaveOption(struct rewriteConfigState *state) {
     /* Mark "save" as processed in case server.saveparamslen is zero. */
     rewriteConfigMarkAsProcessed(state,"save");
 }
-
+void rewriteConfigVectorUnit(struct rewriteConfigState *state) {
+    VectorClockUnit unit = getVectorClockUnit(crdtServer.vectorClock,crdtServer.crdt_gid);
+    
+    if(!isNullVectorClockUnit(unit)) {
+        long long vcu = get_logic_clock(unit);
+        rewriteConfigNumericalOption(state, "local-clock", vcu, CONFIG_DEFAULT_VECTORCLOCK_UNIT);
+    }
+}
+void rewriteConfigNameSpaceOption(struct rewriteConfigState *state) {
+    char *option = "crdt-gid";
+    sds line;
+    line = sdscatprintf(sdsempty(),"%s %s %d", option,
+        crdtServer.crdt_namespace, crdtServer.crdt_gid);
+    rewriteConfigRewriteLine(state,option,line,1);
+}
 /* Rewrite the dir option, always using absolute paths.*/
 void rewriteConfigDirOption(struct rewriteConfigState *state) {
     char cwd[1024];
@@ -2086,13 +2112,9 @@ int rewriteConfig(char *path) {
     rewriteConfigYesNoOption(state,"lazyfree-lazy-server-del",server.lazyfree_lazy_server_del,CONFIG_DEFAULT_LAZYFREE_LAZY_SERVER_DEL);
     rewriteConfigYesNoOption(state,"slave-lazy-flush",server.repl_slave_lazy_flush,CONFIG_DEFAULT_SLAVE_LAZY_FLUSH);
 
-    rewriteConfigNumericalOption(state,"crdt-gid", crdtServer.crdt_gid, CONFIG_DEFAULT_GID);
-    VectorClockUnit unit = getVectorClockUnit(crdtServer.vectorClock,crdtServer.crdt_gid);
-    
-    if(!isNullVectorClockUnit(unit)) {
-        long long vcu = get_logic_clock(unit);
-        rewriteConfigNumericalOption(state, "local-clock", vcu, CONFIG_DEFAULT_VECTORCLOCK_UNIT);
-    }
+    // rewriteConfigNumericalOption(state,"crdt-gid", crdtServer.crdt_gid, CONFIG_DEFAULT_GID);
+    rewriteConfigNameSpaceOption(state);
+    rewriteConfigVectorUnit(state);
     
     /* Rewrite Sentinel config if in Sentinel mode. */
     if (server.sentinel_mode) rewriteConfigSentinelOption(state);
@@ -2111,6 +2133,30 @@ int rewriteConfig(char *path) {
     rewriteConfigReleaseState(state);
     return retval;
 }
+int updateConfigFileVectorUnit(char* path) {
+    struct rewriteConfigState *state;
+    sds newcontent;
+    int retval;
+
+    /* Step 1: read the old config into our rewrite state. */
+    if ((state = rewriteConfigReadOldFile(path)) == NULL) return -1;
+    /* Step 2: rewrite every single option, replacing or appending it inside
+     * the rewrite state. */
+    rewriteConfigVectorUnit(state);
+    /* Step 3: remove all the orphaned lines in the old file, that is, lines
+     * that were used by a config option and are no longer used, like in case
+     * of multiple "save" options or duplicated options. */
+    rewriteConfigRemoveOrphaned(state);
+
+    /* Step 4: generate a new configuration file from the modified state
+     * and write it into the original file. */
+    newcontent = rewriteConfigGetContentFromState(state);
+    retval = rewriteConfigOverwriteFile(server.configfile,newcontent);
+    sdsfree(newcontent);
+    rewriteConfigReleaseState(state);
+    return retval;
+}
+
 
 /*-----------------------------------------------------------------------------
  * CONFIG command entry point

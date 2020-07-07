@@ -400,12 +400,11 @@ int getFlushCommandFlags(client *c, int *flags) {
  *
  * Flushes the currently SELECTed Redis DB. */
 void flushdbCommand(client *c) {
-    // int flags;
+    int flags;
 
-    // if (getFlushCommandFlags(c,&flags) == C_ERR) return;
-    // signalFlushedDb(c->db->id);
-    // server.dirty += emptyDb(c->db->id,flags,NULL);
-    // addReply(c,shared.ok);
+    if (getFlushCommandFlags(c,&flags) == C_ERR) return;
+    signalFlushedDb(c->db->id);
+    server.dirty += emptyDb(c->db->id,flags,NULL);
     addReply(c,shared.ok);
 }
 
@@ -413,27 +412,26 @@ void flushdbCommand(client *c) {
  *
  * Flushes the whole server data set. */
 void flushallCommand(client *c) {
-    // int flags;
+    int flags;
 
-    // if (getFlushCommandFlags(c,&flags) == C_ERR) return;
-    // signalFlushedDb(-1);
-    // server.dirty += emptyDb(-1,flags,NULL);
-    // addReply(c,shared.ok);
-    // if (server.rdb_child_pid != -1) {
-    //     kill(server.rdb_child_pid,SIGUSR1);
-    //     rdbRemoveTempFile(server.rdb_child_pid);
-    // }
-    // if (server.saveparamslen > 0) {
-    //     /* Normally rdbSave() will reset dirty, but we don't want this here
-    //      * as otherwise FLUSHALL will not be replicated nor put into the AOF. */
-    //     int saved_dirty = server.dirty;
-    //     rdbSaveInfo rsi, *rsiptr;
-    //     rsiptr = rdbPopulateSaveInfo(&rsi);
-    //     rdbSave(server.rdb_filename,rsiptr);
-    //     server.dirty = saved_dirty;
-    // }
-    // server.dirty++;
+    if (getFlushCommandFlags(c,&flags) == C_ERR) return;
+    signalFlushedDb(-1);
+    server.dirty += emptyDb(-1,flags,NULL);
     addReply(c,shared.ok);
+    if (server.rdb_child_pid != -1) {
+        kill(server.rdb_child_pid,SIGUSR1);
+        rdbRemoveTempFile(server.rdb_child_pid);
+    }
+    if (server.saveparamslen > 0) {
+        /* Normally rdbSave() will reset dirty, but we don't want this here
+         * as otherwise FLUSHALL will not be replicated nor put into the AOF. */
+        int saved_dirty = server.dirty;
+        rdbSaveInfo rsi, *rsiptr;
+        rsiptr = rdbPopulateSaveInfo(&rsi);
+        rdbSave(server.rdb_filename,rsiptr);
+        server.dirty = saved_dirty;
+    }
+    server.dirty++;
 }
 
 /* This command implements DEL and LAZYDEL. */

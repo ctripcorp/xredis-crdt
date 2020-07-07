@@ -108,6 +108,7 @@ typedef long long mstime_t; /* millisecond time type. */
 #define CONFIG_RUN_ID_SIZE 40
 #define RDB_EOF_MARK_SIZE 40
 #define CONFIG_DEFAULT_REPL_BACKLOG_SIZE (1024*1024)    /* 1mb */
+#define CRDT_CONFIG_DEFAULT_REPL_BACKLOG_SIZE (1024*1024*128) /* 128mb */
 #define CONFIG_DEFAULT_REPL_BACKLOG_TIME_LIMIT (60*60)  /* 1 hour */
 #define CONFIG_REPL_BACKLOG_MIN_SIZE (1024*16)          /* 16k */
 #define CONFIG_BGSAVE_RETRY_DELAY 5 /* Wait a few secs before trying again. */
@@ -293,24 +294,26 @@ typedef long long mstime_t; /* millisecond time type. */
 #define REPL_STATE_RECEIVE_PONG 3 /* Wait for PING reply */
 #define REPL_STATE_SEND_GID 4 /* Send Gid to master */
 #define REPL_STATE_RECEIVE_GID 5 /* Wait for Gid reply */
-#define REPL_STATE_SEND_AUTH 6 /* Send AUTH to master */
-#define REPL_STATE_RECEIVE_AUTH 7 /* Wait for AUTH reply */
-#define REPL_STATE_SEND_PORT 8 /* Send REPLCONF listening-port */
-#define REPL_STATE_RECEIVE_PORT 9 /* Wait for REPLCONF reply */
-#define REPL_STATE_SEND_IP 10 /* Send REPLCONF ip-address */
-#define REPL_STATE_RECEIVE_IP 11 /* Wait for REPLCONF reply */
-#define REPL_STATE_SEND_CAPA 12 /* Send REPLCONF capa */
-#define REPL_STATE_RECEIVE_CAPA 13 /* Wait for REPLCONF reply */
-#define REPL_STATE_SEND_CRDT 14
-#define REPL_STATE_RECEIVE_CRDT 15
+#define REPL_STATE_SEND_CRDT_AUTH 6 /* Send Namespace to master */
+#define REPL_STATE_RECEIVE_CRDT_AUTH 7 /* Wait for Namespace reply */
+#define REPL_STATE_SEND_AUTH 8 /* Send AUTH to master */
+#define REPL_STATE_RECEIVE_AUTH 9 /* Wait for AUTH reply */
+#define REPL_STATE_SEND_PORT 10 /* Send REPLCONF listening-port */
+#define REPL_STATE_RECEIVE_PORT 11 /* Wait for REPLCONF reply */
+#define REPL_STATE_SEND_IP 12 /* Send REPLCONF ip-address */
+#define REPL_STATE_RECEIVE_IP 13 /* Wait for REPLCONF reply */
+#define REPL_STATE_SEND_CAPA 14 /* Send REPLCONF capa */
+#define REPL_STATE_RECEIVE_CAPA 15 /* Wait for REPLCONF reply */
 #define REPL_STATE_SEND_VC 16 /* Send Vector Clock */
-#define REPL_STATE_RECEIVE_VC 17 /* Wait for Vector Clock reply */
-#define REPL_STATE_SEND_PSYNC 18 /* Send PSYNC */
-#define REPL_STATE_RECEIVE_PSYNC 19 /* Wait for PSYNC reply */
+#define REPL_STATE_SEND_CRDT 17
+#define REPL_STATE_RECEIVE_CRDT 18
+#define REPL_STATE_RECEIVE_VC 19 /* Wait for Vector Clock reply */
+#define REPL_STATE_SEND_PSYNC 20 /* Send PSYNC */
+#define REPL_STATE_RECEIVE_PSYNC 21 /* Wait for PSYNC reply */
 
 /* --- End of handshake states --- */
-#define REPL_STATE_TRANSFER 20 /* Receiving .rdb from master */
-#define REPL_STATE_CONNECTED 21 /* Connected to master */
+#define REPL_STATE_TRANSFER 22 /* Receiving .rdb from master */
+#define REPL_STATE_CONNECTED 23 /* Connected to master */
 
 /* State of slaves from the POV of the master. Used in client->replstate.
  * In SEND_BULK and ONLINE state the slave receives new updates
@@ -1261,6 +1264,7 @@ struct redisServer {
 
     /*crdt stuff*/
     int crdt_gid;
+    char* crdt_namespace;
     VectorClock vectorClock;
     VectorClock gcVectorClock;
     list *crdtMasters;
@@ -1610,6 +1614,8 @@ void crdtRoleCommand(client *c);
 CRDT_Master_Instance *createPeerMaster(client *c, int gid);
 void crdtOvcCommand(client *c);
 void crdtAuthGidCommand(client *c);
+
+void crdtAuthCommand(client *c);
 void feedCrdtBacklog(robj **argv, int argc);
 void replicationFeedAllSlaves(int dictid, robj **argv, int argc);
 void replicationFeedStringToAllSlaves(int dictid, void* cmdbuf, size_t cmdlen);
@@ -1831,6 +1837,7 @@ void resetServerSaveParams(struct redisServer *srv);
 struct rewriteConfigState; /* Forward declaration to export API. */
 void rewriteConfigRewriteLine(struct rewriteConfigState *state, const char *option, sds line, int force);
 int rewriteConfig(char *path);
+int updateConfigFileVectorUnit(char *path);
 
 /* db.c -- Keyspace access API */
 int removeExpire(redisDb *db, robj *key);
@@ -1957,6 +1964,8 @@ unsigned long LFUDecrAndReturn(robj *o);
 uint64_t dictSdsHash(const void *key);
 int dictSdsKeyCompare(void *privdata, const void *key1, const void *key2);
 void dictSdsDestructor(void *privdata, void *val);
+void* dictDupKeyStatMemory(void *privdata, const void *key);
+void dictDestructorKeyStatMemory(void *privdata, void *key);
 
 /* Git SHA1 */
 char *redisGitSHA1(void);

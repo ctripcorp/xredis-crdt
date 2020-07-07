@@ -15,6 +15,8 @@ source tests/support/aof.tcl
 
 
 set ::all_tests { 
+    ctrip/unit/namespace
+    ctrip/unit/module_memory
     ctrip/integration/bug/free-replication-blocklog
     ctrip/master-not-crdt/crdt_replid_reuse
     ctrip/integration/bug/not_remember_slave_key_with_expire_when_master_is_non_crdt
@@ -42,7 +44,6 @@ set ::all_tests {
     ctrip/unit/aof
 
     ctrip/unit/expire
-    ctrip/basic/basic_crdt_type_del
     ctrip/integration/composite/master-slave-failover
     ctrip/unit/crdt_publish
     ctrip/integration/master-slave/rdb3
@@ -93,6 +94,7 @@ set ::all_tests {
 }
 
 set ::temp_tests { 
+    
     #####
     ctrip/integration/bug/redis-crash-when-full-sync-hash-merge
     ctrip/integration/bug/redis-when-full-sync-mater-timeout-vectorclock-update

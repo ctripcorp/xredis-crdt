@@ -33,7 +33,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
 
         # Start the replication process...
         $slave peerof $master_gid $master_host $master_port
-
+        $master crdt.info replication
         test {Slave enters handshake} {
             wait_for_condition 50 1000 {
                 [string match *handshake* [$slave crdt.role slave $master_gid]]
