@@ -36,6 +36,15 @@
 #include "ctrip_crdt_common.h"
 #include "atomicvar.h"
 
+#ifdef HAVE_MALLOC_SIZE
+#define PREFIX_SIZE (0)
+#else
+#if defined(__sun) || defined(__sparc) || defined(__sparc__)
+#define PREFIX_SIZE (sizeof(long long))
+#else
+#define PREFIX_SIZE (sizeof(size_t))
+#endif
+#endif
 /* --------------------------------------------------------------------------
  * Private data structures used by the modules system. Those are data
  * structures that are never exposed to Redis Modules, if not as void
@@ -3635,6 +3644,21 @@ RedisModuleString *RM_LoadString(RedisModuleIO *io) {
     return moduleLoadString(io,0,NULL);
 }
 
+void *RM_LoadSds(RedisModuleIO *io, size_t *lenptr) {
+    if (io->ver == 2) {
+        uint64_t opcode = rdbLoadLen(io->rio,NULL);
+        if (opcode != RDB_MODULE_OPCODE_STRING) goto loaderr;
+    }
+    void *s = rdbGenericLoadStringObject(io->rio,
+               RDB_LOAD_SDS, lenptr);
+    add_module_memory_stat_alloc(sds_memory(s));
+    if (s == NULL) goto loaderr;
+
+    return s;
+loaderr:
+    moduleRDBLoadError(io);
+    return NULL; /* Never reached. */
+}
 /* Like RedisModule_LoadString() but returns an heap allocated string that
  * was allocated with RedisModule_Alloc(), and can be resized or freed with
  * RedisModule_Realloc() or RedisModule_Free().
@@ -4604,6 +4628,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(SaveString);
     REGISTER_API(SaveStringBuffer);
     REGISTER_API(LoadString);
+    REGISTER_API(LoadSds);
     REGISTER_API(LoadStringBuffer);
     REGISTER_API(SaveDouble);
     REGISTER_API(LoadDouble);
