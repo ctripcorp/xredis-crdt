@@ -265,6 +265,7 @@ void REDISMODULE_API_FUNC(RedisModule_SaveString)(RedisModuleIO *io, RedisModule
 void REDISMODULE_API_FUNC(RedisModule_SaveStringBuffer)(RedisModuleIO *io, const char *str, size_t len);
 RedisModuleString *REDISMODULE_API_FUNC(RedisModule_LoadString)(RedisModuleIO *io);
 char *REDISMODULE_API_FUNC(RedisModule_LoadStringBuffer)(RedisModuleIO *io, size_t *lenptr);
+void *REDISMODULE_API_FUNC(RedisModule_LoadSds)(RedisModuleIO *io, size_t *lenptr);
 void REDISMODULE_API_FUNC(RedisModule_SaveDouble)(RedisModuleIO *io, double value);
 double REDISMODULE_API_FUNC(RedisModule_LoadDouble)(RedisModuleIO *io);
 void REDISMODULE_API_FUNC(RedisModule_SaveFloat)(RedisModuleIO *io, float value);
@@ -434,6 +435,7 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(SaveString);
     REDISMODULE_GET_API(SaveStringBuffer);
     REDISMODULE_GET_API(LoadString);
+    REDISMODULE_GET_API(LoadSds);
     REDISMODULE_GET_API(LoadStringBuffer);
     REDISMODULE_GET_API(SaveDouble);
     REDISMODULE_GET_API(LoadDouble);
