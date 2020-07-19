@@ -455,6 +455,7 @@ char *crdtSendSynchronousCommand(CRDT_Master_Instance *crdtMaster, int flags, in
 #define PSYNC_FULLRESYNC 3
 #define PSYNC_NOT_SUPPORTED 4
 #define PSYNC_TRY_LATER 5
+
 int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, int fd, int read_reply) {
     char *psync_replid;
     char psync_offset[32];
@@ -1095,7 +1096,19 @@ int startCrdtBgsaveForReplication(long long min_logic_time) {
     return retval;
 
 }
-
+void crdtAllReplicationCacheMaster() {
+    listIter li;
+    listNode *ln;
+    listRewind(crdtServer.crdtMasters, &li);
+    while((ln = listNext(&li)) != NULL) {
+        CRDT_Master_Instance *crdtMaster = ln->value;
+        if(crdtMaster->master == NULL) {
+            crdtReplicationCreateMasterClient(crdtMaster, -1, -1);
+        }
+        crdtReplicationDiscardCachedMaster(crdtMaster);
+        freeClient(crdtMaster->master);
+    }
+}
 void crdtReplicationCacheMaster(client *c) {
     if (!(c->flags & CLIENT_CRDT_MASTER)) {
         return;
@@ -1202,6 +1215,7 @@ void crdtOvcCommand(client *c) {
             freeVectorClock(peerMaster->vectorClock);
         }
         freeVectorClock(vclock);
+        slaveUpdateMasterInterOffset(c, gid);
         peerMaster->vectorClock = newVectorClock;
     } else {
         feedCrdtBacklog(c->argv, c->argc);
@@ -1851,4 +1865,43 @@ void crdtRoleCommand(client *c) {
         addReplyBulkCString(c,slavestate);
         addReplyLongLong(c,masterInstance->master ? masterInstance->master->reploff : -1);
     }
+}
+
+int llstrlen(long long v) {
+    int len = 0;
+    if(v < 0) {
+        v = -v;
+        len = 1;
+    }
+    do {
+        len += 1;
+        v /= 10;
+    } while(v);
+    return len;
+}
+long long getOffset(client* c) {
+    long long size = 0;
+    //*3\r\n
+    size += llstrlen((long long)c->argc) + 3;
+    for(int i = 0; i < c->argc; i++) {
+        sds v = c->argv[i]->ptr;
+        long long l = sdslen(v);
+        //example
+        //$11\r\nCRDT.SELECT\r\n
+        size += llstrlen(l) + 3 + l + 2;
+    }
+    return size;
+}
+int slaveUpdateMasterInterOffset(client* c, int gid) {
+    if(isMasterMySelf() != C_OK) {
+        CRDT_Master_Instance* instance =  getPeerMaster(gid); 
+        if(instance != NULL) {
+            // instance->master_initial_offset += getOffset(c);
+            long long l = c->read_reploff - sdslen(c->querybuf) - c->reploff;
+            assert(l == getOffset(c));
+            instance->master_initial_offset += l;
+        }
+        
+    }
+    return C_OK;
 }

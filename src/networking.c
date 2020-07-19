@@ -1352,7 +1352,7 @@ int processMultibulkBuffer(client *c) {
  * more query buffer to process, because we read more data from the socket
  * or because a client was blocked and later reactivated, so there could be
  * pending query buffer, already representing a full command, to process. */
-void processInputBuffer(client *c) {
+void processInputBuffer(client *c) {           
     server.current_client = c;
     /* Keep processing while there is something in the input buffer */
     while(sdslen(c->querybuf)) {
@@ -1385,12 +1385,12 @@ void processInputBuffer(client *c) {
         } else {
             serverPanic("Unknown request type");
         }
-
         /* Multibulk processing could see a <= 0 length. */
         if (c->argc == 0) {
             resetClient(c);
         } else {
             /* Only reset the client when the command was executed. */
+            // serverLog(LL_WARNING, "cmd: %s, before %lld", (sds)c->argv[0]->ptr, c->reploff);
             if (processCommand(c) == C_OK) {
                 if ((c->flags & CLIENT_MASTER
                     || ((c->flags & CLIENT_CRDT_MASTER) && getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED))
@@ -1398,7 +1398,7 @@ void processInputBuffer(client *c) {
                     /* Update the applied replication offset of our master. */
                     c->reploff = c->read_reploff - sdslen(c->querybuf);
                 }
-
+                
                 /* Don't reset the client structure for clients blocked in a
                  * module blocking command, so that the reply callback will
                  * still be able to access the client argv and argc field.
@@ -1406,6 +1406,7 @@ void processInputBuffer(client *c) {
                 if (!(c->flags & CLIENT_BLOCKED) || c->btype != BLOCKED_MODULE)
                     resetClient(c);
             }
+            // serverLog(LL_WARNING, "after %lld", );
             /* freeMemoryIfNeeded may flush slave output buffers. This may
              * result into a slave, that may be the active client, to be
              * freed. */

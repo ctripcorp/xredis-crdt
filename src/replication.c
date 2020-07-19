@@ -129,6 +129,7 @@ void feedReplicationBacklog(struct redisServer *srv, void *ptr, size_t len) {
     unsigned char *p = ptr;
     srv->master_repl_offset += len;
 
+
     /* This is a circular buffer, so write as much data we can at every
      * iteration and rewind the "idx" index if we reach the limit. */
     while(len) {
@@ -190,11 +191,9 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
 
     /* We can't have slaves attached and no backlog. */
     serverAssert(!(listLength(slaves) != 0 && server.repl_backlog == NULL));
-
     /* Send SELECT command to every slave if needed. */
     if (server.slaveseldb != dictid) {
         robj *selectcmd;
-
         /* For a few DBs we have pre-computed SELECT command. */
         if (dictid >= 0 && dictid < PROTO_SHARED_SELECT_CMDS) {
             selectcmd = shared.select[dictid];
@@ -207,6 +206,8 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
                 "*2\r\n$6\r\nSELECT\r\n$%d\r\n%s\r\n",
                 dictid_len, llstr));
         }
+        
+        
 
         /* Add the SELECT command into the backlog. */
         if (server.repl_backlog) feedReplicationBacklogWithObject(&server, selectcmd);
@@ -2157,6 +2158,7 @@ void replicationUnsetMaster(void) {
      * a very fast reconnection. */
     disconnectSlaves();
     disconnectCrdtSlaves();
+    crdtAllReplicationCacheMaster();
     server.repl_state = REPL_STATE_NONE;
 
     /* We need to make sure the new master will start the replication stream
@@ -2199,6 +2201,7 @@ void slaveofCommand(client *c) {
         !strcasecmp(c->argv[2]->ptr,"one")) {
         if (server.masterhost) {
             replicationUnsetMaster();
+            
             sds client = catClientInfoString(sdsempty(),c);
             serverLog(LL_NOTICE,"MASTER MODE enabled (user request from '%s')",
                 client);

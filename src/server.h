@@ -1590,6 +1590,7 @@ void createReplicationBacklog(struct redisServer *srv);
 void feedReplicationBacklogWithObject(struct redisServer *srv, robj *o);
 int isSameTypeWithMaster();
 int isMasterMySelf();
+int slaveUpdateMasterInterOffset(client *c, int gid);
 
 /* CRDT Replications */
 void crdtReplicationCron(void);
@@ -1998,7 +1999,7 @@ void incrbyCommand(client *c);
 void decrbyCommand(client *c);
 void incrbyfloatCommand(client *c);
 void selectCommand(client *c);
-void crdtSelectCommand(client *c);
+// void crdtSelectCommand(client *c);
 void swapdbCommand(client *c);
 void randomkeyCommand(client *c);
 void keysCommand(client *c);

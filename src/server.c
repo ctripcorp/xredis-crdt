@@ -224,7 +224,7 @@ struct redisCommand redisCommandTable[] = {
 //    {"msetnx",msetnxCommand,-3,"wm",0,NULL,1,-1,2,0,0},
 //    {"randomkey",randomkeyCommand,1,"rR",0,NULL,0,0,0,0,0},
     {"select",selectCommand,2,"lF",0,NULL,0,0,0,0,0},
-    {"crdt.select",crdtSelectCommand,3,"lF",0,NULL,0,0,0,0,0},
+    // {"crdt.select",crdtSelectCommand,3,"lF",0,NULL,0,0,0,0,0},
 //    {"swapdb",swapdbCommand,3,"wF",0,NULL,0,0,0,0,0},
 //    {"move",moveCommand,3,"wF",0,NULL,1,1,1,0,0},
     {"rename",renameCommand,3,"w",0,NULL,1,2,1,0,0},
@@ -3499,12 +3499,16 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                 CRDT_Master_Instance *masterInstance = listNodeValue(ln);
 
 
-                long long slave_repl_offset = 1;
-
+                long long slave_repl_offset = 0;
                 if (masterInstance->master)
                     slave_repl_offset = masterInstance->master->reploff;
-                else if (masterInstance->cached_master)
+                else if (masterInstance->cached_master) {
                     slave_repl_offset = masterInstance->cached_master->reploff;
+                }
+
+                if (isMasterMySelf() != C_OK) {
+                    slave_repl_offset = masterInstance->master_initial_offset;
+                }
 
 
                 info = sdscatprintf(info,
