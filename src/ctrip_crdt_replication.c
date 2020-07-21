@@ -288,7 +288,7 @@ crdtMergeEndCommand(client *c) {
     memcpy(peerMaster->master_replid, c->argv[3]->ptr, sizeof(peerMaster->master_replid));
     if (getLongLongFromObjectOrReply(c, c->argv[4], &offset, NULL) != C_OK) return;
     peerMaster->master_initial_offset = offset;
-    if(!crdtServer.repl_backlog) createReplicationBacklog(&crdtServer);
+    if(!crdtServer.repl_backlog) createReplicationBacklog();
     if (isMasterMySelf() == C_OK) {
         peerMaster->repl_state = REPL_STATE_CONNECTED;
         crdtReplicationSendAck(getPeerMaster(c->gid));
@@ -568,7 +568,7 @@ int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, i
         /* If this instance was restarted and we read the metadata to
          * PSYNC from the persistence file, our replication backlog could
          * be still not initialized. Create it. */
-        if (crdtServer.repl_backlog == NULL) createReplicationBacklog(&crdtServer);
+        if (crdtServer.repl_backlog == NULL) createReplicationBacklog();
         return PSYNC_CONTINUE;
     }
 
@@ -1267,7 +1267,7 @@ void feedCrdtBacklog(robj **argv, int argc) {
 
     /* Write the command to the replication backlog if any. */
     if (!crdtServer.repl_backlog) {
-        createReplicationBacklog(&crdtServer);
+        createReplicationBacklog();
     }
     char aux[LONG_STR_SIZE+3];
     /* Add the multi bulk reply length. */

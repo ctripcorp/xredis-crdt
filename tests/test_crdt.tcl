@@ -15,7 +15,10 @@ source tests/support/aof.tcl
 
 
 set ::all_tests { 
+    
+    ctrip/integration/master-slave/more-write-db
     ctrip/integration/master-slave/slave-peer-offset
+    
     ctrip/master-not-crdt/peerof
     
     ctrip/unit/namespace

@@ -3504,9 +3504,7 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                     slave_repl_offset = masterInstance->master->reploff;
                 else if (masterInstance->cached_master) {
                     slave_repl_offset = masterInstance->cached_master->reploff;
-                }
-
-                if (isMasterMySelf() != C_OK) {
+                }else if (isMasterMySelf() != C_OK) {
                     slave_repl_offset = masterInstance->master_initial_offset;
                 }
 

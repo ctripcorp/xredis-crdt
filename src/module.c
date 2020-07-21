@@ -1478,7 +1478,6 @@ int RM_CrdtReplicateAlsoNormReplicate(RedisModuleCtx *ctx, const char *cmdname, 
 
 int RM_SlaveUpdateMasterInterOffset(RedisModuleCtx *ctx, int gid) {
     return slaveUpdateMasterInterOffset(ctx->client, gid);
-    // instance->master_initial_offset += ctx->client->read_reploff - sdslen(ctx->client->querybuf);
 }
 int RM_ReplicationFeedStringToAllSlaves(int id, void* cmdbuf, size_t cmdlen) {
     // serverLog(LL_WARNING, "cmd: %s", cmd->ptr);

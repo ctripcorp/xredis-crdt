@@ -72,8 +72,7 @@ char *replicationGetSlaveName(client *c) {
 }
 
 /* ---------------------------------- MASTER -------------------------------- */
-
-void createReplicationBacklog(struct redisServer *srv) {
+void createServerReplicationBacklog(struct redisServer *srv) {
     serverAssert(srv->repl_backlog == NULL);
     srv->repl_backlog = zmalloc(srv->repl_backlog_size);
     srv->repl_backlog_histlen = 0;
@@ -83,6 +82,14 @@ void createReplicationBacklog(struct redisServer *srv) {
      * byte we have is the next byte that will be generated for the
      * replication stream. */
     srv->repl_backlog_off = srv->master_repl_offset+1;
+}
+void createReplicationBacklog() {
+    if(server.repl_backlog == NULL) {
+        createServerReplicationBacklog(&server);
+    }
+    if(crdtServer.repl_backlog == NULL) {
+        createServerReplicationBacklog(&crdtServer);
+    }
 }
 
 /* This function is called when the user modifies the replication backlog
@@ -653,9 +660,9 @@ void refullSyncWithSlaves(struct redisServer *srv, client *c) {
         changeReplicationId(&crdtServer);
         clearReplicationId2(&server);
         clearReplicationId2(&crdtServer);
-        createReplicationBacklog(srv);
+        createReplicationBacklog();
     } else if(srv->repl_backlog == NULL) {
-        createReplicationBacklog(srv);
+        createReplicationBacklog();
     }
 
     /* CASE 1: BGSAVE is in progress, with disk target. */
@@ -1399,7 +1406,7 @@ void readSyncBulkPayload(aeEventLoop *el, int fd, void *privdata, int mask) {
          * accumulate the backlog regardless of the fact they have sub-slaves
          * or not, in order to behave correctly if they are promoted to
          * masters after a failover. */
-        if (server.repl_backlog == NULL) createReplicationBacklog(&server);
+        if (server.repl_backlog == NULL) createReplicationBacklog();
 
         serverLog(LL_NOTICE, "MASTER <-> SLAVE sync: Finished with success");
         /* Restart the AOF subsystem now that we finished the sync. This
@@ -1654,7 +1661,7 @@ int slaveTryPartialResynchronization(int fd, int read_reply) {
         /* If this instance was restarted and we read the metadata to
          * PSYNC from the persistence file, our replication backlog could
          * be still not initialized. Create it. */
-        if (server.repl_backlog == NULL) createReplicationBacklog(&server);
+        if (server.repl_backlog == NULL) createReplicationBacklog();
         return PSYNC_CONTINUE;
     }
 
@@ -2201,7 +2208,6 @@ void slaveofCommand(client *c) {
         !strcasecmp(c->argv[2]->ptr,"one")) {
         if (server.masterhost) {
             replicationUnsetMaster();
-            
             sds client = catClientInfoString(sdsempty(),c);
             serverLog(LL_NOTICE,"MASTER MODE enabled (user request from '%s')",
                 client);

@@ -1390,7 +1390,6 @@ void processInputBuffer(client *c) {
             resetClient(c);
         } else {
             /* Only reset the client when the command was executed. */
-            // serverLog(LL_WARNING, "cmd: %s, before %lld", (sds)c->argv[0]->ptr, c->reploff);
             if (processCommand(c) == C_OK) {
                 if ((c->flags & CLIENT_MASTER
                     || ((c->flags & CLIENT_CRDT_MASTER) && getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED))
@@ -1406,7 +1405,6 @@ void processInputBuffer(client *c) {
                 if (!(c->flags & CLIENT_BLOCKED) || c->btype != BLOCKED_MODULE)
                     resetClient(c);
             }
-            // serverLog(LL_WARNING, "after %lld", );
             /* freeMemoryIfNeeded may flush slave output buffers. This may
              * result into a slave, that may be the active client, to be
              * freed. */
