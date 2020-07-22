@@ -48,6 +48,7 @@ typedef struct crdtRdbSaveInfo {
 
 #define SAVE_CRDT_VALUE  "RdbSaveCrdtValue"
 #define LOAD_CRDT_VALUE "RdbLoadCrdtValue"
+#define MAX_FAKECLIENT_ARGV 20
 crdtRdbSaveInfo*
 crdtRdbPopulateSaveInfo(crdtRdbSaveInfo *rsi, long long min_logic_time);
 
@@ -65,7 +66,8 @@ int expire2CrdtExpire(client* client, robj* key, long long expiretime);
 int rdbSaveCrdtData(rio *rdb,redisDb* db, dict* keys, int flags, size_t* processed);
 int rdbSaveCrdtDbSize(rio* rdb, redisDb* db);
 int rdbSaveCrdtInfoAuxFields(rio* rdb);
-int rdbLoadCrdtData(rio* rdb, redisDb* db,  long long current_expire_time);
+typedef int (*LoadCrdtDataFunc)(redisDb*, robj*, void*);
+int rdbLoadCrdtData(rio* rdb, redisDb* db,  long long current_expire_time,  LoadCrdtDataFunc load);
 int rdbLoadCrdtDbSize(rio* rdb, redisDb* db);
 int rdbSaveMillisecondTime(rio *rdb, long long t);
 int crdtSelectDb(client* fakeClient, int dbid);
