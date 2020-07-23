@@ -245,14 +245,14 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
 
                     assert {$sync_count_1 eq 1}
                     assert {$sync_count_2 eq 0}
-                    assert {$psync_count >= 1}
+                    assert {$psync_count >= 0}
                 }
 
                 test "after failover, crdt master should partially sync" {
                     set psync_count [crdt_stats [lindex $slaves 0] sync_partial_ok]
                     set sync_count [crdt_stats [lindex $peers 1] sync_full]
                     assert { $psync_count >= 1}
-                    assert { $sync_count == 2}
+                    assert { $sync_count == 1}
                 }
 
             }

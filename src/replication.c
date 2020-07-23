@@ -72,8 +72,7 @@ char *replicationGetSlaveName(client *c) {
 }
 
 /* ---------------------------------- MASTER -------------------------------- */
-
-void createReplicationBacklog(struct redisServer *srv) {
+void createServerReplicationBacklog(struct redisServer *srv) {
     serverAssert(srv->repl_backlog == NULL);
     srv->repl_backlog = zmalloc(srv->repl_backlog_size);
     srv->repl_backlog_histlen = 0;
@@ -83,6 +82,14 @@ void createReplicationBacklog(struct redisServer *srv) {
      * byte we have is the next byte that will be generated for the
      * replication stream. */
     srv->repl_backlog_off = srv->master_repl_offset+1;
+}
+void createReplicationBacklog() {
+    if(server.repl_backlog == NULL) {
+        createServerReplicationBacklog(&server);
+    }
+    if(crdtServer.repl_backlog == NULL) {
+        createServerReplicationBacklog(&crdtServer);
+    }
 }
 
 /* This function is called when the user modifies the replication backlog
@@ -128,6 +135,7 @@ void freeReplicationBacklog(struct redisServer *srv) {
 void feedReplicationBacklog(struct redisServer *srv, void *ptr, size_t len) {
     unsigned char *p = ptr;
     srv->master_repl_offset += len;
+
 
     /* This is a circular buffer, so write as much data we can at every
      * iteration and rewind the "idx" index if we reach the limit. */
@@ -190,11 +198,9 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
 
     /* We can't have slaves attached and no backlog. */
     serverAssert(!(listLength(slaves) != 0 && server.repl_backlog == NULL));
-
     /* Send SELECT command to every slave if needed. */
     if (server.slaveseldb != dictid) {
         robj *selectcmd;
-
         /* For a few DBs we have pre-computed SELECT command. */
         if (dictid >= 0 && dictid < PROTO_SHARED_SELECT_CMDS) {
             selectcmd = shared.select[dictid];
@@ -207,6 +213,8 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
                 "*2\r\n$6\r\nSELECT\r\n$%d\r\n%s\r\n",
                 dictid_len, llstr));
         }
+        
+        
 
         /* Add the SELECT command into the backlog. */
         if (server.repl_backlog) feedReplicationBacklogWithObject(&server, selectcmd);
@@ -652,9 +660,9 @@ void refullSyncWithSlaves(struct redisServer *srv, client *c) {
         changeReplicationId(&crdtServer);
         clearReplicationId2(&server);
         clearReplicationId2(&crdtServer);
-        createReplicationBacklog(srv);
+        createReplicationBacklog();
     } else if(srv->repl_backlog == NULL) {
-        createReplicationBacklog(srv);
+        createReplicationBacklog();
     }
 
     /* CASE 1: BGSAVE is in progress, with disk target. */
@@ -1398,7 +1406,7 @@ void readSyncBulkPayload(aeEventLoop *el, int fd, void *privdata, int mask) {
          * accumulate the backlog regardless of the fact they have sub-slaves
          * or not, in order to behave correctly if they are promoted to
          * masters after a failover. */
-        if (server.repl_backlog == NULL) createReplicationBacklog(&server);
+        if (server.repl_backlog == NULL) createReplicationBacklog();
 
         serverLog(LL_NOTICE, "MASTER <-> SLAVE sync: Finished with success");
         /* Restart the AOF subsystem now that we finished the sync. This
@@ -1653,7 +1661,7 @@ int slaveTryPartialResynchronization(int fd, int read_reply) {
         /* If this instance was restarted and we read the metadata to
          * PSYNC from the persistence file, our replication backlog could
          * be still not initialized. Create it. */
-        if (server.repl_backlog == NULL) createReplicationBacklog(&server);
+        if (server.repl_backlog == NULL) createReplicationBacklog();
         return PSYNC_CONTINUE;
     }
 
@@ -2157,6 +2165,7 @@ void replicationUnsetMaster(void) {
      * a very fast reconnection. */
     disconnectSlaves();
     disconnectCrdtSlaves();
+    crdtAllReplicationCacheMaster();
     server.repl_state = REPL_STATE_NONE;
 
     /* We need to make sure the new master will start the replication stream

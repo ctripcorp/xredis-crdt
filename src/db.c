@@ -474,38 +474,7 @@ void existsCommand(client *c) {
     addReplyLongLong(c,count);
 }
 
-//crdt.select <gid> <dbid>
-void crdtSelectCommand(client *c) {
-    long id;
-    long long gid;
 
-    if (getLongLongFromObjectOrReply(c, c->argv[1], &gid,
-                                 "invalid gid") != C_OK)
-        return;
-    if(!check_gid(gid)) {
-        addReplyError(c,"gid must < 15");
-        return;
-    }
-
-    if (getLongFromObjectOrReply(c, c->argv[2], &id,
-                                 "invalid DB index") != C_OK)
-        return;
-
-    if (server.cluster_enabled && id != 0) {
-        addReplyError(c,"SELECT is not allowed in cluster mode");
-        return;
-    }
-
-    if (selectDb(c, (int)id) == C_ERR) {
-        addReplyError(c,"DB index is out of range");
-    } else {
-        addReply(c,shared.ok);
-    }
-
-    if (gid == crdtServer.crdt_gid) {
-        feedCrdtBacklog(c->argv, c->argc);
-    }
-}
 
 void selectCommand(client *c) {
     long id;
