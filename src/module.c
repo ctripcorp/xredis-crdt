@@ -1475,6 +1475,10 @@ int RM_CrdtReplicateAlsoNormReplicate(RedisModuleCtx *ctx, const char *cmdname, 
     server.dirty++;
     return REDISMODULE_OK;
 }
+
+int RM_UpdatePeerReplOffset(RedisModuleCtx *ctx, int gid) {
+    return UpdatePeerReplOffset(ctx->client, gid);
+}
 int RM_ReplicationFeedStringToAllSlaves(int id, void* cmdbuf, size_t cmdlen) {
     // serverLog(LL_WARNING, "cmd: %s", cmd->ptr);
     replicationFeedStringToAllSlaves(id, cmdbuf, cmdlen);
@@ -4589,7 +4593,8 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(CrdtReplicateVerbatim);
     REGISTER_API(ReplicationFeedAllSlaves);
     REGISTER_API(ReplicationFeedStringToAllSlaves);
-     REGISTER_API(ReplicationFeedRobjToAllSlaves);
+    REGISTER_API(ReplicationFeedRobjToAllSlaves);
+    REGISTER_API(UpdatePeerReplOffset);
     REGISTER_API(DeleteKey);
     REGISTER_API(UnlinkKey);
     REGISTER_API(StringSet);

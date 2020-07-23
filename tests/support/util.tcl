@@ -457,6 +457,11 @@ proc start_write_load {host port seconds} {
     exec $tclsh tests/helpers/gen_write_load.tcl $host $port $seconds &
 }
 
+proc start_write_db_load {host port seconds db} {
+    set tclsh [info nameofexecutable]
+    exec $tclsh tests/helpers/gen_write_db_load.tcl $host $port $seconds $db &
+}
+
 # Stop a process generating write load executed with start_write_load.
 proc stop_write_load {handle} {
     catch {exec /bin/kill -9 $handle}

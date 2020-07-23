@@ -288,7 +288,7 @@ crdtMergeEndCommand(client *c) {
     memcpy(peerMaster->master_replid, c->argv[3]->ptr, sizeof(peerMaster->master_replid));
     if (getLongLongFromObjectOrReply(c, c->argv[4], &offset, NULL) != C_OK) return;
     peerMaster->master_initial_offset = offset;
-    if(!crdtServer.repl_backlog) createReplicationBacklog(&crdtServer);
+    if(!crdtServer.repl_backlog) createReplicationBacklog();
     if (isMasterMySelf() == C_OK) {
         peerMaster->repl_state = REPL_STATE_CONNECTED;
         crdtReplicationSendAck(getPeerMaster(c->gid));
@@ -455,6 +455,7 @@ char *crdtSendSynchronousCommand(CRDT_Master_Instance *crdtMaster, int flags, in
 #define PSYNC_FULLRESYNC 3
 #define PSYNC_NOT_SUPPORTED 4
 #define PSYNC_TRY_LATER 5
+
 int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, int fd, int read_reply) {
     char *psync_replid;
     char psync_offset[32];
@@ -567,7 +568,7 @@ int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, i
         /* If this instance was restarted and we read the metadata to
          * PSYNC from the persistence file, our replication backlog could
          * be still not initialized. Create it. */
-        if (crdtServer.repl_backlog == NULL) createReplicationBacklog(&crdtServer);
+        if (crdtServer.repl_backlog == NULL) createReplicationBacklog();
         return PSYNC_CONTINUE;
     }
 
@@ -1095,7 +1096,19 @@ int startCrdtBgsaveForReplication(long long min_logic_time) {
     return retval;
 
 }
-
+void crdtAllReplicationCacheMaster() {
+    listIter li;
+    listNode *ln;
+    listRewind(crdtServer.crdtMasters, &li);
+    while((ln = listNext(&li)) != NULL) {
+        CRDT_Master_Instance *crdtMaster = ln->value;
+        if(crdtMaster->master == NULL) {
+            crdtReplicationCreateMasterClient(crdtMaster, -1, -1);
+        }
+        crdtReplicationDiscardCachedMaster(crdtMaster);
+        crdtReplicationCacheMaster(crdtMaster->master);
+    }
+}
 void crdtReplicationCacheMaster(client *c) {
     if (!(c->flags & CLIENT_CRDT_MASTER)) {
         return;
@@ -1202,6 +1215,7 @@ void crdtOvcCommand(client *c) {
             freeVectorClock(peerMaster->vectorClock);
         }
         freeVectorClock(vclock);
+        UpdatePeerReplOffset(c, gid);
         peerMaster->vectorClock = newVectorClock;
     } else {
         feedCrdtBacklog(c->argv, c->argc);
@@ -1253,7 +1267,7 @@ void feedCrdtBacklog(robj **argv, int argc) {
 
     /* Write the command to the replication backlog if any. */
     if (!crdtServer.repl_backlog) {
-        createReplicationBacklog(&crdtServer);
+        createReplicationBacklog();
     }
     char aux[LONG_STR_SIZE+3];
     /* Add the multi bulk reply length. */
@@ -1851,4 +1865,16 @@ void crdtRoleCommand(client *c) {
         addReplyBulkCString(c,slavestate);
         addReplyLongLong(c,masterInstance->master ? masterInstance->master->reploff : -1);
     }
+}
+
+int UpdatePeerReplOffset(client* c, int gid) {
+    if(isMasterMySelf() != C_OK) {
+        CRDT_Master_Instance* instance =  getPeerMaster(gid); 
+        if(instance != NULL) {
+            long long l = c->read_reploff - sdslen(c->querybuf) - c->reploff;
+            instance->master_initial_offset += l;
+        }
+        
+    }
+    return C_OK;
 }
