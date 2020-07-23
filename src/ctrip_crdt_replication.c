@@ -1867,38 +1867,11 @@ void crdtRoleCommand(client *c) {
     }
 }
 
-int llstrlen(long long v) {
-    int len = 0;
-    if(v < 0) {
-        v = -v;
-        len = 1;
-    }
-    do {
-        len += 1;
-        v /= 10;
-    } while(v);
-    return len;
-}
-long long getOffset(client* c) {
-    long long size = 0;
-    //*3\r\n
-    size += llstrlen((long long)c->argc) + 3;
-    for(int i = 0; i < c->argc; i++) {
-        sds v = c->argv[i]->ptr;
-        long long l = sdslen(v);
-        //example
-        //$11\r\nCRDT.SELECT\r\n
-        size += llstrlen(l) + 3 + l + 2;
-    }
-    return size;
-}
 int UpdatePeerReplOffset(client* c, int gid) {
     if(isMasterMySelf() != C_OK) {
         CRDT_Master_Instance* instance =  getPeerMaster(gid); 
         if(instance != NULL) {
-            // instance->master_initial_offset += getOffset(c);
             long long l = c->read_reploff - sdslen(c->querybuf) - c->reploff;
-            assert(l == getOffset(c));
             instance->master_initial_offset += l;
         }
         
