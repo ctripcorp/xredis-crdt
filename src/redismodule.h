@@ -219,7 +219,7 @@ int REDISMODULE_API_FUNC(RedisModule_CrdtReplicateAlsoNormReplicate)(RedisModule
 int REDISMODULE_API_FUNC(RedisModule_ReplicationFeedAllSlaves)(int dbId, const char *cmdname, const char *fmt, ...);
 int REDISMODULE_API_FUNC(RedisModule_ReplicationFeedStringToAllSlaves)(int dbId, void* cmd, size_t cmdlen);
 int REDISMODULE_API_FUNC(RedisModule_ReplicationFeedRobjToAllSlaves)(int dbId, RedisModuleString* cmd);
-int REDISMODULE_API_FUNC(RedisModule_SlaveUpdateMasterInterOffset)(RedisModuleCtx *ctx, int gid);
+int REDISMODULE_API_FUNC(RedisModule_UpdatePeerReplOffset)(RedisModuleCtx *ctx, int gid);
 int REDISMODULE_API_FUNC(RedisModule_IncrCrdtConflict)(int type);
 int REDISMODULE_API_FUNC(RedisModule_CrdtMultiWrappedReplicate)(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...);
 const char *REDISMODULE_API_FUNC(RedisModule_CallReplyStringPtr)(RedisModuleCallReply *reply, size_t *len);
@@ -393,7 +393,7 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(ReplicationFeedAllSlaves);
     REDISMODULE_GET_API(ReplicationFeedStringToAllSlaves);
     REDISMODULE_GET_API(ReplicationFeedRobjToAllSlaves);
-    REDISMODULE_GET_API(SlaveUpdateMasterInterOffset);
+    REDISMODULE_GET_API(UpdatePeerReplOffset);
     REDISMODULE_GET_API(IncrCrdtConflict);
     REDISMODULE_GET_API(CrdtMultiWrappedReplicate);
     REDISMODULE_GET_API(DeleteKey);

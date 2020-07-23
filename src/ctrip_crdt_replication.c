@@ -1215,7 +1215,7 @@ void crdtOvcCommand(client *c) {
             freeVectorClock(peerMaster->vectorClock);
         }
         freeVectorClock(vclock);
-        slaveUpdateMasterInterOffset(c, gid);
+        UpdatePeerReplOffset(c, gid);
         peerMaster->vectorClock = newVectorClock;
     } else {
         feedCrdtBacklog(c->argv, c->argc);
@@ -1892,7 +1892,7 @@ long long getOffset(client* c) {
     }
     return size;
 }
-int slaveUpdateMasterInterOffset(client* c, int gid) {
+int UpdatePeerReplOffset(client* c, int gid) {
     if(isMasterMySelf() != C_OK) {
         CRDT_Master_Instance* instance =  getPeerMaster(gid); 
         if(instance != NULL) {
