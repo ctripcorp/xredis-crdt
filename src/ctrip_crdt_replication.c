@@ -1106,7 +1106,7 @@ void crdtAllReplicationCacheMaster() {
             crdtReplicationCreateMasterClient(crdtMaster, -1, -1);
         }
         crdtReplicationDiscardCachedMaster(crdtMaster);
-        freeClient(crdtMaster->master);
+        crdtReplicationCacheMaster(crdtMaster->master);
     }
 }
 void crdtReplicationCacheMaster(client *c) {
