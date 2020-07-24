@@ -145,10 +145,21 @@ set checks(0) {
 }
 set adds(1) {
     $redis hset hash k1 v1 k2 v2
+    $redis hset hash1 k0 v0 k1 v1 k2 v2 k3 v3 k4 v4 k5 v5 k6 v6 k7 v7 k8 v8 k9 v9 
 }
 set checks(1) {
     assert_equal [$redis hget hash k1] v1
     assert_equal [$redis hget hash k2] v2
+    assert_equal [$redis hget hash1 k0] v0
+    assert_equal [$redis hget hash1 k1] v1
+    assert_equal [$redis hget hash1 k2] v2
+    assert_equal [$redis hget hash1 k3] v3
+    assert_equal [$redis hget hash1 k4] v4
+    assert_equal [$redis hget hash1 k5] v5
+    assert_equal [$redis hget hash1 k6] v6
+    assert_equal [$redis hget hash1 k7] v7
+    assert_equal [$redis hget hash1 k8] v8
+    assert_equal [$redis hget hash1 k9] v9
 }
 set adds(2) {
     $redis set key2 v 

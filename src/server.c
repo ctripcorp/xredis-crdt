@@ -1429,6 +1429,9 @@ void createSharedObjects(void) {
     shared.rpop = createStringObject("RPOP",4);
     shared.lpop = createStringObject("LPOP",4);
     shared.lpush = createStringObject("LPUSH",5);
+    shared.set = createStringObject("SET", 3);
+    shared.hset = createStringObject("HSET", 4);
+    shared.expireat = createStringObject("EXPIREAt", 8);
     for (j = 0; j < OBJ_SHARED_INTEGERS; j++) {
         shared.integers[j] =
             makeObjectShared(createObject(OBJ_STRING,(void*)(long)j));
