@@ -1527,7 +1527,6 @@ void rdbLoadProgressCallback(rio *r, const void *buf, size_t len) {
         processEventsWhileBlocked();
     }
 }
-
 /* Load an RDB file from the rio stream 'rdb'. On success C_OK is returned,
  * otherwise C_ERR is returned and 'errno' is set accordingly. */
 int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
@@ -1536,7 +1535,9 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
     redisDb *db = server.db+0;
     char buf[1024];
     long long expiretime, now = mstime();
-
+    int (*load)(redisDb*, robj*, void*);
+    load = (int (*)(redisDb*, robj*, void*))(unsigned long)getModuleFunction(CRDT_MODULE, LOAD_CRDT_VALUE);
+    if(load == NULL) goto eoferr;
     rdb->update_cksum = rdbLoadProgressCallback;
     rdb->max_processing_chunk = server.loading_process_events_interval_bytes;
     if (rioRead(rdb,buf,9) == 0) goto eoferr;
@@ -1574,6 +1575,7 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
 
     }
     client* fakeClient = createFakeClient();
+    fakeClient->argv = zmalloc(sizeof(robj*)*MAX_FAKECLIENT_ARGV);
     while(1) {
         robj *key, *val;
         expiretime = -1;
@@ -1711,7 +1713,7 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
             continue; /* Read type again. */
         } 
         if(type == RDB_CRDT_VALUE) {
-            if(rdbLoadCrdtData(rdb, db, expiretime) == C_ERR) goto eoferr;
+            if(rdbLoadCrdtData(rdb, db, expiretime, load) == C_ERR) goto eoferr;
             continue;
         } 
 
@@ -1729,6 +1731,7 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
         if(!isCrdtRdb && crdt_enabled) {
             if(data2CrdtData(fakeClient, key, val) == C_ERR) {
                 decrRefCount(key);
+                zfree(fakeClient->argv);
                 freeFakeClient(fakeClient);
                 serverLog(LL_WARNING, "crdt load not crdt rdb datatype error");
                 freeVectorClock(crdtServer.vectorClock);
@@ -1764,6 +1767,7 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
 
         decrRefCount(key);
     }
+    zfree(fakeClient->argv);
     freeFakeClient(fakeClient);
     /* Verify the checksum if RDB version is >= 5 */
     if (rdbver >= 5 && server.rdb_checksum) {
