@@ -43,7 +43,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
         [lindex $peers 0] expire key1 4;
         after 2000
         assert_equal [[lindex $peers 0] get key1] value
-        after 2000;
+        after 2100;
         assert_equal [[lindex $peers 0] get key1] {}
         
     }
@@ -271,12 +271,13 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
         wait [lindex $peers 0] 0 crdt.info [lindex $peer_stdouts 0]
         wait [lindex $peers 1] 0 crdt.info [lindex $peer_stdouts 1]
         test "k expire" {
+            set c [crdt_stats [lindex $peers 1] crdt_non_type_conflict]
             [lindex $peers 0] set pk1 value
             [lindex $peers 0] expire pk1 4
             after 2000
             assert_equal [[lindex $peers 1] get pk1] value
-            after 2000
-            assert_equal [[lindex $peers 1] get pk1] {}
+            after 2100
+            assert_equal [[lindex $peers 1] get pk1] {}            
             assert_equal [[lindex $peers 0] ttl pk1] -2
             assert_equal [[lindex $peers 1] ttl pk1] -2
             assert_equal [[lindex $peers 0] get pk1] {}
