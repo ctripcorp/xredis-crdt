@@ -561,10 +561,24 @@ int rdbSaveAuxFieldCrdt(rio *rdb) {
                 == -1)  return C_ERR;
             if (rdbSaveAuxFieldStrInt(rdb, "peer-master-port", masterInstance->masterport)
                 == -1)  return C_ERR;
-            if (rdbSaveAuxFieldStrStr(rdb, "peer-master-repl-id", masterInstance->master_replid) 
+            char* replid = NULL;
+            long long replid_offset  = -1;
+            if(masterInstance->master) {
+                replid = masterInstance->master->replid;
+                replid_offset = masterInstance->master->reploff;
+                serverLog(LL_WARNING, "master reploff %lld, replid %lld", replid_offset, masterInstance->master_initial_offset);
+            } else if(masterInstance->cached_master) {
+                replid = masterInstance->cached_master->replid;
+                replid_offset = masterInstance->cached_master->reploff;
+            } else {
+                replid = masterInstance->master_replid;
+                replid_offset = masterInstance->master_initial_offset;
+            }
+            if (rdbSaveAuxFieldStrStr(rdb, "peer-master-repl-id", replid) 
                 == -1)  return C_ERR;
-            if (rdbSaveAuxFieldStrInt(rdb, "peer-master-repl-offset", masterInstance->master_initial_offset)
+            if (rdbSaveAuxFieldStrInt(rdb, "peer-master-repl-offset", replid_offset)
                 == -1)  return C_ERR;
+ 
         }
     }
     return C_OK;

@@ -98,6 +98,7 @@ proc test_write_data_offset {hasSlave master slave slave_slave peer peer_slave} 
         $m debug set-crdt-ovc 1
         $p debug set-crdt-ovc 1
     }
+    
     check "before write" $hasSlave $master $slave $slave_slave $peer $peer_slave
     $peer set k v
     after $delay_time
@@ -109,28 +110,24 @@ proc test_write_data_offset {hasSlave master slave slave_slave peer peer_slave} 
     check "set k v" $hasSlave $master $slave $slave_slave $peer $peer_slave
     # print_file_matches $peer_slave_log
     $peer del k
-    after $delay_time 
     check "del k " $hasSlave $master $slave $slave_slave $peer $peer_slave
     # print_file_matches $slave_log
     $peer hset h k v k1 v2
-    after $delay_time
+
     check "hset-1 h" $hasSlave  $master $slave $slave_slave $peer $peer_slave
     $peer hdel h k k1 
-    after $delay_time
+
     check "hdel h" $hasSlave  $master $slave $slave_slave $peer $peer_slave
     $peer hset h k v k1 v1
-    after $delay_time
+
     check "hset-2 h" $hasSlave  $master $slave $slave_slave $peer $peer_slave
     $peer del h 
-    after $delay_time
     check "del h" $hasSlave  $master $slave $slave_slave $peer $peer_slave
 
     $peer mset k v2 k1 v1
-    after $delay_time
     check "mset" $hasSlave  $master $slave $slave_slave $peer $peer_slave 
 
     $peer setex k1 2 v0
-    after $delay_time
     check "setex k1" $hasSlave  $master $slave $slave_slave $peer $peer_slave
 
     $peer set k v1 
@@ -233,7 +230,8 @@ slave-peer-offset "1.other peer peerof 2. add data 3.slaveof 4.peerof" {
     $peer_slave slaveof $peer_host $peer_port
     wait $master 0 info $slave_log
     wait $peer 0 info $peer_slave_log
-
+    $peer set k v1
+    $master set k v2
     $slave_slave slaveof $slave_host $slave_port
     wait $slave 0 info $slave_slave_log
 
@@ -252,6 +250,7 @@ slave-peer-offset "1.other peer peerof 2. add data  3.peerof 4.slaveof" {
     $peer2 peerof $peer_gid $peer_host $peer_port
     wait $peer 0 crdt.info $peer_log
 
+
     $peer set k v0
     # $master set k1 v1
 
@@ -259,6 +258,9 @@ slave-peer-offset "1.other peer peerof 2. add data  3.peerof 4.slaveof" {
     $peer peerof $master_gid $master_host $master_port
     wait $master 0 crdt.info $master_log
     wait $peer 1 crdt.info $peer_log
+
+    $peer set k v2
+    $master set k1 v3
 
     $slave slaveof $master_host $master_port
     $peer_slave slaveof $peer_host $peer_port
@@ -285,6 +287,8 @@ slave-peer-offset "1.add data 2.slaveof 3.peerof " {
     wait $master 0 info $slave_log
     wait $peer 0 info $peer_slave_log
 
+    $master set k1 v
+    $peer set k2 v
     $slave_slave slaveof $slave_host $slave_port
     wait $slave 0 info $slave_slave_log
     
@@ -307,6 +311,8 @@ slave-peer-offset "1.add data 2.peerof 3.slaveof " {
     wait $master 0 crdt.info $master_log
     wait $peer 0 crdt.info $peer_log
 
+    $master set k1 v
+    $peer set k2 v
     $slave slaveof $master_host $master_port
     $peer_slave slaveof $peer_host $peer_port
     wait $master 0 info $slave_log
