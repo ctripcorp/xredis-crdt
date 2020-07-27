@@ -1842,7 +1842,7 @@ int updateConfigFileVectorUnit(char *path);
 
 /* db.c -- Keyspace access API */
 int removeExpire(redisDb *db, robj *key);
-int crdtPropagateExpire(redisDb *db, robj *key, int lazy);
+int crdtPropagateExpire(redisDb *db, robj *key, int lazy, long long expireTime);
 void propagateExpire(redisDb *db, robj *key, int lazy);
 int expireIfNeeded(redisDb *db, robj *key);
 long long getExpire(redisDb *db, robj *key);
