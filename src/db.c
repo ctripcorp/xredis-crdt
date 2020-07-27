@@ -1101,10 +1101,10 @@ void propagateExpire(redisDb *db, robj *key, int lazy) {
     decrRefCount(argv[1]);
 }
 
-int isDelayExpire(sds key, VectorClock vc) {
-    int len = get_len(vc);
+int isDelayExpire(sds key) {
+    int len = get_len(crdtServer.vectorClock);
     int index = key[0] % len;
-    clk* c = get_clock_unit_by_index(&vc, index);
+    clk* c = get_clock_unit_by_index(&crdtServer.vectorClock, index);
     if(get_gid(*c) == crdtServer.crdt_gid) {
         return 0;
     }
@@ -1118,6 +1118,12 @@ int crdtPropagateExpire(redisDb *db, robj *key, int lazy, long long expireTime) 
          robj *val = dictGetVal(entry);
          if(val != NULL) {
             if(isModuleCrdt(val) == C_OK) {
+                if(expireTime != -1 && isDelayExpire((sds)key->ptr)) {
+                    long long now = mstime();
+                    if(expireTime + DELAYEXPIRETIME - now > 0) { 
+                        return C_ERR;
+                    }
+                }
                 struct moduleValue* rm = (struct moduleValue*)val->ptr;
                 CrdtObject* obj = ((CrdtObject*)(rm->value));
                 mk = getModuleKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE, 1);
@@ -1126,13 +1132,7 @@ int crdtPropagateExpire(redisDb *db, robj *key, int lazy, long long expireTime) 
                     if(method == NULL) {
                         return C_ERR;
                     }
-                    if(expireTime != -1 && isDelayExpire((sds)key->ptr,method->getLastVC(obj))) {
-                        long long now = mstime();
-                        if(expireTime + DELAYEXPIRETIME - now > 0) {
-                            closeModuleKey(mk);  
-                            return C_ERR;
-                        }
-                    }
+                    
                     method->propagateDel(db->id, key, mk, obj);
                     closeModuleKey(mk);
                 }
@@ -1158,7 +1158,6 @@ int expireIfNeeded(redisDb *db, robj *key) {
 
     /* Don't expire anything while loading. It will be done later. */
     if (server.loading) return 0;
-
     /* If we are in the context of a Lua script, we claim that time is
      * blocked to when the Lua script started. This way a key can expire
      * only the first time it is accessed and not in the middle of the
