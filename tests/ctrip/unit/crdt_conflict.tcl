@@ -76,6 +76,7 @@ start_server {tags {"crdt-del"} overrides {crdt-gid 1} config {crdt.conf} module
         }
 
     }
+     
     test {different type modify} {
         $redis_server CRDT.SET key-3 val2 3 [clock milliseconds] "1:10;2:99;3:101"  
         catch {$redis_server CRDT.HSET key-3 2 [expr [clock milliseconds]-10]  "1:10;2:101;3:99" 2 k v}
@@ -129,7 +130,133 @@ start_server {tags {"crdt-del"} overrides {crdt-gid 1} config {crdt.conf} module
             fail "server is not able to detect conflict"
         }
     }
+
+    test {crdt.set and crdt.del_reg} {
+        $redis_server CRDT.SET key-7 val2 3 [clock milliseconds] "1:10;2:103;3:105"  
+        $redis_server CRDT.del_reg key-7 2 [expr [clock milliseconds] - 10]   "1:10;2:105;3:103"  
+
+        
+        assert {[crdt_stats $redis_server crdt_non_type_conflict] == 5}
+        assert {[crdt_stats $redis_server crdt_modify_conflict] == 7}
+        assert {[crdt_stats $redis_server crdt_data_tombstone_conflict] == 1}
+        wait_for_condition 50 1000 {
+            [log_file_matches $server_log "*drop*"]
+        } else {
+            fail "server is not able to detect conflict"
+        }
+
+    }
+
+    test {crdt.del_reg and crdt.set} {
+        $redis_server CRDT.del_reg key-8 2 [expr [clock milliseconds] - 10]   "1:10;2:105;3:103"  
+        $redis_server CRDT.SET key-8 val2 3 [clock milliseconds] "1:10;2:103;3:105"  
+        
+        
+        assert {[crdt_stats $redis_server crdt_non_type_conflict] == 6}
+        assert {[crdt_stats $redis_server crdt_modify_conflict] == 8}
+        assert {[crdt_stats $redis_server crdt_data_tombstone_conflict] == 2}
+        wait_for_condition 50 1000 {
+            [log_file_matches $server_log "*drop*"]
+        } else {
+            fail "server is not able to detect conflict"
+        }
+
+    }
     
+    test {crdt.del and crdt.del_reg} {
+        $redis_server CRDT.del_reg key-9 2 [expr [clock milliseconds] - 10]   "1:10;2:105;3:103"  
+        $redis_server CRDT.del_reg key-9 3 [clock milliseconds] "1:10;2:103;3:105"  
+        
+        
+        assert {[crdt_stats $redis_server crdt_non_type_conflict] == 7}
+        assert {[crdt_stats $redis_server crdt_modify_conflict] == 9}
+        assert {[crdt_stats $redis_server crdt_tombstone_isomrphic_conflict] == 1}
+        wait_for_condition 50 1000 {
+            [log_file_matches $server_log "*drop*"]
+        } else {
+            fail "server is not able to detect conflict"
+        }
+    }
+
+    test { crdt.del_hash and crdt.hset} {
+        $redis_server CRDT.del_hash key-10 2 [expr [clock milliseconds] - 10]   "1:10;2:105;3:103"   "1:10;2:105;3:103" 
+        $redis_server CRDT.HSET key-10 3  [clock milliseconds] "1:10;2:103;3:105" 2 k val2
+        
+        assert {[crdt_stats $redis_server crdt_non_type_conflict] == 8}
+        assert {[crdt_stats $redis_server crdt_modify_conflict] == 10}
+        assert {[crdt_stats $redis_server crdt_data_tombstone_conflict] == 3}
+        wait_for_condition 50 1000 {
+            [log_file_matches $server_log "*drop*"]
+        } else {
+            fail "server is not able to detect conflict"
+        }
+
+    }
+    test {crdt.hset and crdt.del_hash} {
+        $redis_server CRDT.HSET key-11 3  [clock milliseconds] "1:10;2:103;3:105" 2 k val2
+        $redis_server CRDT.del_hash key-11 2 [expr [clock milliseconds] - 10]   "1:10;2:105;3:103"   "1:10;2:105;3:103" 
+        assert {[crdt_stats $redis_server crdt_non_type_conflict] == 9}
+        assert {[crdt_stats $redis_server crdt_modify_conflict] == 11}
+        assert {[crdt_stats $redis_server crdt_data_tombstone_conflict] == 4}
+        wait_for_condition 50 1000 {
+            [log_file_matches $server_log "*drop*"]
+        } else {
+            fail "server is not able to detect conflict"
+        }
+    }
+    test {crdt.REM_HASH and crdt.hset} {
+        $redis_server CRDT.REM_HASH key-12 2 [expr [clock milliseconds] - 10]   "1:10;2:105;3:103"   k
+        $redis_server CRDT.HSET key-12 3  [clock milliseconds] "1:10;2:103;3:105" 2 k val2
+        
+        assert {[crdt_stats $redis_server crdt_non_type_conflict] == 10}
+        assert {[crdt_stats $redis_server crdt_modify_conflict] == 12}
+        assert {[crdt_stats $redis_server crdt_data_tombstone_conflict] == 5}
+        wait_for_condition 50 1000 {
+            [log_file_matches $server_log "*drop*"]
+        } else {
+            fail "server is not able to detect conflict"
+        }
+    }
+    test {crdt.hset and crdt.REM_HASH} {
+        $redis_server CRDT.HSET key-13 3  [clock milliseconds] "1:10;2:103;3:105" 2 k val2
+        $redis_server CRDT.REM_HASH key-13 2 [expr [clock milliseconds] - 10]   "1:10;2:105;3:103"   k
+        assert {[crdt_stats $redis_server crdt_non_type_conflict] == 11}
+        assert {[crdt_stats $redis_server crdt_modify_conflict] == 13}
+        assert {[crdt_stats $redis_server crdt_data_tombstone_conflict] == 6}
+        wait_for_condition 50 1000 {
+            [log_file_matches $server_log "*drop*"]
+        } else {
+            fail "server is not able to detect conflict"
+        }
+    }
+    test {crdt.del_hash and crdt.del_hash} {
+        $redis_server CRDT.del_hash key-14 3  [clock milliseconds] "1:10;2:103;3:105" "1:10;2:103;3:105"
+        $redis_server CRDT.del_hash key-14 2 [expr [clock milliseconds] - 10]   "1:10;2:105;3:103"   "1:10;2:105;3:103" 
+        # puts [crdt_stats $redis_server crdt_tombstone_isomrphic_conflict]
+        # puts [crdt_stats $redis_server crdt_modify_conflict]
+        assert {[crdt_stats $redis_server crdt_non_type_conflict] == 12}
+        assert {[crdt_stats $redis_server crdt_modify_conflict] == 14}
+        assert {[crdt_stats $redis_server crdt_tombstone_isomrphic_conflict] == 2}
+        wait_for_condition 50 1000 {
+            [log_file_matches $server_log "*drop*"]
+        } else {
+            fail "server is not able to detect conflict"
+        }
+
+    }
+    test {crdt.rem_hash and crdt.rem_hash} {
+        $redis_server CRDT.rem_hash key-15 3  [clock milliseconds] "1:10;2:103;3:105"   k
+        $redis_server CRDT.rem_hash key-15 2 [expr [clock milliseconds] - 10]   "1:10;2:105;3:103"  k
+        assert {[crdt_stats $redis_server crdt_non_type_conflict] == 13}
+        assert {[crdt_stats $redis_server crdt_modify_conflict] == 15}
+        assert {[crdt_stats $redis_server crdt_tombstone_isomrphic_conflict] == 3}
+        wait_for_condition 50 1000 {
+            [log_file_matches $server_log "*drop*"]
+        } else {
+            fail "server is not able to detect conflict"
+        }
+
+    }
     start_server {tags {"crdt-del"} overrides {crdt-gid 2} config {crdt.conf} module {crdt.so} } {
         lappend peers [srv 0 client]
         lappend hosts [srv 0 host]
@@ -143,18 +270,20 @@ start_server {tags {"crdt-del"} overrides {crdt-gid 1} config {crdt.conf} module
         [lindex $peers 0] peerof [lindex $gids 1] [lindex $hosts 1] [lindex $ports 1]
         wait [lindex $peers 1] 0 crdt.info [lindex $stdouts 1]
         assert_equal [crdt_stats [lindex $peers 0] crdt_type_conflict] 3
-        assert_equal [crdt_stats [lindex $peers 0] crdt_non_type_conflict] 5
-        assert_equal [crdt_stats [lindex $peers 0] crdt_modify_conflict] 6
+        assert_equal [crdt_stats [lindex $peers 0] crdt_non_type_conflict] 14
+        assert_equal [crdt_stats [lindex $peers 0] crdt_modify_conflict] 15
         assert_equal [crdt_stats [lindex $peers 0] crdt_merge_conflict] 2
+        assert_equal [crdt_stats [lindex $peers 0] crdt_data_isomrphic_conflict] 5
 
         set before1 [crdt_stats [lindex $peers 1] crdt_non_type_conflict]
         set before0 [crdt_stats [lindex $peers 0] crdt_non_type_conflict]
-        for {set j 0} {$j < 300} {incr j} {
+        set num 30
+        for {set j 0} {$j < $num} {incr j} {
             [lindex $peers 1] set $j $j
             [lindex $peers 1] expire $j 5
         } 
         after 6000
-        assert_equal [crdt_stats [lindex $peers 0] crdt_non_type_conflict] $before0
-        assert_equal [crdt_stats [lindex $peers 1] crdt_non_type_conflict] $before1
+        assert_equal [crdt_stats [lindex $peers 0] crdt_non_type_conflict]  $before0
+        assert_equal [crdt_stats [lindex $peers 1] crdt_non_type_conflict]  $before1
     }
 }
