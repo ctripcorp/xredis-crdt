@@ -6,7 +6,25 @@ proc start_bg_complex_string_data {host port db ops} {
 proc stop_bg_complex_data {handle} {
     catch {exec /bin/kill -9 $handle}
 }
+proc wait_load_rdb_over {client} {
+    set retry 50
+    while {$retry} {
+        set a [catch { $client dbsize } error]
+        if {$error == "LOADING Redis is loading the dataset in memory"} {
+            incr retry -1
+            after 100
+        } else {
+            break
+        }
+    }
+    if {$retry == 0} {
+        # error "assertion: Master-Slave not correctly synchronized"
+        # assert_equal [$client ping] PONG
+        # log_file_matches $log
+        $client dbsize
+    }
 
+}
 start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so}} {
     start_server {overrides {crdt-gid 1} module {crdt.so}} {
 
@@ -31,6 +49,7 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so}} {
             stop_bg_complex_data $load_handle1
             stop_bg_complex_data $load_handle2
             set retry 10
+            wait_load_rdb_over $slave
             while {$retry && ([$master debug digest] ne [$slave debug digest])}\
             {
                 after 1000

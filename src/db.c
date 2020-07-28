@@ -474,38 +474,7 @@ void existsCommand(client *c) {
     addReplyLongLong(c,count);
 }
 
-//crdt.select <gid> <dbid>
-void crdtSelectCommand(client *c) {
-    long id;
-    long long gid;
 
-    if (getLongLongFromObjectOrReply(c, c->argv[1], &gid,
-                                 "invalid gid") != C_OK)
-        return;
-    if(!check_gid(gid)) {
-        addReplyError(c,"gid must < 15");
-        return;
-    }
-
-    if (getLongFromObjectOrReply(c, c->argv[2], &id,
-                                 "invalid DB index") != C_OK)
-        return;
-
-    if (server.cluster_enabled && id != 0) {
-        addReplyError(c,"SELECT is not allowed in cluster mode");
-        return;
-    }
-
-    if (selectDb(c, (int)id) == C_ERR) {
-        addReplyError(c,"DB index is out of range");
-    } else {
-        addReply(c,shared.ok);
-    }
-
-    if (gid == crdtServer.crdt_gid) {
-        feedCrdtBacklog(c->argv, c->argc);
-    }
-}
 
 void selectCommand(client *c) {
     long id;
@@ -1132,13 +1101,27 @@ void propagateExpire(redisDb *db, robj *key, int lazy) {
     decrRefCount(argv[1]);
 }
 
-int crdtPropagateExpire(redisDb *db, robj *key, int lazy) {
+int isDelayExpire(sds key) {
+    int len = get_len(crdtServer.vectorClock);
+    int key_len = sdslen(key);
+    int index = (key[0] + key[key_len/2] + key[key_len-1])% len;
+    clk* c = get_clock_unit_by_index(&crdtServer.vectorClock, index);
+    return get_gid(*c) != crdtServer.crdt_gid;
+}
+#define DELAYEXPIRETIME 500
+int crdtPropagateExpire(redisDb *db, robj *key, int lazy, long long expireTime) {
     void *mk = NULL;
     dictEntry *entry = dictFind(db->dict, key->ptr);
     if(entry != NULL) {
          robj *val = dictGetVal(entry);
          if(val != NULL) {
             if(isModuleCrdt(val) == C_OK) {
+                if(expireTime != -1 && isDelayExpire((sds)key->ptr)) {
+                    long long now = mstime();
+                    if(expireTime + DELAYEXPIRETIME - now > 0) { 
+                        return C_ERR;
+                    }
+                }
                 struct moduleValue* rm = (struct moduleValue*)val->ptr;
                 CrdtObject* obj = ((CrdtObject*)(rm->value));
                 mk = getModuleKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE, 1);
@@ -1147,6 +1130,7 @@ int crdtPropagateExpire(redisDb *db, robj *key, int lazy) {
                     if(method == NULL) {
                         return C_ERR;
                     }
+                    
                     method->propagateDel(db->id, key, mk, obj);
                     closeModuleKey(mk);
                 }
@@ -1172,7 +1156,6 @@ int expireIfNeeded(redisDb *db, robj *key) {
 
     /* Don't expire anything while loading. It will be done later. */
     if (server.loading) return 0;
-
     /* If we are in the context of a Lua script, we claim that time is
      * blocked to when the Lua script started. This way a key can expire
      * only the first time it is accessed and not in the middle of the
@@ -1193,8 +1176,8 @@ int expireIfNeeded(redisDb *db, robj *key) {
     if (now <= when) return 0;
 
     /* Delete the key */
-    server.stat_expiredkeys++;
-    if(crdtPropagateExpire(db,key,server.lazyfree_lazy_expire) != C_OK) {
+    // server.stat_expiredkeys++;
+    if(crdtPropagateExpire(db,key,server.lazyfree_lazy_expire, when) != C_OK) {
         return 0;
     }
     notifyKeyspaceEvent(NOTIFY_EXPIRED,

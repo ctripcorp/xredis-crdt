@@ -779,7 +779,7 @@ struct sharedObjectsStruct {
     *masterdownerr, *roslaveerr, *execaborterr, *noautherr, *noreplicaserr,
     *busykeyerr, *oomerr, *plus, *messagebulk, *pmessagebulk, *subscribebulk, *crdtsubscribebulk,
     *unsubscribebulk, *uncrdtsubscribebulk, *psubscribebulk, *crdtpsubscribebulk, *punsubscribebulk, *crdtpunsubscribebulk, *del, *unlink, *crdtdel,
-    *rpop, *lpop, *lpush, *emptyscan,
+    *rpop, *lpop, *lpush,*set,*hset,*expireat, *emptyscan,
     *crdtmergeerr,
     *select[PROTO_SHARED_SELECT_CMDS],
     *integers[OBJ_SHARED_INTEGERS],
@@ -1586,10 +1586,11 @@ void replicationCacheMasterUsingMyself(void);
 void feedReplicationBacklog(struct redisServer *srv, void *ptr, size_t len);
 int masterTryPartialResynchronization(struct redisServer *srv, client *c);
 void putSlaveOnline(client *slave);
-void createReplicationBacklog(struct redisServer *srv);
+void createReplicationBacklog();
 void feedReplicationBacklogWithObject(struct redisServer *srv, robj *o);
 int isSameTypeWithMaster();
 int isMasterMySelf();
+int UpdatePeerReplOffset(client *c, int gid);
 
 /* CRDT Replications */
 void crdtReplicationCron(void);
@@ -1616,6 +1617,7 @@ void crdtOvcCommand(client *c);
 void crdtAuthGidCommand(client *c);
 
 void crdtAuthCommand(client *c);
+void freeClientArgv(client* c);
 void feedCrdtBacklog(robj **argv, int argc);
 void replicationFeedAllSlaves(int dictid, robj **argv, int argc);
 void replicationFeedStringToAllSlaves(int dictid, void* cmdbuf, size_t cmdlen);
@@ -1841,7 +1843,7 @@ int updateConfigFileVectorUnit(char *path);
 
 /* db.c -- Keyspace access API */
 int removeExpire(redisDb *db, robj *key);
-int crdtPropagateExpire(redisDb *db, robj *key, int lazy);
+int crdtPropagateExpire(redisDb *db, robj *key, int lazy, long long expireTime);
 void propagateExpire(redisDb *db, robj *key, int lazy);
 int expireIfNeeded(redisDb *db, robj *key);
 long long getExpire(redisDb *db, robj *key);
@@ -1998,7 +2000,6 @@ void incrbyCommand(client *c);
 void decrbyCommand(client *c);
 void incrbyfloatCommand(client *c);
 void selectCommand(client *c);
-void crdtSelectCommand(client *c);
 void swapdbCommand(client *c);
 void randomkeyCommand(client *c);
 void keysCommand(client *c);

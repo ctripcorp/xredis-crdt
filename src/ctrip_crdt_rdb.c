@@ -485,6 +485,12 @@ int rdbSaveCrdtData(rio *rdb, redisDb* db, dict* keys, int flags, size_t* proces
     addKeys(db->deleted_keys, keys);
     addKeys(db->expires, keys);
     dictEntry* de = NULL;
+    void (*save)(redisDb*, rio*, void*);
+    save = (void (*)(redisDb*, rio*, void*))(unsigned long)getModuleFunction(CRDT_MODULE, SAVE_CRDT_VALUE);
+    if(save == NULL) {
+        serverLog(LL_WARNING, "crdt module save data function is null");
+        return C_ERR;
+    }
     dictIterator* di = dictGetIterator(keys);
     while((de = dictNext(di)) != NULL) {
         sds keystr = dictGetKey(de);
@@ -498,12 +504,7 @@ int rdbSaveCrdtData(rio *rdb, redisDb* db, dict* keys, int flags, size_t* proces
         if (rdbSaveType(rdb,RDB_CRDT_VALUE) == -1) return C_ERR;
         
         if (rdbSaveStringObject(rdb,&key) == -1) return C_ERR;
-        void (*save)(redisDb*, rio*, void*);
-        save = (void (*)(redisDb*, rio*, void*))(unsigned long)getModuleFunction(CRDT_MODULE, SAVE_CRDT_VALUE);
-        if(save == NULL) {
-            serverLog(LL_WARNING, "crdt module save data function is null");
-            return C_ERR;
-        }
+        
         save(db, rdb, &key);
         /* When this RDB is produced as part of an AOF rewrite, move
             * accumulated diff from parent to child while rewriting in
@@ -518,14 +519,10 @@ int rdbSaveCrdtData(rio *rdb, redisDb* db, dict* keys, int flags, size_t* proces
     dictReleaseIterator(di);
     return C_OK;
 }
-
-int rdbLoadCrdtData(rio* rdb, redisDb* db, long long current_expire_time) {
+int rdbLoadCrdtData(rio* rdb, redisDb* db, long long current_expire_time, LoadCrdtDataFunc load) {
     robj* key = NULL;
     int result = C_ERR;
     if ((key = rdbLoadStringObject(rdb)) == NULL) goto eoferr;
-    int (*load)(redisDb*, robj*, void*);
-    load = (int (*)(redisDb*, robj*, void*))(unsigned long)getModuleFunction(CRDT_MODULE, LOAD_CRDT_VALUE);
-    if(load == NULL) goto eoferr;
     if(load(db, key, rdb) == C_ERR) goto eoferr;
     if(dictFind(db->dict,key->ptr) != NULL && current_expire_time != -1) {
         setExpire(NULL, db, key, current_expire_time);
@@ -555,7 +552,6 @@ int rdbSaveAuxFieldCrdt(rio *rdb) {
     if(listLength(crdtServer.crdtMasters)) {
         listIter li;
         listNode *ln;
-
         listRewind(crdtServer.crdtMasters, &li);
         while((ln = listNext(&li))) {
             CRDT_Master_Instance *masterInstance = ln->value;
@@ -565,10 +561,24 @@ int rdbSaveAuxFieldCrdt(rio *rdb) {
                 == -1)  return C_ERR;
             if (rdbSaveAuxFieldStrInt(rdb, "peer-master-port", masterInstance->masterport)
                 == -1)  return C_ERR;
-            if (rdbSaveAuxFieldStrStr(rdb, "peer-master-repl-id", masterInstance->master_replid) 
+            char* replid = NULL;
+            long long replid_offset  = -1;
+            if(masterInstance->master) {
+                replid = masterInstance->master->replid;
+                replid_offset = masterInstance->master->reploff;
+                serverLog(LL_WARNING, "master reploff %lld, replid %lld", replid_offset, masterInstance->master_initial_offset);
+            } else if(masterInstance->cached_master) {
+                replid = masterInstance->cached_master->replid;
+                replid_offset = masterInstance->cached_master->reploff;
+            } else {
+                replid = masterInstance->master_replid;
+                replid_offset = masterInstance->master_initial_offset;
+            }
+            if (rdbSaveAuxFieldStrStr(rdb, "peer-master-repl-id", replid) 
                 == -1)  return C_ERR;
-            if (rdbSaveAuxFieldStrInt(rdb, "peer-master-repl-offset", masterInstance->master_initial_offset)
+            if (rdbSaveAuxFieldStrInt(rdb, "peer-master-repl-offset", replid_offset)
                 == -1)  return C_ERR;
+ 
         }
     }
     return C_OK;
@@ -653,19 +663,19 @@ int processInputRdb(client* fakeClient) {
     struct redisCommand* cmd = lookupCommand(fakeClient->argv[0]->ptr);
     if (!cmd) {
         serverLog(LL_WARNING,"Unknown command '%s' reading the append only file", fakeClient->argv[0]->ptr);
-        freeFakeClientArgv(fakeClient);
+        freeClientArgv(fakeClient);
         fakeClient->cmd = NULL;
         return C_ERR;
     } 
     fakeClient->cmd = fakeClient->lastcmd = cmd;
     call(fakeClient, CMD_CALL_PROPAGATE);
-    freeFakeClientArgv(fakeClient);
+    freeClientArgv(fakeClient);
     fakeClient->cmd = NULL;
     return C_OK;
 }
 int crdtSelectDb(client* fakeClient, int dbid) {
     fakeClient->argc = 2;
-    fakeClient->argv = zmalloc(sizeof(robj*)*2);
+    // fakeClient->argv = zmalloc(sizeof(robj*)*2);
     fakeClient->argv[0] = createStringObject("select", 6);
     fakeClient->argv[1] = createStrRobjFromLongLong(dbid);
     return processInputRdb(fakeClient);
@@ -675,8 +685,9 @@ int data2CrdtData(client* fakeClient,robj* key, robj* val) {
     switch(val->type) {
         case OBJ_STRING: 
             fakeClient->argc = 3;
-            fakeClient->argv = zmalloc(sizeof(robj*)*3);
-            fakeClient->argv[0] = createStringObject("Set", 3);
+            // fakeClient->argv = zmalloc(sizeof(robj*)*3);
+            fakeClient->argv[0] = shared.set;
+            incrRefCount(shared.set);
             fakeClient->argv[1] = key;
             incrRefCount(key);
             long long result;
@@ -686,31 +697,37 @@ int data2CrdtData(client* fakeClient,robj* key, robj* val) {
             }
             fakeClient->argv[2] = val;
             incrRefCount(val);
-            
+            processInputRdb(fakeClient);
         break;
         // case OBJ_LIST: freeListObject(o); break;
         // case OBJ_SET: freeSetObject(o); break;
         // case OBJ_ZSET: freeZsetObject(o); break;
         case OBJ_HASH: 
             len = hashTypeLength(val);
-            fakeClient->argc = 2 + 2 * len;
-            fakeClient->argv = zmalloc(sizeof(robj*)*fakeClient->argc);
-            fakeClient->argv[0] = createStringObject("HSET", 4);
-            fakeClient->argv[1] = key;
-            incrRefCount(key);
-            int i = 2;
+            int i = 0;
             hashTypeIterator* hi = hashTypeInitIterator(val);
-            while (hashTypeNext(hi) != C_ERR) {
-                fakeClient->argv[i++] = reverseHashToArgv(hi, OBJ_HASH_KEY);
-                fakeClient->argv[i++] = reverseHashToArgv(hi, OBJ_HASH_VALUE);
-            }
+            hashTypeNext(hi);
+            while(len > 0) {
+                fakeClient->argv[0] = shared.hset;
+                incrRefCount(shared.hset);
+                fakeClient->argv[1] = key;
+                incrRefCount(key);
+                i = 2;
+                do {
+                    fakeClient->argv[i++] = reverseHashToArgv(hi, OBJ_HASH_KEY);
+                    fakeClient->argv[i++] = reverseHashToArgv(hi, OBJ_HASH_VALUE);
+                    len--;
+                } while (hashTypeNext(hi) != C_ERR && i < MAX_FAKECLIENT_ARGV);
+                fakeClient->argc = i;
+                processInputRdb(fakeClient);
+            } 
             hashTypeReleaseIterator(hi);          
         break;
         // case OBJ_MODULE: freeModuleObject(o); break;
         default:  goto error;
     }
     decrRefCount(val);  
-    return processInputRdb(fakeClient);
+    return C_OK;
 error:
     if(val != NULL) {
         decrRefCount(val);
@@ -720,8 +737,9 @@ error:
 
 int expire2CrdtExpire(client* fakeClient, robj* key, long long expiretime) {
     fakeClient->argc = 3;
-    fakeClient->argv = zmalloc(sizeof(robj*)*3);
-    fakeClient->argv[0] = createStringObject("expireAt", 8);
+    // fakeClient->argv = zmalloc(sizeof(robj*)*3);
+    fakeClient->argv[0] = shared.expireat;
+    incrRefCount(shared.expireat); 
     fakeClient->argv[1] = key;
     incrRefCount(key);
     fakeClient->argv[2] = createStrRobjFromLongLong(expiretime);

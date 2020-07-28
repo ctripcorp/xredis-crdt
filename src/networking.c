@@ -717,7 +717,7 @@ void acceptUnixHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
     }
 }
 
-static void freeClientArgv(client *c) {
+void freeClientArgv(client *c) {
     int j;
     for (j = 0; j < c->argc; j++)
         decrRefCount(c->argv[j]);
@@ -1352,7 +1352,7 @@ int processMultibulkBuffer(client *c) {
  * more query buffer to process, because we read more data from the socket
  * or because a client was blocked and later reactivated, so there could be
  * pending query buffer, already representing a full command, to process. */
-void processInputBuffer(client *c) {
+void processInputBuffer(client *c) {           
     server.current_client = c;
     /* Keep processing while there is something in the input buffer */
     while(sdslen(c->querybuf)) {
@@ -1385,7 +1385,6 @@ void processInputBuffer(client *c) {
         } else {
             serverPanic("Unknown request type");
         }
-
         /* Multibulk processing could see a <= 0 length. */
         if (c->argc == 0) {
             resetClient(c);
@@ -1398,7 +1397,7 @@ void processInputBuffer(client *c) {
                     /* Update the applied replication offset of our master. */
                     c->reploff = c->read_reploff - sdslen(c->querybuf);
                 }
-
+                
                 /* Don't reset the client structure for clients blocked in a
                  * module blocking command, so that the reply callback will
                  * still be able to access the client argv and argc field.
