@@ -1671,8 +1671,8 @@ void receiveChildInfo(struct redisServer *srv);
 void *getModuleKey(redisDb *db, robj *keyname, int mode, int needCheck);
 void closeModuleKey(void *moduleKey);
 #define TYPECONFLICT (1<<0)
-#define DATA_ISOMORPHIC_CONFLICT (1<<1)
-#define TOMBSTONE_ISOMORPHIC_CONFLICT (1<<2)
+#define DATA_CONFLICT (1<<1)
+#define TOMBSTONE_CONFLICT (1<<2)
 #define DATA_TOMBSTONE_CONFLICT (1<<3)
 // #define NONTYPECONFLICT (1<<1)
 #define MODIFYCONFLICT (1<<4)
