@@ -1617,6 +1617,7 @@ void crdtOvcCommand(client *c);
 void crdtAuthGidCommand(client *c);
 
 void crdtAuthCommand(client *c);
+void freeClientArgv(client* c);
 void feedCrdtBacklog(robj **argv, int argc);
 void replicationFeedAllSlaves(int dictid, robj **argv, int argc);
 void replicationFeedStringToAllSlaves(int dictid, void* cmdbuf, size_t cmdlen);
