@@ -1103,12 +1103,10 @@ void propagateExpire(redisDb *db, robj *key, int lazy) {
 
 int isDelayExpire(sds key) {
     int len = get_len(crdtServer.vectorClock);
-    int index = key[0] % len;
+    int key_len = sdslen(key);
+    int index = (key[0] + key[key_len/2] + key[key_len-1])% len;
     clk* c = get_clock_unit_by_index(&crdtServer.vectorClock, index);
-    if(get_gid(*c) == crdtServer.crdt_gid) {
-        return 0;
-    }
-    return 1;
+    return get_gid(*c) != crdtServer.crdt_gid;
 }
 #define DELAYEXPIRETIME 500
 int crdtPropagateExpire(redisDb *db, robj *key, int lazy, long long expireTime) {

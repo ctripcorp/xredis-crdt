@@ -277,7 +277,9 @@ start_server {tags {"crdt-del"} overrides {crdt-gid 1} config {crdt.conf} module
 
         set before1 [crdt_stats [lindex $peers 1] crdt_non_type_conflict]
         set before0 [crdt_stats [lindex $peers 0] crdt_non_type_conflict]
+
         set num 30
+
         for {set j 0} {$j < $num} {incr j} {
             [lindex $peers 1] set $j $j
             [lindex $peers 1] expire $j 5
