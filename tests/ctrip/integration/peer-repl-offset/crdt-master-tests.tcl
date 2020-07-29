@@ -318,7 +318,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                             error "assertion:Slave3 not correctly synchronized"
                         }
 
-                        test "Offset-Alignment Two-Peers-Partial-Sync Add-Slave-After-PeerOf" {
+                        test "Offset-Alignment Two-Peers-Full-Sync Add-Slave-After-PeerOf" {
 
                             wait_for_condition 500 100 {
                                 [crdt_repl [lindex $peers 0] master_repl_offset] == [crdt_repl [lindex $peers 1] peer0_repl_offset] &&
@@ -345,7 +345,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
 
                         }
 
-                        test "VC-Alignment Two-Peers-Partial-Sync Add-Slave-After-PeerOf" {
+                        test "VC-Alignment Two-Peers-Full-Sync Add-Slave-After-PeerOf" {
                             set peer_0_info [crdt_repl [lindex $peers 0] ovc]
                             set slave_2_info [crdt_repl [lindex $slaves 2] ovc]
                             set peer_1_info [crdt_repl [lindex $peers 1] ovc]
@@ -509,6 +509,11 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                 set load_handle1 [start_write_load [lindex $peer_hosts 0] [lindex $peer_ports 0] 2]
                 set load_handle2 [start_write_load [lindex $peer_hosts 0] [lindex $peer_ports 1] 2]
                 set load_handle3 [start_write_load [lindex $peer_hosts 0] [lindex $peer_ports 1] 2]
+
+                [lindex $peers 0] debug set-crdt-ovc 1
+                [lindex $peers 1] debug set-crdt-ovc 1
+                [lindex $slaves 0] debug set-crdt-ovc 1
+                [lindex $slaves 1] debug set-crdt-ovc 1
                 start_server {config {crdt.conf} overrides {crdt-gid 1} module {crdt.so}} {
                     lappend slaves [srv 0 client]
                     lappend slave_hosts [srv 0 host]
@@ -562,6 +567,10 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                             error "assertion:Slave5 not correctly synchronized"
                         }
 
+                        [lindex $peers 0] debug set-crdt-ovc 0
+                        [lindex $peers 1] debug set-crdt-ovc 0
+                        [lindex $slaves 0] debug set-crdt-ovc 0
+                        [lindex $slaves 1] debug set-crdt-ovc 0
                         after 300
                         # Stop the write load
                         stop_write_load $load_handle0
@@ -611,6 +620,159 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                     }
                 }
 
+                ####################################### Stage 5: Master-Slave Switch ######################################################
+                set sync_partial_ok_0 [ crdt_status [lindex $slaves 0] "sync_partial_ok" ]
+                set sync_partial_ok_1 [ crdt_status [lindex $peers 1] "sync_partial_ok" ]
+
+                set load_handle0 [start_write_load_with_interval [lindex $peer_hosts 1] [lindex $peer_ports 1] 1 100]
+
+                [lindex $slaves 0] slaveof no one
+                [lindex $peers 0] slaveof [lindex $slave_hosts 0] [lindex $slave_ports 0]
+
+                [lindex $peers 0] debug set-crdt-ovc 1
+                [lindex $peers 1] debug set-crdt-ovc 1
+                [lindex $slaves 0] debug set-crdt-ovc 1
+                [lindex $slaves 1] debug set-crdt-ovc 1
+
+                after 20
+
+                [lindex $peers 1] peerof 1 [lindex $slave_hosts 0] [lindex $slave_ports 0]
+
+                set retry 500
+                while {$retry} {
+                    set info [[lindex $peers 1] crdt.info replication]
+                    if {[string match {*slave0:*state=online*} $info]} {
+                        break
+                    } else {
+                        incr retry -1
+                        after 100
+                    }
+                }
+                if {$retry == 0} {
+                    puts [log_content [lindex $peer_stdout 1]]
+                    error "Stage5-1: assertion:Peers not correctly synchronized"
+                }
+                set retry 500
+                while {$retry} {
+                    set info [[lindex $slaves 0] crdt.info replication]
+                    if {[string match {*slave0:*state=online*} $info]} {
+                        break
+                    } else {
+                        incr retry -1
+                        after 50
+                    }
+                }
+                if {$retry == 0} {
+                    puts [log_content [lindex $slave_stdout 0]]
+                    error "Stage5-2: assertion:Peers not correctly synchronized"
+                }
+
+                set retry 500
+                while {$retry} {
+                    set info [[lindex $slaves 0] info replication]
+                    if {[string match {*slave0:*state=online*} $info]} {
+                        break
+                    } else {
+                        incr retry -1
+                        after 50
+                    }
+                }
+                if {$retry == 0} {
+                    puts [log_content [lindex $slave_stdout 2]]
+                    error "assertion:Slave2 not correctly synchronized"
+                }
+                set load_handle1 [start_write_load_with_interval [lindex $slave_hosts 0] [lindex $slave_ports 0] 1 20]
+                after 40
+
+                set retry 500
+                while {$retry} {
+                    set info [[lindex $peers 1] info replication]
+                    if {[string match {*slave0:*state=online*} $info]} {
+                        break
+                    } else {
+                        incr retry -1
+                        after 50
+                    }
+                }
+                if {$retry == 0} {
+                    puts [log_content [lindex $slave_stdout 3]]
+                    error "assertion:Slave3 not correctly synchronized"
+                }
+                test "Master-Slave-Switch Peer-Partial-Sync" {
+                    set sync_partial_ok_now_0 [ crdt_status [lindex $slaves 0] "sync_partial_ok" ]
+                    set sync_partial_ok_now_1 [ crdt_status [lindex $peers 1] "sync_partial_ok" ]
+
+                    puts [format "sync_full_0: %d" [crdt_status [lindex $slaves 0] "sync_full" ]]
+                    puts [format "sync_full_1: %d" [crdt_status [lindex $peers 1] "sync_full" ]]
+
+                    set partil_incr_0 [expr $sync_partial_ok_now_0 - $sync_partial_ok_0]
+                    set partil_incr_1 [expr $sync_partial_ok_now_1 - $sync_partial_ok_1]
+
+                    assert_equal $partil_incr_0 1
+                    assert_equal $partil_incr_1 1
+
+                    ### insensitive the redis peer-repl state
+                    [lindex $peers 0] config crdt.set repl-timeout 600
+                    [lindex $peers 1] config crdt.set repl-timeout 600
+                    [lindex $peers 0] debug set-crdt-ovc 0
+                    [lindex $peers 1] debug set-crdt-ovc 0
+                    [lindex $slaves 0] debug set-crdt-ovc 0
+                    [lindex $slaves 1] debug set-crdt-ovc 0
+
+                    # Stop the write load
+                    stop_write_load $load_handle0
+                    stop_write_load $load_handle1
+                }
+                after 200
+
+                test "Offset-Alignment Master-Slave-Switch Peer-Partial-Sync" {
+                    # Make sure that slaves and master have same
+                    # number of keys
+                    wait_for_condition 500 100 {
+                        [[lindex $peers 0] dbsize] == [[lindex $slaves 0] dbsize]
+                    } else {
+                        fail "Different number of keys between masted and slave after too long time."
+                    }
+
+                    wait_for_condition 500 100 {
+                        [[lindex $peers 1] dbsize] == [[lindex $slaves 1] dbsize]
+                    } else {
+                        fail "Different number of keys between masted and slave after too long time."
+                    }
+
+                    wait_for_condition 500 100 {
+                        [crdt_repl [lindex $slaves 0] master_repl_offset] == [crdt_repl [lindex $peers 1] peer0_repl_offset] &&
+                        [crdt_repl [lindex $slaves 0] master_repl_offset] == [crdt_repl [lindex $peers 0] master_repl_offset] &&
+                        [crdt_repl [lindex $slaves 0] master_repl_offset] == [crdt_repl [lindex $slaves 1] peer0_repl_offset] &&
+                        [crdt_repl [lindex $peers 1] master_repl_offset] == [crdt_repl [lindex $peers 0] peer0_repl_offset] &&
+                        [crdt_repl [lindex $peers 1] master_repl_offset] == [crdt_repl [lindex $slaves 1] master_repl_offset] &&
+                        [crdt_repl [lindex $peers 1] master_repl_offset] == [crdt_repl [lindex $slaves 0] peer0_repl_offset]
+                    } else {
+                        puts [format "peer0 master-offset: %d" [crdt_repl [lindex $slaves 0] master_repl_offset]]
+                        puts [format "slave0 master-offset: %d" [crdt_repl [lindex $peers 0] master_repl_offset]]
+                        puts [format "peer1 offset: %d" [crdt_repl [lindex $peers 1] peer0_repl_offset]]
+                        puts [format "slave1 offset: %d" [crdt_repl [lindex $slaves 1] peer0_repl_offset]]
+
+                        puts [format "peer1 master-offset: %d" [crdt_repl [lindex $peers 1] master_repl_offset]]
+                        puts [format "slave1 master-offset: %d" [crdt_repl [lindex $slaves 1] master_repl_offset]]
+                        puts [format "peer0 offset: %d" [crdt_repl [lindex $slaves 0] peer0_repl_offset]]
+                        puts [format "slave0 offset: %d" [crdt_repl [lindex $peers 0] peer0_repl_offset]]
+                        fail "crdt repl offset not aligned."
+                    }
+
+                }
+
+                test "VC-Alignment Master-Slave-Switch Peer-Partial-Sync" {
+                    set peer_0_info [crdt_repl [lindex $peers 0] ovc]
+                    set slave_0_info [crdt_repl [lindex $slaves 0] ovc]
+                    set peer_1_info [crdt_repl [lindex $peers 1] ovc]
+                    set slave_1_info [crdt_repl [lindex $slaves 1] ovc]
+                    assert_equal $peer_0_info $slave_0_info
+                    assert_equal $peer_1_info $slave_1_info
+                    assert_equal $peer_0_info $slave_1_info
+                    assert_equal $peer_1_info $slave_0_info
+                    assert_equal $peer_0_info $peer_1_info
+                }
             }
         }
     }

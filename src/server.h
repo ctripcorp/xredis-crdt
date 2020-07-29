@@ -1626,6 +1626,7 @@ void replicationFeedAllSlaves(int dictid, robj **argv, int argc);
 void replicationFeedStringToAllSlaves(int dictid, void* cmdbuf, size_t cmdlen);
 void replicationFeedRobjToAllSlaves(int dictid, robj* cmd);
 void crdtCancelReplicationHandshake(int gid);
+void crdtReplicationCacheMasterUsingMyself(void);
 
 /* CRDT Command */
 void crdtDelCommand(client *c);
