@@ -554,7 +554,7 @@ int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, i
             memcpy(new,start,CONFIG_RUN_ID_SIZE);
             new[CONFIG_RUN_ID_SIZE] = '\0';
 
-            serverLog(LL_WARNING,"Master replication ID changed to %s",new);
+            serverLog(LL_WARNING,"[CRDT]Master replication ID changed to %s",new);
 
             memcpy(masterInstance->master_replid, new, CONFIG_RUN_ID_SIZE);
             masterInstance->master_replid[CONFIG_RUN_ID_SIZE] = '\0';
@@ -658,7 +658,7 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
             strncmp(err,"-NOAUTH",7) != 0 &&
             strncmp(err,"-ERR operation not permitted",28) != 0)
         {
-            serverLog(LL_WARNING,"Error reply to PING from master: '%s'",err);
+            serverLog(LL_WARNING,"[CRDT]Error reply to PING from master: '%s'",err);
             sdsfree(err);
             goto error;
         } else {
@@ -1118,7 +1118,7 @@ void crdtReplicationCacheMaster(client *c) {
         crdtMaster = createPeerMaster(c, c->gid);
         listAddNodeTail(crdtServer.crdtMasters, crdtMaster);
     }
-    serverLog(LL_NOTICE,"Caching the disconnected master state.");
+    serverLog(LL_NOTICE,"[CRDT]Caching the disconnected master state.(%s: %lld)", crdtMaster->master ? crdtMaster->master->replid : "null", crdtMaster->master ? crdtMaster->master->reploff : -1);
 
     /* Unlink the client from the server structures. */
     unlinkClient(c);
