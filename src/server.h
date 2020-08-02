@@ -1385,6 +1385,7 @@ extern dictType modulesDictType;
  *----------------------------------------------------------------------------*/
 
 /* Modules */
+void* createModuleKey(redisDb *db, robj *keyname, int mode, robj* value, robj* tombstone);
 void moduleInitModulesSystem(void);
 int moduleLoad(const char *path, void **argv, int argc);
 void moduleLoadFromQueue(void);
