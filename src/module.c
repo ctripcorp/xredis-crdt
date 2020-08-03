@@ -1730,12 +1730,23 @@ int RM_SelectDb(RedisModuleCtx *ctx, int newid) {
     int retval = selectDb(ctx->client,newid);
     return (retval == C_OK) ? REDISMODULE_OK : REDISMODULE_ERR;
 }
-
+void* createModuleKey(redisDb *db, robj *keyname, int mode,robj* value, robj* tombstone) {
+    RedisModuleKey *kp;   
+    kp = zmalloc(sizeof(*kp));
+    kp->db = db;
+    kp->key = keyname;
+    incrRefCount(keyname);
+    kp->value = value;
+    kp->tombstone = tombstone;
+    kp->iter = NULL;
+    kp->mode = mode;
+    kp->ctx = NULL;
+    zsetKeyReset(kp);
+    return (void*)kp;
+}
 
 void *getModuleKey(redisDb *db, robj *keyname, int mode, int needCheck) {
-    RedisModuleKey *kp;
     robj *value, *tombstone = NULL;
- 
     if (mode & REDISMODULE_WRITE) {
         value = needCheck == C_OK? lookupKeyWrite(db,keyname): lookupKey(db,keyname,LOOKUP_NONE);
     } else {
@@ -1747,18 +1758,8 @@ void *getModuleKey(redisDb *db, robj *keyname, int mode, int needCheck) {
     if (mode & REDISMODULE_TOMBSTONE) {
         tombstone = lookupTombstoneKey(db,keyname);
     }
-    kp = zmalloc(sizeof(*kp));
-    
-    kp->db = db;
-    kp->key = keyname;
-    incrRefCount(keyname);
-    kp->value = value;
-    kp->tombstone = tombstone;
-    kp->iter = NULL;
-    kp->mode = mode;
-    kp->ctx = NULL;
-    zsetKeyReset(kp);
-    return (void*)kp;
+    RedisModuleKey *kp = createModuleKey(db, keyname, mode, value, tombstone);
+    return kp;
 }
 /* Return an handle representing a Redis key, so that it is possible
  * to call other APIs with the key handle as argument to perform
