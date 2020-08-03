@@ -481,55 +481,21 @@ void addKeys(dict* d, dict* keys) {
     dictReleaseIterator(di);
 }
 
-int rdbSaveCrdtData(rio *rdb, redisDb* db, dict* keys, int flags, size_t* processed) {
-    addKeys(db->deleted_keys, keys);
-    addKeys(db->expires, keys);
-    dictEntry* de = NULL;
-    void (*save)(redisDb*, rio*, void*);
-    save = (void (*)(redisDb*, rio*, void*))(unsigned long)getModuleFunction(CRDT_MODULE, SAVE_CRDT_VALUE);
-    if(save == NULL) {
-        serverLog(LL_WARNING, "crdt module save data function is null");
-        return C_ERR;
-    }
-    dictIterator* di = dictGetIterator(keys);
-    while((de = dictNext(di)) != NULL) {
-        sds keystr = dictGetKey(de);
-        robj key;
-        initStaticStringObject(key,keystr);
-        long long expiretime = getExpire(db, &key);
-        if (expiretime != -1) {
-            if (rdbSaveType(rdb,RDB_OPCODE_EXPIRETIME_MS) == -1) return C_ERR;
-            if (rdbSaveMillisecondTime(rdb,expiretime) == -1) return C_ERR;
-        }
-        if (rdbSaveType(rdb,RDB_CRDT_VALUE) == -1) return C_ERR;
-        
-        if (rdbSaveStringObject(rdb,&key) == -1) return C_ERR;
-        
-        save(db, rdb, &key);
-        /* When this RDB is produced as part of an AOF rewrite, move
-            * accumulated diff from parent to child while rewriting in
-            * order to have a smaller final write. */
-        if (flags & RDB_SAVE_AOF_PREAMBLE &&
-            rdb->processed_bytes > *processed+AOF_READ_DIFF_INTERVAL_BYTES)
-        {
-            *processed = rdb->processed_bytes;
-            aofReadDiffFromParent();
-        }
-    }
-    dictReleaseIterator(di);
-    return C_OK;
-}
 int rdbLoadCrdtData(rio* rdb, redisDb* db, long long current_expire_time, LoadCrdtDataFunc load) {
     robj* key = NULL;
+    void* moduleKey = NULL;
     int result = C_ERR;
     if ((key = rdbLoadStringObject(rdb)) == NULL) goto eoferr;
-    if(load(db, key, rdb) == C_ERR) goto eoferr;
-    if(dictFind(db->dict,key->ptr) != NULL && current_expire_time != -1) {
+    // assert(dictFind(db->dict,key->ptr) == NULL);
+    moduleKey = createModuleKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE, NULL, NULL);
+    if(load(db, key, rdb, moduleKey) == C_ERR) goto eoferr;
+    if(current_expire_time != -1) {
         setExpire(NULL, db, key, current_expire_time);
     }
     result = C_OK;
 eoferr:
     if(key != NULL) decrRefCount(key);
+    if(moduleKey != NULL) closeModuleKey(moduleKey);
     return result;
 }
 

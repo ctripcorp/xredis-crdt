@@ -63,10 +63,9 @@ int data2CrdtData(client* fakeClient, robj* key, robj* val);
 int verifyRdbType(int isCrdtRdb);
 int expire2CrdtExpire(client* client, robj* key, long long expiretime);
 /* CRDT RDB */
-int rdbSaveCrdtData(rio *rdb,redisDb* db, dict* keys, int flags, size_t* processed);
 int rdbSaveCrdtDbSize(rio* rdb, redisDb* db);
 int rdbSaveCrdtInfoAuxFields(rio* rdb);
-typedef int (*LoadCrdtDataFunc)(redisDb*, robj*, void*);
+typedef int (*LoadCrdtDataFunc)(redisDb*, robj*, void*, void*);
 int rdbLoadCrdtData(rio* rdb, redisDb* db,  long long current_expire_time,  LoadCrdtDataFunc load);
 int rdbLoadCrdtDbSize(rio* rdb, redisDb* db);
 int rdbSaveMillisecondTime(rio *rdb, long long t);
