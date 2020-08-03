@@ -1759,7 +1759,6 @@ void *getModuleKey(redisDb *db, robj *keyname, int mode, int needCheck) {
         tombstone = lookupTombstoneKey(db,keyname);
     }
     RedisModuleKey *kp = createModuleKey(db, keyname, mode, value, tombstone);
-    kp->mode = mode;
     return kp;
 }
 /* Return an handle representing a Redis key, so that it is possible
@@ -3450,15 +3449,10 @@ moduleType *RM_CreateDataType(RedisModuleCtx *ctx, const char *name, int encver,
  * writing or there is an active iterator, REDISMODULE_ERR is returned. */
 int RM_ModuleTypeSetValue(RedisModuleKey *key, moduleType *mt, void *value) {
     if (!(key->mode & REDISMODULE_WRITE) || key->iter) return REDISMODULE_ERR;
+    RM_DeleteKey(key);
     robj *o = createModuleObject(mt,value);
-    if(key->value) {
-        RM_DeleteKey(key);
-        setKey(key->db,key->key,o);
-        decrRefCount(o);
-    } else {
-        dbAdd(key->db, key->key, o);
-        signalModifiedKey(key->db,key->key);
-    }
+    setKey(key->db,key->key,o);
+    decrRefCount(o);
     key->value = o;
     return REDISMODULE_OK;
 }
