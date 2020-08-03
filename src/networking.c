@@ -135,7 +135,7 @@ client *createClient(int fd) {
     c->crdt_pubsub_channels = dictCreate(&objectKeyPointerValueDictType,NULL);
     c->crdt_pubsub_patterns = listCreate();
     c->peerid = NULL;
-    c->gid = 0;
+    c->peer_master = NULL;
     c->vectorClock = newVectorClock(0);
     listSetFreeMethod(c->pubsub_patterns,decrRefCountVoid);
     listSetMatchMethod(c->pubsub_patterns,listMatchObjects);
@@ -1392,7 +1392,7 @@ void processInputBuffer(client *c) {
             /* Only reset the client when the command was executed. */
             if (processCommand(c) == C_OK) {
                 if ((c->flags & CLIENT_MASTER
-                    || ((c->flags & CLIENT_CRDT_MASTER) && getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED))
+                    || ((c->flags & CLIENT_CRDT_MASTER) && c->peer_master->repl_state == REPL_STATE_CONNECTED))
                     && !(c->flags & CLIENT_MULTI)) {
                     /* Update the applied replication offset of our master. */
                     c->reploff = c->read_reploff - sdslen(c->querybuf);
@@ -1453,7 +1453,7 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
         if (c->flags & CLIENT_CRDT_SLAVE) {
             serverLog(LL_NOTICE, "[CRDT]slave disconnect: %s:%d", c->slave_ip, c->slave_listening_port);
         } else if (c->flags & CLIENT_CRDT_MASTER) {
-            CRDT_Master_Instance *masterInstance = getPeerMaster(c->gid);
+            CRDT_Master_Instance *masterInstance = c->peer_master;
             serverLog(LL_NOTICE, "[CRDT]master disconnect: %s:%d", masterInstance->masterhost, masterInstance->masterport);
         }
         freeClient(c);
@@ -1471,7 +1471,7 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
     if (c->flags & CLIENT_MASTER) {
         c->read_reploff += nread;
     } else if (c->flags & CLIENT_CRDT_MASTER) {
-        if (getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED)  {
+        if (c->peer_master->repl_state == REPL_STATE_CONNECTED)  {
             c->read_reploff += nread;
         }
     }

@@ -263,29 +263,32 @@ start_server {tags {"crdt-del"} overrides {crdt-gid 1} config {crdt.conf} module
         lappend ports [srv 0 port]
         lappend stdouts [srv 0 stdout]
         lappend gids 2
-        [lindex $peers 1] config crdt.set repl-diskless-sync-delay 1
-        [lindex $peers 1] config set repl-diskless-sync-delay 1
-        [lindex $peers 1] CRDT.SET key-1 v25 2 [clock milliseconds]  "1:1;2:201;3:99"
-        [lindex $peers 1] CRDT.HSET key-3 2 [expr [clock milliseconds]-10]  "1:2;2:202;3:99" 2 k v
-        [lindex $peers 0] peerof [lindex $gids 1] [lindex $hosts 1] [lindex $ports 1]
-        wait [lindex $peers 1] 0 crdt.info [lindex $stdouts 1]
-        assert_equal [crdt_stats [lindex $peers 0] crdt_type_conflict] 3
-        assert_equal [crdt_stats [lindex $peers 0] crdt_non_type_conflict] 14
-        assert_equal [crdt_stats [lindex $peers 0] crdt_modify_conflict] 15
-        assert_equal [crdt_stats [lindex $peers 0] crdt_merge_conflict] 2
-        assert_equal [crdt_stats [lindex $peers 0] crdt_data_isomrphic_conflict] 5
+        test "peer" {
+            [lindex $peers 1] config crdt.set repl-diskless-sync-delay 1
+            [lindex $peers 1] config set repl-diskless-sync-delay 1
+            [lindex $peers 1] CRDT.SET key-1 v25 2 [clock milliseconds]  "1:1;2:201;3:99"
+            [lindex $peers 1] CRDT.HSET key-3 2 [expr [clock milliseconds]-10]  "1:2;2:202;3:99" 2 k v
+            [lindex $peers 0] peerof [lindex $gids 1] [lindex $hosts 1] [lindex $ports 1]
+            wait [lindex $peers 1] 0 crdt.info [lindex $stdouts 1]
+            assert_equal [crdt_stats [lindex $peers 0] crdt_type_conflict] 3
+            assert_equal [crdt_stats [lindex $peers 0] crdt_non_type_conflict] 14
+            assert_equal [crdt_stats [lindex $peers 0] crdt_modify_conflict] 15
+            assert_equal [crdt_stats [lindex $peers 0] crdt_merge_conflict] 2
+            assert_equal [crdt_stats [lindex $peers 0] crdt_data_isomrphic_conflict] 5
 
-        set before1 [crdt_stats [lindex $peers 1] crdt_non_type_conflict]
-        set before0 [crdt_stats [lindex $peers 0] crdt_non_type_conflict]
+            set before1 [crdt_stats [lindex $peers 1] crdt_non_type_conflict]
+            set before0 [crdt_stats [lindex $peers 0] crdt_non_type_conflict]
 
-        set num 30
+            set num 30
 
-        for {set j 0} {$j < $num} {incr j} {
-            [lindex $peers 1] set $j $j
-            [lindex $peers 1] expire $j 5
-        } 
-        after 6000
-        assert_equal [crdt_stats [lindex $peers 0] crdt_non_type_conflict]  $before0
-        assert_equal [crdt_stats [lindex $peers 1] crdt_non_type_conflict]  $before1
+            for {set j 0} {$j < $num} {incr j} {
+                [lindex $peers 1] set $j $j
+                [lindex $peers 1] expire $j 5
+            } 
+            after 6000
+            assert_equal [crdt_stats [lindex $peers 0] crdt_non_type_conflict]  $before0
+            assert_equal [crdt_stats [lindex $peers 1] crdt_non_type_conflict]  $before1
+        }
+        
     }
 }
