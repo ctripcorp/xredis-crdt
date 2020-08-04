@@ -629,6 +629,7 @@ enable_zone_allocator
 enable_tls
 enable_lazy_lock
 TESTLIBS
+jemalloc_version_debug
 jemalloc_version_gid
 jemalloc_version_nrev
 jemalloc_version_bugfix
@@ -6984,6 +6985,10 @@ jemalloc_version_gid=`echo ${jemalloc_version} | tr ".g-" " " | awk '{print $5}'
 
 
 
+jemalloc_version_debug=0
+if test "x$enable_debug" = "x1" ; then
+  jemalloc_version_debug=1
+fi
 
 
 
