@@ -11,4 +11,4 @@ then
     echo "You need tcl 8.5 or newer in order to run the Redis test"
     exit 1
 fi
-tclsh tests/test_crdt.tcl $*
+$TCLSH tests/test_crdt.tcl $*

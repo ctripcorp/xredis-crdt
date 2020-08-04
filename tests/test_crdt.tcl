@@ -15,18 +15,13 @@ source tests/support/aof.tcl
 
 
 set ::all_tests { 
-    ctrip/integration/peer-repl-offset/crdt-master-tests
-}
-
-set ::temp_tests {
-    
     ctrip/master-not-crdt/more-write-db
     ctrip/master-not-crdt/update-peer-repl-offset
     ctrip/integration/master-slave/more-write-db
     ctrip/integration/master-slave/slave-peer-offset
-
+    
     ctrip/master-not-crdt/peerof
-
+    
     ctrip/unit/namespace
     ctrip/unit/module_memory
     ctrip/integration/bug/free-replication-blocklog
@@ -41,7 +36,7 @@ set ::temp_tests {
     ctrip/integration/bug/slave-merge-expired-object-bug
     ctrip/integration/bug/peerof
     ctrip/integration/master-master/add_sync
-
+    
     ctrip/master-not-crdt/master-redis-peer2
     ctrip/master-not-crdt/master-redis-peer
     ctrip/master-not-crdt/jump-vectorclock
@@ -60,7 +55,7 @@ set ::temp_tests {
     ctrip/unit/crdt_publish
     ctrip/integration/master-slave/rdb3
     ctrip/integration/master-slave/auth-gid
-    ctrip/integration/bug/redis-unfree-client-when-master-to-slave
+ctrip/integration/bug/redis-unfree-client-when-master-to-slave
     ctrip/integration/bug/hash-miss-send-when-full-sync
     ctrip/integration/bug/full-sync-timeout
 
@@ -101,6 +96,43 @@ set ::temp_tests {
     ctrip/integration/master-slave/rdb
     ctrip/integration/master-slave/rdb2
     ctrip/integration/master-slave/psync2
+    ctrip/integration/master-slave/replication-psync
+}
+
+set ::temp_tests {
+    
+    #####
+    ctrip/integration/bug/redis-crash-when-full-sync-hash-merge
+    ctrip/integration/bug/redis-when-full-sync-mater-timeout-vectorclock-update
+    
+    
+    ctrip/unit/merge_different_type
+    ctrip/integration/composite/master-slave-failover
+    ctrip/unit/crdt_hdel_mem_leak
+    ctrip/unit/gc
+    
+    ctrip/unit/crdt_conflict
+    ctrip/unit/crdt_del_conflict
+
+    ctrip/integration/master-slave/replication
+    ctrip/integration/master-slave/replication-1
+    ctrip/integration/master-slave/replication-2
+    ctrip/integration/master-slave/replication-3
+    ctrip/integration/master-slave/replication-4
+    ctrip/integration/master-slave/psync2
+    ctrip/integration/master-slave/psync2-reg
+
+
+    ctrip/integration/master-master/replication
+    ctrip/integration/master-master/full_sync
+    ctrip/integration/master-master/full_sync-2
+    ctrip/integration/master-master/partial-sync
+    ctrip/integration/master-master/replication-2
+    ctrip/integration/master-master/full_sync-3
+
+    ctrip/integration/composite/full-sync
+    ctrip/integration/composite/concurrent-conflict-full
+    ctrip/integration/composite/master-slave-failover
     ctrip/integration/master-slave/replication-psync
 
 }
