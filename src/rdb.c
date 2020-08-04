@@ -887,7 +887,6 @@ int rdbSaveInfoAuxFields(rio *rdb, int flags, rdbSaveInfo *rsi) {
 int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
     dictIterator *di = NULL;
     dictEntry *de;
-    dict* keys = NULL;
     char magic[10];
     int j;
     long long now = mstime();
@@ -896,6 +895,12 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
 
     if (server.rdb_checksum)
         rdb->update_cksum = rioGenericUpdateChecksum;
+    void (*save)(redisDb*, rio*, void*, void*);
+    save = (void (*)(redisDb*, rio*, void*, void*))(unsigned long)getModuleFunction(CRDT_MODULE, SAVE_CRDT_VALUE);
+    if(save == NULL) {
+        serverLog(LL_WARNING, "crdt module save data function is null");
+        return C_ERR;
+    }
     snprintf(magic,sizeof(magic),"REDIS%04d", CTRIP_RDB_PREFIX + RDB_VERSION);
     if (rdbWriteRaw(rdb,magic,9) == -1) goto werr;
     if (rdbSaveInfoAuxFields(rdb,flags,rsi) == -1) goto werr;
@@ -908,7 +913,6 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
         ) 
             continue;
         di = dictGetSafeIterator(d);
-        keys = dictCreate(&setDictType, NULL);
         if (!di) return C_ERR;
 
         /* Write the SELECT DB opcode */
@@ -935,19 +939,24 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
         /* Iterate this DB writing every entry */
         while((de = dictNext(di)) != NULL) {
             sds keystr = dictGetKey(de);
-            robj key, *o = dictGetVal(de);
+            robj key, *o = dictGetVal(de),*tombstone;
+            long long expire;
+            initStaticStringObject(key,keystr);
+            expire = getExpire(db,&key);
             if(isModuleCrdt(o) != C_OK) {
                 serverLog(LL_WARNING,"save value is not crdt key: %s", keystr);
-                long long expire;
-                initStaticStringObject(key,keystr);
-                expire = getExpire(db,&key);
                 if (rdbSaveKeyValuePair(rdb,&key,o,expire,now) == -1) goto werr;
             } else {
-                dictEntry *de = dictAddRaw(keys,keystr,NULL);
-                if (de) {
-                    dictSetKey(keys,de,sdsdup(keystr));
-                    dictSetVal(keys,de,NULL);
+                if (expire != -1) {
+                    if (rdbSaveType(rdb,RDB_OPCODE_EXPIRETIME_MS) == -1) return C_ERR;
+                    if (rdbSaveMillisecondTime(rdb,expire) == -1) return C_ERR;
                 }
+                if (rdbSaveType(rdb,RDB_CRDT_VALUE) == -1) return C_ERR;
+
+                if (rdbSaveStringObject(rdb,&key) == -1) return C_ERR;
+                tombstone = lookupTombstoneKey(db, &key);
+                void* moduleKey = createModuleKey(db, &key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE, o, tombstone);
+                save(db, rdb, &key, moduleKey);
             }
             
             /* When this RDB is produced as part of an AOF rewrite, move
@@ -960,13 +969,28 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
                 aofReadDiffFromParent();
             }
         }
-        if(crdt_enabled) {
-            if(rdbSaveCrdtData(rdb, db, keys, flags, &processed) == C_ERR) {
-                goto werr;
+        dictReleaseIterator(di);
+        di = dictGetSafeIterator(db->deleted_keys);
+        while((de = dictNext(di)) != NULL) {
+            sds keystr = dictGetKey(de);
+            robj key, *o = dictGetVal(de);
+            if(dictFind(db->dict,keystr)) {
+                continue;
+            }
+            initStaticStringObject(key,keystr);
+            if (rdbSaveType(rdb,RDB_CRDT_VALUE) == -1) return C_ERR;
+            if (rdbSaveStringObject(rdb,&key) == -1) return C_ERR;
+            void* moduleKey = createModuleKey(db, &key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE, NULL, o);
+            save(db, rdb, &key, moduleKey);
+            if(moduleKey != NULL) closeModuleKey(moduleKey);
+            if (flags & RDB_SAVE_AOF_PREAMBLE &&
+                rdb->processed_bytes > processed+AOF_READ_DIFF_INTERVAL_BYTES)
+            {
+                processed = rdb->processed_bytes;
+                aofReadDiffFromParent();
             }
         }
         dictReleaseIterator(di);
-        dictRelease(keys);
     }
     di = NULL; /* So that we don't release it again on error. */
 
@@ -1535,8 +1559,8 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
     redisDb *db = server.db+0;
     char buf[1024];
     long long expiretime, now = mstime();
-    int (*load)(redisDb*, robj*, void*);
-    load = (int (*)(redisDb*, robj*, void*))(unsigned long)getModuleFunction(CRDT_MODULE, LOAD_CRDT_VALUE);
+    int (*load)(redisDb*, robj*, void*, void*);
+    load = (int (*)(redisDb*, robj*, void*, void*))(unsigned long)getModuleFunction(CRDT_MODULE, LOAD_CRDT_VALUE);
     if(load == NULL) goto eoferr;
     rdb->update_cksum = rdbLoadProgressCallback;
     rdb->max_processing_chunk = server.loading_process_events_interval_bytes;
