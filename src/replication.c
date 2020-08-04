@@ -494,10 +494,12 @@ int masterTryPartialResynchronization(struct redisServer *srv, client *c) {
         psync_offset > (srv->repl_backlog_off + srv->repl_backlog_histlen))
     {
         serverLog(LL_NOTICE,
-            "Unable to partial resync with slave %s for lack of backlog (Slave request was: %lld).", replicationGetSlaveName(c), psync_offset);
+            "%sUnable to partial resync with slave %s for lack of backlog (Slave request was: %lld, mine is %lld).",
+            srv == &crdtServer ? "[CRDT]" : "", replicationGetSlaveName(c), psync_offset, srv->repl_backlog_off);
         if (psync_offset > srv->master_repl_offset) {
             serverLog(LL_WARNING,
-                "Warning: slave %s tried to PSYNC with an offset that is greater than the master replication offset(%lld).", replicationGetSlaveName(c), srv->master_repl_offset);
+                "%sWarning: slave %s tried to PSYNC with an offset(%lld) that is greater than the master replication offset(%lld).",
+                srv == &crdtServer ? "[CRDT]" : "", replicationGetSlaveName(c), psync_offset, srv->master_repl_offset);
         }
         goto need_full_resync;
     }
@@ -2133,7 +2135,10 @@ void replicationSetMaster(char *ip, int port) {
     cancelReplicationHandshake();
     /* Before destroying our master state, create a cached master using
      * our own parameters, to later PSYNC with the new master. */
-    if (was_master) replicationCacheMasterUsingMyself();
+    if (was_master) {
+        replicationCacheMasterUsingMyself();
+        crdtReplicationCacheMasterUsingMyself();
+    }
     server.repl_state = REPL_STATE_CONNECT;
     server.repl_down_since = 0;
 }
