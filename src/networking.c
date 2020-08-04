@@ -806,7 +806,7 @@ void freeClient(client *c) {
         }
     }
 
-    if (!server.master && c->flags & CLIENT_CRDT_MASTER) {
+    if (c->flags & CLIENT_CRDT_MASTER) {
         serverLog(LL_WARNING,"[CRDT]Connection with CRDT master lost.");
         if (!(c->flags & (CLIENT_CLOSE_AFTER_REPLY|
                           CLIENT_CLOSE_ASAP|
@@ -1389,8 +1389,17 @@ void processInputBuffer(client *c) {
         if (c->argc == 0) {
             resetClient(c);
         } else {
+            if (c->flags & CLIENT_MASTER && isMasterMySelf() != C_OK) {
+                c->peer_master = NULL;
+            }
             /* Only reset the client when the command was executed. */
             if (processCommand(c) == C_OK) {
+                if (c->flags & CLIENT_MASTER && c->peer_master != NULL && isMasterMySelf() != C_OK) {
+                    CRDT_Master_Instance* peer = c->peer_master;
+                    if(peer) { //
+                        peer->master->reploff += c->read_reploff - sdslen(c->querybuf) - c->reploff;
+                    }
+                }
                 if ((c->flags & CLIENT_MASTER
                     || ((c->flags & CLIENT_CRDT_MASTER) && c->peer_master->repl_state == REPL_STATE_CONNECTED))
                     && !(c->flags & CLIENT_MULTI)) {

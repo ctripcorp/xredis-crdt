@@ -289,6 +289,5 @@ start_server {tags {"crdt-del"} overrides {crdt-gid 1} config {crdt.conf} module
             assert_equal [crdt_stats [lindex $peers 0] crdt_non_type_conflict]  $before0
             assert_equal [crdt_stats [lindex $peers 1] crdt_non_type_conflict]  $before1
         }
-        
     }
 }

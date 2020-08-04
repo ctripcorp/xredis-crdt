@@ -1361,8 +1361,13 @@ int Verbatim(RedisModuleCtx *ctx, int flags) {
 int RM_ReplicateVerbatim(RedisModuleCtx *ctx) {
     return Verbatim(ctx, PROPAGATE_AOF|PROPAGATE_REPL);
 }
-int RM_CrdtReplicateVerbatim(RedisModuleCtx *ctx) {
-    return Verbatim(ctx, PROPAGATE_AOF|PROPAGATE_CRDT_REPL);
+int RM_CrdtReplicateVerbatim(int gid, RedisModuleCtx *ctx) {
+    if(crdtServer.crdt_gid == gid) {
+        return Verbatim(ctx, PROPAGATE_AOF|PROPAGATE_CRDT_REPL);
+    } else {
+        ctx->client->peer_master = getPeerMaster(gid);
+        return RM_ReplicateVerbatim(ctx);
+    }
 }
 
 /* This function will replicate the command exactly as it was defined.
@@ -1476,11 +1481,7 @@ int RM_CrdtReplicateAlsoNormReplicate(RedisModuleCtx *ctx, const char *cmdname, 
     return REDISMODULE_OK;
 }
 
-int RM_UpdatePeerReplOffset(RedisModuleCtx *ctx, int gid) {
-    return UpdatePeerReplOffset(ctx->client, gid);
-}
 int RM_ReplicationFeedStringToAllSlaves(int id, void* cmdbuf, size_t cmdlen) {
-    // serverLog(LL_WARNING, "cmd: %s", cmd->ptr);
     replicationFeedStringToAllSlaves(id, cmdbuf, cmdlen);
     return REDISMODULE_OK;
 }
@@ -4604,7 +4605,6 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(ReplicationFeedAllSlaves);
     REGISTER_API(ReplicationFeedStringToAllSlaves);
     REGISTER_API(ReplicationFeedRobjToAllSlaves);
-    REGISTER_API(UpdatePeerReplOffset);
     REGISTER_API(DeleteKey);
     REGISTER_API(UnlinkKey);
     REGISTER_API(StringSet);

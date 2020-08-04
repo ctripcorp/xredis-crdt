@@ -37,4 +37,5 @@
 
 void freePeerMaster(CRDT_Master_Instance *masterInstance);
 void crdtAllReplicationCacheMaster();
+void crdtReplicationCreateMasterClient(CRDT_Master_Instance *crdtMaster, int fd, int dbid);
 #endif //REDIS_CRDT_REPLICATION_H
