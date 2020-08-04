@@ -1176,6 +1176,12 @@ AC_SUBST([jemalloc_version_bugfix])
 AC_SUBST([jemalloc_version_nrev])
 AC_SUBST([jemalloc_version_gid])
 
+jemalloc_version_debug=0
+if test "x$enable_debug" = "x1" ; then
+  jemalloc_version_debug=1
+fi
+AC_SUBST([jemalloc_version_debug])
+
 dnl ============================================================================
 dnl Configure pthreads.
 
