@@ -1913,6 +1913,8 @@ unsigned long getClientOutputBufferMemoryUsage(client *c) {
  */
 int getClientType(client *c) {
     if (c->flags & CLIENT_MASTER) return CLIENT_TYPE_MASTER;
+    if (c->flags & CLIENT_CRDT_MASTER) return CLIENT_TYPE_CRDT_MASTER;
+    if (c->flags & CLIENT_CRDT_SLAVE) return CLIENT_TYPE_CRDT_SLAVE;
     if ((c->flags & CLIENT_SLAVE) && !(c->flags & CLIENT_MONITOR))
         return CLIENT_TYPE_SLAVE;
     if (c->flags & CLIENT_PUBSUB ) return CLIENT_TYPE_PUBSUB;
