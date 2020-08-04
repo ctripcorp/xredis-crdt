@@ -7,16 +7,24 @@ proc stop_bg_complex_data {handle} {
     catch {exec /bin/kill -9 $handle}
 }
 
+proc print_log_content {log} {
+    set fp [open $log r]
+    set content [read $fp]
+    close $fp
+    puts $content
+}
 start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {crdt.so}} {
     start_server {config {crdt.conf} overrides {crdt-gid 2} module {crdt.so}} {
 
         set peer1 [srv -1 client]
         set peer1_host [srv -1 host]
         set peer1_port [srv -1 port]
+        set peer1_stdout [srv 0 stdout]
         set peer1_gid 1
         set peer2 [srv 0 client]
         set peer2_host [srv 0 host]
         set peer2_port [srv 0 port]
+        set peer2_stdout [srv 0 stdout]
         set peer2_gid 2
 
         set load_handle0 [start_bg_complex_string_data $peer1_host $peer1_port 9 100000]
@@ -35,6 +43,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
             stop_bg_complex_data $load_handle1
             stop_bg_complex_data $load_handle2
             set retry 10
+            print_log_content $peer2_stdout
             while {$retry && ([$peer1 debug digest] ne [$peer2 debug digest])}\
             {
                 after 1000
