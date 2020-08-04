@@ -695,7 +695,7 @@ typedef struct readyList {
     redisDb *db;
     robj *key;
 } readyList;
-
+struct CRDT_Master_Instance;
 /* With multiplexing we need to take per-client state.
  * Clients are taken in a linked list. */
 typedef struct client {
@@ -754,10 +754,9 @@ typedef struct client {
     /* Response buffer */
     int bufpos;
     char buf[PROTO_REPLY_CHUNK_BYTES];
-
     /* Crdt Stuff*/
     VectorClock vectorClock; // used for slave client only, when the client is a master, use crdtMasterInstance
-    long long gid; // use for master client only, to locate the crdtMasterInstance
+    struct CRDT_Master_Instance* peer_master;
 } client;
 
 struct saveparam {
