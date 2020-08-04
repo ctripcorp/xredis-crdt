@@ -1601,6 +1601,7 @@ void crdtMergeDelCommand(client *c);
 void crdtMergeStartCommand(client *c);
 void crdtMergeEndCommand(client *c);
 void peerofCommand(client *c);
+void peerChangeCommand(client *c);
 void crdtReplicationSetMaster(int gid, char *ip, int port);
 void crdtReplicationCacheMaster(client *c);
 void crdtReplicationHandleMasterDisconnection(client *c);
