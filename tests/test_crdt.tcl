@@ -15,6 +15,7 @@ source tests/support/aof.tcl
 
 
 set ::all_tests { 
+    ctrip/integration/bug/master-master-add-sync-when-slave-change-to-master
     ctrip/master-not-crdt/more-write-db
     ctrip/master-not-crdt/update-peer-repl-offset
     ctrip/integration/master-slave/more-write-db

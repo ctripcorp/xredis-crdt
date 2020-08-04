@@ -326,6 +326,7 @@ struct redisCommand redisCommandTable[] = {
     {"crdt.role",crdtRoleCommand,3,"lst",0,NULL,0,0,0,0,0},
     {"crdt.info",crdtinfoCommand,-1,"lt",0,NULL,0,0,0,0,0},
     {"peerof",peerofCommand,4,"ast",0,NULL,0,0,0,0,0},
+    {"crdt.peerchange",peerChangeCommand,3,"lF", 0,NULL,0,0,0,0,0},
     {"debugCancelCrdt",debugCancelCrdt,3,"ast",0,NULL,0,0,0,0,0},
     {"tombstoneSize",tombstoneSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
     {"expireSize",expireSizeCommand,1,"rF",0,NULL,0,0,0,0,0},

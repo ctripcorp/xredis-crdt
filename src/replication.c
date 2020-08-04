@@ -136,7 +136,7 @@ void feedReplicationBacklog(struct redisServer *srv, void *ptr, size_t len) {
     unsigned char *p = ptr;
     srv->master_repl_offset += len;
 
-
+    
     /* This is a circular buffer, so write as much data we can at every
      * iteration and rewind the "idx" index if we reach the limit. */
     while(len) {
@@ -148,7 +148,7 @@ void feedReplicationBacklog(struct redisServer *srv, void *ptr, size_t len) {
             srv->repl_backlog_idx = 0;
         len -= thislen;
         p += thislen;
-        srv->repl_backlog_histlen += thislen;
+        srv->repl_backlog_histlen += thislen; 
     }
     if (srv->repl_backlog_histlen > srv->repl_backlog_size)
         srv->repl_backlog_histlen = srv->repl_backlog_size;

@@ -282,6 +282,11 @@ crdtMergeEndCommand(client *c) {
     mergeLogicClock(&crdtServer.vectorClock, &peerMaster->vectorClock, sourceGid);
     refreshGcVectorClock(peerMaster->vectorClock);
     if (getLongLongFromObjectOrReply(c, c->argv[4], &offset, NULL) != C_OK) return;
+    //when master->slave 
+    if(!peerMaster->master && peerMaster->cached_master) {
+        peerMaster->master = peerMaster->cached_master;
+        peerMaster->cached_master = NULL;
+    }
     peerMaster->master->reploff = offset;
     memcpy(peerMaster->master->replid, c->argv[3]->ptr, sdslen(c->argv[3]->ptr));
     if(!crdtServer.repl_backlog) createReplicationBacklog();
@@ -444,6 +449,42 @@ char *crdtSendSynchronousCommand(CRDT_Master_Instance *crdtMaster, int flags, in
  *    to the master reply. This will be used to populate the 'server.master'
  *    structure replication offset.
  */
+//crdt.peerChange <gid> <replid>
+void peerChangeCommand(client *c) {
+    long long gid;
+    if (getLongLongFromObjectOrReply(c, c->argv[1], &gid,
+        "invalid gid") != C_OK)
+        return;
+    if(!check_gid(gid)) return;
+    CRDT_Master_Instance* peer =  getPeerMaster(gid);
+    if(peer && peer->cached_master) {
+        memcpy(peer->cached_master->replid, c->argv[2]->ptr, sizeof(c->argv[2]->ptr));
+        peer->master = peer->cached_master;
+        peer->cached_master = NULL;
+    }
+    server.dirty++;
+    addReply(c,shared.ok);
+}
+void replicationFeedPeerChangeCommand(int gid, char* new) {
+    char gidstr[LONG_STR_SIZE];
+    int gid_len = ll2string(gidstr,sizeof(gidstr),gid);
+    robj* cmd = createObject(OBJ_STRING,
+                sdscatprintf(sdsempty(),
+                "*3\r\n$15\r\nCRDT.peerChange\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n",
+                                     gid_len, gidstr, CONFIG_RUN_ID_SIZE, new));
+    
+    if(server.repl_backlog) feedReplicationBacklogWithObject(&server,cmd);
+    listNode *ln;
+    listIter li;
+    listRewind(server.slaves,&li);
+    
+    while((ln = listNext(&li))) {
+        client *slave = ln->value;
+        if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) continue;
+        addReply(slave, cmd);
+    }
+    decrRefCount(cmd);
+}
 
 #define PSYNC_WRITE_ERROR 0
 #define PSYNC_WAIT_REPLY 1
@@ -550,10 +591,12 @@ int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, i
             memcpy(new,start,CONFIG_RUN_ID_SIZE);
             new[CONFIG_RUN_ID_SIZE] = '\0';
 
-            serverLog(LL_WARNING,"Master replication ID changed to %s",new);
+            serverLog(LL_WARNING,"[crdt]Master replication ID changed to %s",new);
 
             memcpy(masterInstance->master_replid, new, CONFIG_RUN_ID_SIZE);
             masterInstance->master_replid[CONFIG_RUN_ID_SIZE] = '\0';
+        
+            replicationFeedPeerChangeCommand(masterInstance->gid, new);
         }
 
         /* Setup the replication to continue. */
