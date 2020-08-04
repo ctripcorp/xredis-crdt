@@ -285,9 +285,9 @@ crdtMergeEndCommand(client *c) {
     peerMaster->master->reploff = offset;
     memcpy(peerMaster->master->replid, c->argv[3]->ptr, sdslen(c->argv[3]->ptr));
     if(!crdtServer.repl_backlog) createReplicationBacklog();
-    peerMaster->repl_state = REPL_STATE_CONNECTED;
     if (isMasterMySelf() == C_OK) {
         crdtReplicationSendAck(c->peer_master);
+        peerMaster->repl_state = REPL_STATE_CONNECTED;
     }
     server.dirty ++;
     serverLog(LL_NOTICE, "[CRDT][crdtMergeEndCommand][end] master gid: %lld", sourceGid);
@@ -1093,7 +1093,7 @@ int startCrdtBgsaveForReplication(long long min_logic_time) {
     return retval;
 
 }
-void crdtAllReplicationCacheMaster() {
+void crdtReplicationCacheAllMaster() {
     listIter li;
     listNode *ln;
     listRewind(crdtServer.crdtMasters, &li);
@@ -1195,6 +1195,7 @@ void crdtOvcCommand(client *c) {
             freeVectorClock(peerMaster->vectorClock);
         }
         freeVectorClock(vclock);
+        // about peerMaster reploff
         c->peer_master = peerMaster;
         peerMaster->vectorClock = newVectorClock;
     } else {
