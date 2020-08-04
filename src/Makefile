@@ -290,7 +290,7 @@ gcov:
 
 coverage:
 	$(MAKE) gcov
-	@(set -e; cd ..; ./runtest-crdt --clients 15)
+	@(set -e; cd ..; ./runtest-crdt --clients 1)
 	@geninfo -o crdt-redis.info .
 	@genhtml --legend -o lcov-html crdt-redis.info
 

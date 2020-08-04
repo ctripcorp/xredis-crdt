@@ -1,3 +1,4 @@
+
 proc log_file_matches {log pattern} {
     set fp [open $log r]
     set content [read $fp]

@@ -457,11 +457,6 @@ proc start_write_load {host port seconds} {
     exec $tclsh tests/helpers/gen_write_load.tcl $host $port $seconds &
 }
 
-proc start_write_load_with_interval {host port seconds interval} {
-    set tclsh [info nameofexecutable]
-    exec $tclsh tests/helpers/gen_write_load_with_interval.tcl $host $port $seconds $interval &
-}
-
 proc start_write_db_load {host port seconds db} {
     set tclsh [info nameofexecutable]
     exec $tclsh tests/helpers/gen_write_db_load.tcl $host $port $seconds $db &
