@@ -1516,11 +1516,11 @@ int incrCrdtConflict(int type) {
     }
     if (type & DATA_CONFLICT) {
         crdtServer.crdt_non_type_conflict++;
-        crdtServer.crdt_data_isomrphic_conflict++;
+        crdtServer.crdt_data_conflict++;
     }
     if (type & TOMBSTONE_CONFLICT) {
         crdtServer.crdt_non_type_conflict++;
-        crdtServer.crdt_tombstone_isomrphic_conflict++;
+        crdtServer.crdt_tombstone_conflict++;
     }
     if (type & DATA_TOMBSTONE_CONFLICT) {
         crdtServer.crdt_non_type_conflict++;

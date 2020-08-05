@@ -170,7 +170,7 @@ start_server {tags {"crdt-del"} overrides {crdt-gid 1} config {crdt.conf} module
         
         assert {[crdt_stats $redis_server crdt_non_type_conflict] == 7}
         assert {[crdt_stats $redis_server crdt_modify_conflict] == 9}
-        assert {[crdt_stats $redis_server crdt_tombstone_isomrphic_conflict] == 1}
+        assert {[crdt_stats $redis_server crdt_tombstone_conflict] == 1}
         wait_for_condition 50 1000 {
             [log_file_matches $server_log "*drop*"]
         } else {
@@ -232,11 +232,11 @@ start_server {tags {"crdt-del"} overrides {crdt-gid 1} config {crdt.conf} module
     test {crdt.del_hash and crdt.del_hash} {
         $redis_server CRDT.del_hash key-14 3  [clock milliseconds] "1:10;2:103;3:105" "1:10;2:103;3:105"
         $redis_server CRDT.del_hash key-14 2 [expr [clock milliseconds] - 10]   "1:10;2:105;3:103"   "1:10;2:105;3:103" 
-        # puts [crdt_stats $redis_server crdt_tombstone_isomrphic_conflict]
+        # puts [crdt_stats $redis_server crdt_tombstone_conflict]
         # puts [crdt_stats $redis_server crdt_modify_conflict]
         assert {[crdt_stats $redis_server crdt_non_type_conflict] == 12}
         assert {[crdt_stats $redis_server crdt_modify_conflict] == 14}
-        assert {[crdt_stats $redis_server crdt_tombstone_isomrphic_conflict] == 2}
+        assert {[crdt_stats $redis_server crdt_tombstone_conflict] == 2}
         wait_for_condition 50 1000 {
             [log_file_matches $server_log "*drop*"]
         } else {
@@ -249,7 +249,7 @@ start_server {tags {"crdt-del"} overrides {crdt-gid 1} config {crdt.conf} module
         $redis_server CRDT.rem_hash key-15 2 [expr [clock milliseconds] - 10]   "1:10;2:105;3:103"  k
         assert {[crdt_stats $redis_server crdt_non_type_conflict] == 13}
         assert {[crdt_stats $redis_server crdt_modify_conflict] == 15}
-        assert {[crdt_stats $redis_server crdt_tombstone_isomrphic_conflict] == 3}
+        assert {[crdt_stats $redis_server crdt_tombstone_conflict] == 3}
         wait_for_condition 50 1000 {
             [log_file_matches $server_log "*drop*"]
         } else {
@@ -274,7 +274,7 @@ start_server {tags {"crdt-del"} overrides {crdt-gid 1} config {crdt.conf} module
             assert_equal [crdt_stats [lindex $peers 0] crdt_non_type_conflict] 14
             assert_equal [crdt_stats [lindex $peers 0] crdt_modify_conflict] 15
             assert_equal [crdt_stats [lindex $peers 0] crdt_merge_conflict] 2
-            assert_equal [crdt_stats [lindex $peers 0] crdt_data_isomrphic_conflict] 5
+            assert_equal [crdt_stats [lindex $peers 0] crdt_data_conflict] 5
 
             set before1 [crdt_stats [lindex $peers 1] crdt_non_type_conflict]
             set before0 [crdt_stats [lindex $peers 0] crdt_non_type_conflict]

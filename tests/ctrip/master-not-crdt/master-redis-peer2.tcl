@@ -18,10 +18,16 @@ proc get_info_replication_attr_value {client type attr} {
 }
 proc check_peer {peerMaster  peerSlave masteindex} {
     set attr [format "peer%d_repl_offset" $masteindex]
+    set replid [format "peer%d_replid" $masteindex]
     assert  {
         [ get_info_replication_attr_value  $peerMaster crdt.info master_repl_offset] 
         ==
         [ get_info_replication_attr_value $peerSlave crdt.info $attr]
+    }
+    assert  {
+        [ get_info_replication_attr_value  $peerMaster crdt.info master_replid] 
+        ==
+        [ get_info_replication_attr_value $peerSlave crdt.info $replid]
     }
 }
 proc wait { client index type log}  {

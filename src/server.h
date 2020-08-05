@@ -1272,8 +1272,8 @@ struct redisServer {
     long long crdt_non_type_conflict;
     long long crdt_modify_conflict;
     long long crdt_merge_conflict;
-    long long crdt_data_isomrphic_conflict;
-    long long crdt_tombstone_isomrphic_conflict;
+    long long crdt_data_conflict;
+    long long crdt_tombstone_conflict;
     long long crdt_data_tombstone_conflict;
     long long local_clock;
 }redisServer;

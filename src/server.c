@@ -1923,8 +1923,8 @@ void resetServerStats(struct redisServer *srv) {
     srv->stat_sync_full = 0;
     srv->crdt_type_conflict = 0;
     srv->crdt_non_type_conflict = 0;
-    srv->crdt_data_isomrphic_conflict = 0;
-    srv->crdt_tombstone_isomrphic_conflict = 0;
+    srv->crdt_data_conflict = 0;
+    srv->crdt_tombstone_conflict = 0;
     srv->crdt_data_tombstone_conflict = 0;
     srv->crdt_modify_conflict = 0;
     srv->crdt_merge_conflict = 0;
@@ -3468,8 +3468,8 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                             "crdt_non_type_conflict:%lld\r\n"
                             "crdt_modify_conflict:%lld\r\n"
                             "crdt_merge_conflict:%lld\r\n"
-                            "crdt_data_isomrphic_conflict:%lld\r\n"
-                            "crdt_tombstone_isomrphic_conflict:%lld\r\n"
+                            "crdt_data_conflict:%lld\r\n"
+                            "crdt_tombstone_conflict:%lld\r\n"
                             "crdt_data_tombstone_conflict:%lld\r\n",
                             crdtServer.stat_sync_full,
                             crdtServer.stat_sync_partial_ok,
@@ -3479,8 +3479,8 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                             crdtServer.crdt_non_type_conflict,
                             crdtServer.crdt_modify_conflict,
                             crdtServer.crdt_merge_conflict,
-                            crdtServer.crdt_data_isomrphic_conflict,
-                            crdtServer.crdt_tombstone_isomrphic_conflict,
+                            crdtServer.crdt_data_conflict,
+                            crdtServer.crdt_tombstone_conflict,
                             crdtServer.crdt_data_tombstone_conflict);
     }
 
@@ -3509,12 +3509,14 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
 
                 CRDT_Master_Instance *masterInstance = listNodeValue(ln);
 
-
+                char* slave_replid = "000000";
                 long long slave_repl_offset = 0;
-                if (masterInstance->master)
+                if (masterInstance->master) {
                     slave_repl_offset = masterInstance->master->reploff;
-                else if (masterInstance->cached_master) {
+                    slave_replid = masterInstance->master->replid;
+                } else if (masterInstance->cached_master) {
                     slave_repl_offset = masterInstance->cached_master->reploff;
+                    slave_replid = masterInstance->cached_master->replid;
                 }
 
 
@@ -3526,7 +3528,8 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                                     "peer%d_link_status:%s\r\n"
                                     "peer%d_last_io_seconds_ago:%d\r\n"
                                     "peer%d_sync_in_progress:%d\r\n"
-                                    "peer%d_repl_offset:%lld\r\n",
+                                    "peer%d_repl_offset:%lld\r\n"
+                                    "peer%d_replid:%s\r\n",
                                     masterid,
                                     masterid, masterInstance->masterhost,
                                     masterid, masterInstance->masterport,
@@ -3536,7 +3539,8 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                                     masterid, masterInstance->master ?
                                     ((int) (server.unixtime - masterInstance->master->lastinteraction)) : -1,
                                     masterid, masterInstance->repl_state == REPL_STATE_TRANSFER,
-                                    masterid, slave_repl_offset
+                                    masterid, slave_repl_offset,
+                                    masterid, slave_replid
                 );
 
                 if (masterInstance->repl_state != REPL_STATE_CONNECTED) {
