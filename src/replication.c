@@ -2133,7 +2133,10 @@ void replicationSetMaster(char *ip, int port) {
     cancelReplicationHandshake();
     /* Before destroying our master state, create a cached master using
      * our own parameters, to later PSYNC with the new master. */
-    if (was_master) replicationCacheMasterUsingMyself();
+    if (was_master) {
+        replicationCacheMasterUsingMyself();
+        crdtReplicationAllPeersStateReset();
+    }
     server.repl_state = REPL_STATE_CONNECT;
     server.repl_down_since = 0;
 }
@@ -2173,6 +2176,7 @@ void replicationUnsetMaster(void) {
      * with PSYNC version 2, there is no need for full resync after a
      * master switch. */
     server.slaveseldb = -1;
+    crdtServer.slaveseldb = -1;
     server.repl_slave_repl_all = CONFIG_DEFAULT_SLAVE_REPLICATE_ALL;
 
     /* Once we turn from slave to master, we consider the starting time without
@@ -2229,7 +2233,6 @@ void slaveofCommand(client *c) {
         /* There was no previous master or the user specified a different one,
          * we can continue. */
         replicationSetMaster(c->argv[1]->ptr, port);
-        crdtReplicationCloseAllMasters();
         sds client = catClientInfoString(sdsempty(),c);
         serverLog(LL_NOTICE,"SLAVE OF %s:%d enabled (user request from '%s')",
             server.masterhost, server.masterport, client);
