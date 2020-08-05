@@ -90,7 +90,7 @@ start_redis [list overrides [list repl-diskless-sync-delay 1  ]] {
                 lappend slave_gid 2
                 [lindex $slave 1] config set repl-diskless-sync-delay 1
                 [lindex $slave 1] config crdt.set repl-diskless-sync-delay 1
-                test "value" {
+                test "value1" {
                     [lindex $slave 0] slaveof [lindex $master_hosts 0] [ lindex $master_ports 0]
                     [lindex $slave 1] slaveof [lindex $master_hosts 1] [ lindex $master_ports 1]
                     wait [lindex $master 0] 0 info [lindex $master_stdouts 1]
@@ -105,7 +105,9 @@ start_redis [list overrides [list repl-diskless-sync-delay 1  ]] {
                     [lindex $master 0] set key value
                     [lindex $master 1] hset hash k v
                     after 500
+                    # print_log_file [lindex $slave_stdouts 0]
                     assert_equal [[lindex $slave 0] get key] value
+                    # print_log_file [lindex $slave_stdouts 1]
                     assert_equal [[lindex $slave 1] hget hash k] v 
                     after 500
                     assert_equal [[lindex $slave 1] get key] value
@@ -183,9 +185,9 @@ start_redis [list overrides [list repl-diskless-sync-delay 1  ]] {
                     assert_equal [[lindex $slave 0] get key] value
                     assert_equal [[lindex $slave 1] hget hash k] v 
                     after 500
-                    print_log_file [lindex $slave_stdouts 1]
                     assert_equal [[lindex $slave 1] get key] value
                     assert_equal [[lindex $slave 0] hget hash k] v 
+                    print_log_file [lindex $slave_stdouts 1]
                     check_peer [lindex $slave 0] [lindex $slave 1] 0
                     check_peer [lindex $slave 1] [lindex $slave 0] 0
 

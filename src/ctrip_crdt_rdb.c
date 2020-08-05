@@ -188,7 +188,7 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
                                                   dictid_len, llstr));
             needDelete = C_OK;
         }
-        if(rioWriteBulkObject(rdb, selectcmd) == 0) goto werr;
+        if(rioWrite(rdb, selectcmd->ptr, sdslen(selectcmd->ptr)) == 0) goto werr;
         if (needDelete == C_OK) {
             decrRefCount(selectcmd);
         }

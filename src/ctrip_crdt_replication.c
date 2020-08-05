@@ -881,8 +881,9 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
 
     if (psync_result == PSYNC_FULLRESYNC) {
         serverLog(LL_NOTICE, "[CRDT] MASTER <-> SLAVE sync: Crdt Master accepted a Full Resynchronization.");
-        // crdtReplicationCreateMasterClient(crdtMaster, fd, -1);
-        createClient(fd);
+        client* c = createClient(fd);
+        c->flags |= CLIENT_CRDT_MASTER;
+        c->peer_master = crdtMaster;
         crdtMaster->repl_transfer_s = -1;
     }
 
@@ -894,7 +895,7 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
         goto error;
 
     }
-    serverLog(LL_NOTICE, "[CRDT] Replication: Master Client create successfully: %lld", crdtMaster->master->peer_master->gid);
+    serverLog(LL_NOTICE, "[CRDT] Replication: Master Client create successfully: %lld", crdtMaster->gid);
     crdtMaster->repl_state = REPL_STATE_TRANSFER;
     crdtMaster->repl_transfer_lastio = server.unixtime;
     return;
@@ -1034,7 +1035,21 @@ void crdtReplicationDiscardCachedMaster(CRDT_Master_Instance *crdtMaster) {
     crdtMaster->cached_master = NULL;
 }
 void crdtReplicationAllPeersStateReset() {
-
+    for (int gid = 0; gid < (MAX_PEERS + 1); gid++) {
+        CRDT_Master_Instance *crdtMaster = crdtServer.crdtMasters[gid];
+        if(crdtMaster == NULL) continue;
+        crdtReplicationDiscardCachedMaster(crdtMaster);
+        if(crdtMaster->repl_state == REPL_STATE_CONNECTED) {
+            if(crdtMaster->master) {
+                crdtReplicationCacheMaster(crdtMaster->master);
+                crdtMaster->master = crdtMaster->cached_master;
+                crdtMaster->cached_master = NULL;
+            }
+        } else {
+            crdtCancelReplicationHandshake(gid);
+        }
+        crdtMaster->repl_state = REPL_STATE_NONE;
+    }
 }
 /* Once we have a link with the master and the synchroniziation was
  * performed, this function materializes the master client we store

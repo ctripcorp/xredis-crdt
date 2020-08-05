@@ -15,6 +15,7 @@ source tests/support/aof.tcl
 
 
 set ::all_tests {
+    ctrip/integration/bug/peerof_other_peer_when_master-peer_full_sync
     ctrip/integration/master-slave/psync2
     ctrip/integration/master-slave/auth-gid
     ctrip/master-not-crdt/more-write-db

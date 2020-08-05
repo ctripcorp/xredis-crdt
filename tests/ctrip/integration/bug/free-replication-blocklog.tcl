@@ -96,7 +96,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                 $peer peerof $slave_gid $slave_host $slave_port
                 
                 wait $slave 0 crdt.info $slave_stdout
-                puts [$slave crdt.info stats]
+                # puts [$slave crdt.info stats]
                 set sync_partial_ok [ crdt_status $slave "sync_partial_ok" ]
                 if {$sync_partial_ok==0} {
                     print_log_content $slave_stdout
