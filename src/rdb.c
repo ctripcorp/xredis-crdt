@@ -1588,12 +1588,16 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
     CRDT_Master_Instance *currentMasterInstance = NULL;
     if (isCrdtRdb && crdt_enabled ) {
         if(crdtServer.crdtMasters == NULL) {
-            crdtServer.crdtMasters = listCreate();
-        }
-        if( listLength(crdtServer.crdtMasters)) {
-            while (listLength(crdtServer.crdtMasters)) {
-                listNode *ln = listFirst(crdtServer.crdtMasters);
-                freePeerMaster((CRDT_Master_Instance*)ln->value);
+            crdtServer.crdtMasters = zmalloc((MAX_PEERS + 1) * sizeof(void*));
+            int i = 0;
+            for(; i < (MAX_PEERS + 1); i ++) {
+                crdtServer.crdtMasters[i] = NULL;
+            }
+        } else {
+            for (int gid = 0; gid < (MAX_PEERS + 1); gid++) {
+                CRDT_Master_Instance *crdtMaster = crdtServer.crdtMasters[gid];
+                if (crdtMaster == NULL) continue;
+                freePeerMaster(crdtMaster);
             }
         }
 
@@ -1711,7 +1715,7 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                 CRDT_Master_Instance *masterInstance = getPeerMaster(gid);
                 if(masterInstance == NULL) {
                     masterInstance = createPeerMaster(NULL, gid);
-                    listAddNodeTail(crdtServer.crdtMasters, masterInstance);
+                    crdtServer.crdtMasters[gid] = masterInstance;
                 }
                 currentMasterInstance = masterInstance;
                 crdtReplicationCreateMasterClient(currentMasterInstance, -1, -1);

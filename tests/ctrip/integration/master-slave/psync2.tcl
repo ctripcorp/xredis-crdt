@@ -4,7 +4,7 @@ start_server {overrides {crdt-gid 1} module {crdt.so}} {
 start_server {overrides {crdt-gid 1} module {crdt.so}} {
 start_server {overrides {crdt-gid 1} module {crdt.so}} {
     set master_id 0                 ; # Current master
-    set start_time [clock seconds]  ; # Test start time
+    set start_time [clock milliseconds]  ; # Test start time
     set counter_value 0             ; # Current value of the Redis counter "x"
 
     # Config
@@ -12,7 +12,7 @@ start_server {overrides {crdt-gid 1} module {crdt.so}} {
 
     set no_exit 0                   ; # Do not exit at end of the test
 
-    set duration 1                 ; # Total test seconds
+    set duration 200               ; # Total test seconds
 
     set genload 1                   ; # Load master with writes at every cycle
 
@@ -32,7 +32,7 @@ start_server {overrides {crdt-gid 1} module {crdt.so}} {
     }
 
     set cycle 1
-    while {([clock seconds]-$start_time) < $duration} {
+    while {([clock milliseconds]-$start_time) < $duration} {
         test "PSYNC2: --- CYCLE $cycle ---" {
             incr cycle
         }

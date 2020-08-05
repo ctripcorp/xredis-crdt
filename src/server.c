@@ -2120,7 +2120,11 @@ void initServer(struct redisServer *srv) {
     }
 
     if(srv == &crdtServer) {
-        srv->crdtMasters = listCreate();
+        srv->crdtMasters = zmalloc((MAX_PEERS + 1) * sizeof(void*));
+        int i = 0;
+        for(; i < (MAX_PEERS + 1); i ++) {
+            srv->crdtMasters[i] = NULL;
+        }
         srv->crdt_gid = server.crdt_gid;
     }
     VectorClock vc = newVectorClock(1);
@@ -3499,54 +3503,48 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
         sdsfree(gcVectorClockStr);
         info = sdscatprintf(info, 
                             "gid:%d\r\n", crdtServer.crdt_gid);
-        if (listLength(crdtServer.crdtMasters)) {
-            listNode *ln;
-            listIter li;
-            int masterid = 0;
-
-            listRewind(crdtServer.crdtMasters,&li);
-            while((ln = listNext(&li))) {
-
-                CRDT_Master_Instance *masterInstance = listNodeValue(ln);
 
 
-                long long slave_repl_offset = 0;
-                if (masterInstance->master)
-                    slave_repl_offset = masterInstance->master->reploff;
-                else if (masterInstance->cached_master) {
-                    slave_repl_offset = masterInstance->cached_master->reploff;
-                }
+        int masterid = 0;
+        for (int gid = 0; gid < (MAX_PEERS + 1); gid++) {
+            CRDT_Master_Instance *masterInstance = crdtServer.crdtMasters[gid];
+            if(masterInstance == NULL) continue;
 
-
-                info = sdscatprintf(info,
-                                    "#Peer_Master_%d\r\n"
-                                    "peer%d_host:%s\r\n"
-                                    "peer%d_port:%d\r\n"
-                                    "peer%d_gid:%lld\r\n"
-                                    "peer%d_link_status:%s\r\n"
-                                    "peer%d_last_io_seconds_ago:%d\r\n"
-                                    "peer%d_sync_in_progress:%d\r\n"
-                                    "peer%d_repl_offset:%lld\r\n",
-                                    masterid,
-                                    masterid, masterInstance->masterhost,
-                                    masterid, masterInstance->masterport,
-                                    masterid, masterInstance->gid,
-                                    masterid, (masterInstance->repl_state == REPL_STATE_CONNECTED) ?
-                                    "up" : "down",
-                                    masterid, masterInstance->master ?
-                                    ((int) (server.unixtime - masterInstance->master->lastinteraction)) : -1,
-                                    masterid, masterInstance->repl_state == REPL_STATE_TRANSFER,
-                                    masterid, slave_repl_offset
-                );
-
-                if (masterInstance->repl_state != REPL_STATE_CONNECTED) {
-                    info = sdscatprintf(info,
-                                        "peer%d_link_down_since_seconds:%jd\r\n",
-                                        masterid, (intmax_t) server.unixtime - masterInstance->repl_down_since);
-                }
-                masterid ++;
+            long long slave_repl_offset = 0;
+            if (masterInstance->master)
+                slave_repl_offset = masterInstance->master->reploff;
+            else if (masterInstance->cached_master) {
+                slave_repl_offset = masterInstance->cached_master->reploff;
             }
 
+
+            info = sdscatprintf(info,
+                                "#Peer_Master_%d\r\n"
+                                "peer%d_host:%s\r\n"
+                                "peer%d_port:%d\r\n"
+                                "peer%d_gid:%lld\r\n"
+                                "peer%d_link_status:%s\r\n"
+                                "peer%d_last_io_seconds_ago:%d\r\n"
+                                "peer%d_sync_in_progress:%d\r\n"
+                                "peer%d_repl_offset:%lld\r\n",
+                                masterid,
+                                masterid, masterInstance->masterhost,
+                                masterid, masterInstance->masterport,
+                                masterid, masterInstance->gid,
+                                masterid, (masterInstance->repl_state == REPL_STATE_CONNECTED) ?
+                                "up" : "down",
+                                masterid, masterInstance->master ?
+                                ((int) (server.unixtime - masterInstance->master->lastinteraction)) : -1,
+                                masterid, masterInstance->repl_state == REPL_STATE_TRANSFER,
+                                masterid, slave_repl_offset
+            );
+
+            if (masterInstance->repl_state != REPL_STATE_CONNECTED) {
+                info = sdscatprintf(info,
+                                    "peer%d_link_down_since_seconds:%jd\r\n",
+                                    masterid, (intmax_t) server.unixtime - masterInstance->repl_down_since);
+            }
+            masterid ++;
         }
 
         info = sdscatprintf(info,

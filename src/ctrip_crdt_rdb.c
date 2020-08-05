@@ -515,37 +515,33 @@ int rdbLoadCrdtDbSize(rio* rdb, redisDb* db) {
     return C_OK;  
 }
 int rdbSaveAuxFieldCrdt(rio *rdb) {
-    if(listLength(crdtServer.crdtMasters)) {
-        listIter li;
-        listNode *ln;
-        listRewind(crdtServer.crdtMasters, &li);
-        while((ln = listNext(&li))) {
-            CRDT_Master_Instance *masterInstance = ln->value;
-            if (rdbSaveAuxFieldStrInt(rdb, "peer-master-gid", masterInstance->gid)
-                == -1)  return C_ERR;
-            if (rdbSaveAuxFieldStrStr(rdb, "peer-master-host", masterInstance->masterhost)
-                == -1)  return C_ERR;
-            if (rdbSaveAuxFieldStrInt(rdb, "peer-master-port", masterInstance->masterport)
-                == -1)  return C_ERR;
-            char* replid = NULL;
-            long long replid_offset  = -1;
-            if(masterInstance->master) {
-                replid = masterInstance->master->replid;
-                replid_offset = masterInstance->master->reploff;
-                serverLog(LL_WARNING, "master reploff %lld, replid %lld", replid_offset, masterInstance->master_initial_offset);
-            } else if(masterInstance->cached_master) {
-                replid = masterInstance->cached_master->replid;
-                replid_offset = masterInstance->cached_master->reploff;
-            } else {
-                replid = masterInstance->master_replid;
-                replid_offset = masterInstance->master_initial_offset;
-            }
-            if (rdbSaveAuxFieldStrStr(rdb, "peer-master-repl-id", replid) 
-                == -1)  return C_ERR;
-            if (rdbSaveAuxFieldStrInt(rdb, "peer-master-repl-offset", replid_offset)
-                == -1)  return C_ERR;
- 
+    for (int gid = 0; gid < (MAX_PEERS + 1); gid++) {
+        CRDT_Master_Instance *masterInstance = crdtServer.crdtMasters[gid];
+        if(masterInstance == NULL) continue;
+        if (rdbSaveAuxFieldStrInt(rdb, "peer-master-gid", masterInstance->gid)
+            == -1)  return C_ERR;
+        if (rdbSaveAuxFieldStrStr(rdb, "peer-master-host", masterInstance->masterhost)
+            == -1)  return C_ERR;
+        if (rdbSaveAuxFieldStrInt(rdb, "peer-master-port", masterInstance->masterport)
+            == -1)  return C_ERR;
+        char* replid = NULL;
+        long long replid_offset  = -1;
+        if(masterInstance->master) {
+            replid = masterInstance->master->replid;
+            replid_offset = masterInstance->master->reploff;
+            serverLog(LL_WARNING, "master reploff %lld, replid %lld", replid_offset, masterInstance->master_initial_offset);
+        } else if(masterInstance->cached_master) {
+            replid = masterInstance->cached_master->replid;
+            replid_offset = masterInstance->cached_master->reploff;
+        } else {
+            replid = masterInstance->master_replid;
+            replid_offset = masterInstance->master_initial_offset;
         }
+        if (rdbSaveAuxFieldStrStr(rdb, "peer-master-repl-id", replid)
+            == -1)  return C_ERR;
+        if (rdbSaveAuxFieldStrInt(rdb, "peer-master-repl-offset", replid_offset)
+            == -1)  return C_ERR;
+
     }
     return C_OK;
 }
