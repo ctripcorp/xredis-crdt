@@ -50,6 +50,7 @@
 
 #define max(x, y) x > y ? x : y
 #define GIDSIZE 4
+#define MAX_PEERS ((1 << GIDSIZE) - 1)
 /**
  * To shrink down mem usage, an unsigned long long will stand for [gid, clock]
  * where, higher 4 bits is allocated for gid (16 gid in total)

@@ -68,10 +68,8 @@ void freePeerMaster(CRDT_Master_Instance *masterInstance) {
     if (!masterInstance) {
         return;
     }
-    list *l = crdtServer.crdtMasters;
-    listNode *ln = listSearchKey(l, masterInstance);
-    serverAssert(ln != NULL);
-    listDelNode(l,ln);
+    int gid = (int) masterInstance->gid;
+    crdtServer.crdtMasters[gid] = NULL;
     if(masterInstance->masterhost) {
         sdsfree(masterInstance->masterhost);
         masterInstance->masterhost = NULL;
@@ -97,19 +95,7 @@ void freePeerMaster(CRDT_Master_Instance *masterInstance) {
 }
 
 CRDT_Master_Instance *getPeerMaster(int gid) {
-    listIter li;
-    listNode *ln;
-    CRDT_Master_Instance *peerMaster = NULL;
-
-    listRewind(crdtServer.crdtMasters, &li);
-    while((ln = listNext(&li)) != NULL) {
-        CRDT_Master_Instance *crdtMaster = ln->value;
-        if (crdtMaster->gid == gid) {
-            peerMaster = crdtMaster;
-            break;
-        }
-    }
-    return peerMaster;
+    return crdtServer.crdtMasters[gid];
 }
 
 void refreshVectorClock(client *c, sds vcStr) {
@@ -209,7 +195,7 @@ void crdtReplicationSetMaster(int gid, char *ip, int port) {
     CRDT_Master_Instance *peerMaster = getPeerMaster(gid);
     if (!peerMaster) {
         peerMaster = createPeerMaster(NULL, gid);
-        listAddNodeTail(crdtServer.crdtMasters, peerMaster);
+        crdtServer.crdtMasters[gid] = peerMaster;
     }
     if (peerMaster->masterhost != NULL) {
         sdsfree(peerMaster->masterhost);
@@ -1094,11 +1080,9 @@ int startCrdtBgsaveForReplication(long long min_logic_time) {
 
 }
 void crdtReplicationCacheAllMaster() {
-    listIter li;
-    listNode *ln;
-    listRewind(crdtServer.crdtMasters, &li);
-    while((ln = listNext(&li)) != NULL) {
-        CRDT_Master_Instance *crdtMaster = ln->value;
+    for (int gid = 0; gid < (MAX_PEERS + 1); gid++) {
+        CRDT_Master_Instance *crdtMaster = crdtServer.crdtMasters[gid];
+        if(crdtMaster == NULL) continue;
         if(crdtMaster->master) {
             crdtReplicationDiscardCachedMaster(crdtMaster);
             crdtReplicationCacheMaster(crdtMaster->master);
@@ -1542,17 +1526,17 @@ void replicationFeedAllSlaves(int dictid, robj **argv, int argc) {
 }
 
 void crdtReplicationCloseAllMasters() {
-    serverLog(LL_NOTICE, "[CRDT][begin]disconnect all crdt masters: %lu", listLength(crdtServer.crdtMasters));
-    listIter li;
-    listNode *ln;
-    listRewind(crdtServer.crdtMasters, &li);
-    while ((ln = listNext(&li)) != NULL) {
-        CRDT_Master_Instance *crdtMaster = ln->value;
+    serverLog(LL_NOTICE, "[CRDT][begin]disconnect all crdt masters");
+    for (int gid = 0; gid < (MAX_PEERS + 1); gid++) {
+        CRDT_Master_Instance *crdtMaster = crdtServer.crdtMasters[gid];
+        if(crdtMaster == NULL) {
+            continue;
+        }
         crdtReplicationDiscardCachedMaster(crdtMaster);
         if(crdtMaster->repl_state == REPL_STATE_CONNECTED) {
             if(crdtMaster->master) {freeClient(crdtMaster->master);}
         } else {
-            crdtCancelReplicationHandshake(crdtMaster->gid);
+            crdtCancelReplicationHandshake(gid);
         }
         crdtMaster->repl_state = REPL_STATE_NONE;
     }
@@ -1569,16 +1553,16 @@ void crdtReplicationCron(void) {
      * Connect crdt master if and only if I'm NOT a SLAVE here
      * SLAVE SHOULD RECEIVE DATA from their masters*/
     if (isMasterMySelf() == C_OK) {
-        listRewind(crdtServer.crdtMasters, &li);
-        while ((ln = listNext(&li)) != NULL) {
-            CRDT_Master_Instance *crdtMaster = ln->value;
-
-
+        for (int gid = 0; gid < (MAX_PEERS + 1); gid++) {
+            CRDT_Master_Instance *crdtMaster = crdtServer.crdtMasters[gid];
+            if (crdtMaster == NULL) {
+                continue;
+            }
             if (crdtMaster->masterhost &&
                 (crdtMaster->repl_state == REPL_STATE_CONNECTING || crdtSlaveIsInHandshakeState(crdtMaster)) &&
                 (time(NULL) - crdtMaster->repl_transfer_lastio) > crdtServer.repl_timeout) {
                 serverLog(LL_NOTICE, "[CRDT]Timeout connecting to the MASTER...");
-                crdtCancelReplicationHandshake(crdtMaster->gid);
+                crdtCancelReplicationHandshake(gid);
             }
 
             /* Bulk transfer I/O timeout? */
@@ -1586,7 +1570,7 @@ void crdtReplicationCron(void) {
                 (time(NULL) - crdtMaster->repl_transfer_lastio) > crdtServer.repl_timeout) {
                 serverLog(LL_NOTICE,
                           "[CRDT]Timeout receiving bulk data from MASTER... If the problem persists try to set the 'repl-timeout' parameter in redis.conf to a larger value.");
-                crdtCancelReplicationHandshake(crdtMaster->gid);
+                crdtCancelReplicationHandshake(gid);
             }
 
             /* Timed out master when we are an already connected slave? */

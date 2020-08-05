@@ -157,32 +157,19 @@ void expireSizeCommand(client *c) {
  * if no access is performed on them.
  *----------------------------------------------------------------------------*/
 VectorClock getGcVectorClock() {
-    listIter li;
-    listNode *ln;
     VectorClock gcVectorClock = dupVectorClock(crdtServer.vectorClock);
-    if (crdtServer.crdtMasters == NULL || listLength(crdtServer.crdtMasters) == 0) {
-        return gcVectorClock;
-    }
-    listRewind(crdtServer.crdtMasters, &li);
-    while ((ln = listNext(&li)) != NULL) {
-        CRDT_Master_Instance *crdtMaster = ln->value;
+
+    int index = 0;
+    for(; index < MAX_PEERS + 1; index ++) {
+
+        CRDT_Master_Instance *crdtMaster = crdtServer.crdtMasters[index];
         if (crdtMaster == NULL) {
             continue;
         }
         VectorClock other = crdtMaster->vectorClock;
         VectorClock old = gcVectorClock;
         gcVectorClock = mergeMinVectorClock(old, other);
-        
         freeVectorClock(old);
-        // for (int i = 0; i < gcVectorClock->length; i++) {
-        //     VectorClockUnit *gcVectorClockUnit = &(gcVectorClock->clocks[i]);
-        //     VectorClockUnit *otherVectorClockUnit = getVectorClockUnit(other, gcVectorClock->clocks[i].gid);
-        //     if(otherVectorClockUnit != NULL) {
-        //         gcVectorClockUnit->logic_time = min(gcVectorClockUnit->logic_time, otherVectorClockUnit->logic_time);
-        //     } else {
-        //         gcVectorClockUnit->logic_time = 0;
-        //     }
-        // }
     }
     return gcVectorClock;
 }

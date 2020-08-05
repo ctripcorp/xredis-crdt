@@ -1266,7 +1266,7 @@ struct redisServer {
     char* crdt_namespace;
     VectorClock vectorClock;
     VectorClock gcVectorClock;
-    list *crdtMasters;
+    struct CRDT_Master_Instance **crdtMasters;
     int active_crdt_ovc;      /* Can be disabled for testing purposes. */
     long long crdt_type_conflict;
     long long crdt_non_type_conflict;
