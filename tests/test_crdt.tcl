@@ -15,127 +15,44 @@ source tests/support/aof.tcl
 
 
 set ::all_tests {
-    ctrip/integration/master-slave/psync2
-    ctrip/integration/master-slave/auth-gid
-    ctrip/master-not-crdt/more-write-db
-    ctrip/master-not-crdt/update-peer-repl-offset
-    ctrip/integration/master-slave/more-write-db
-    ctrip/integration/master-slave/slave-peer-offset
-
-    ctrip/master-not-crdt/peerof
-
-    ctrip/unit/namespace
-    ctrip/unit/module_memory
-    ctrip/integration/bug/free-replication-blocklog
-    ctrip/master-not-crdt/crdt_replid_reuse
-    ctrip/integration/bug/not_remember_slave_key_with_expire_when_master_is_non_crdt
-    ctrip/unit/crdt_command
-    ctrip/readonly/basic_crdt_type
-    ctrip/readonly/basic_type
-    ctrip/readonly/basic_crdt_type_del
-    ctrip/unit/peerof
-    ctrip/unit/dict-expend
-    ctrip/integration/bug/slave-merge-expired-object-bug
-    ctrip/integration/bug/peerof
-    ctrip/integration/master-master/add_sync
-
-    ctrip/master-not-crdt/master-redis-peer2
-    ctrip/master-not-crdt/master-redis-peer
-    ctrip/master-not-crdt/jump-vectorclock
-    ctrip/master-not-crdt/crdt-redis-when-inited-not-full-sync-from-redis
-    ctrip/master-not-crdt/full-sync-error-datatype
-    ctrip/master-not-crdt/load-redis-rdb
-    ctrip/master-not-crdt/master-redis-slave-crdt
-    ctrip/master-not-crdt/add-sync-stop
-    ctrip/master-not-crdt/full-sync-error-datatype2
-    ctrip/master-not-crdt/full-sync-stop
-    ctrip/master-not-crdt/slave-redis
-    ctrip/unit/aof
-
-    ctrip/unit/expire
-    ctrip/integration/composite/master-slave-failover
-    ctrip/unit/crdt_publish
-    ctrip/integration/master-slave/rdb3
-    ctrip/integration/master-slave/auth-gid
-    ctrip/integration/bug/redis-unfree-client-when-master-to-slave
-    ctrip/integration/bug/hash-miss-send-when-full-sync
-    ctrip/integration/bug/full-sync-timeout
-
-    ctrip/basic/basic_crdt_type
-    ctrip/basic/basic_type
-    ctrip/basic/basic_crdt_type_del
-
-
-    ctrip/unit/crdt_hash
-    ctrip/unit/crdt_del
-    ctrip/unit/crdt_register
-    ctrip/unit/merge_different_type
-    ctrip/integration/composite/master-slave-failover
-    ctrip/unit/crdt_hdel_mem_leak
-    ctrip/unit/gc
-    ctrip/unit/pubsub
-    ctrip/integration/bug/redis-crash-when-full-sync-hash-merge
-    ctrip/integration/bug/redis-when-full-sync-mater-timeout-vectorclock-update
-    ctrip/integration/master-slave/replication
-    ctrip/integration/master-slave/replication-1
-    ctrip/integration/master-slave/replication-2
-    ctrip/integration/master-slave/replication-3
-    ctrip/integration/master-slave/replication-4
-    ctrip/integration/master-slave/psync2-reg
-
-    ctrip/integration/master-master/replication
-    ctrip/integration/master-master/full_sync
-    ctrip/integration/master-master/full_sync-2
-    ctrip/integration/master-master/partial-sync
-    ctrip/integration/master-master/replication-2
-    ctrip/integration/master-master/full_sync-3
-
-    ctrip/integration/composite/full-sync
-    ctrip/integration/composite/concurrent-conflict-full
-    ctrip/integration/composite/master-slave-failover
-    ctrip/unit/crdt_conflict
-    ctrip/unit/crdt_del_conflict
-    ctrip/integration/master-slave/rdb
-    ctrip/integration/master-slave/rdb2
-    ctrip/integration/master-slave/psync2
-    ctrip/integration/master-slave/replication-psync
+    ctrip/integration/peer-partial-sync/master-type-crdts
 }
 
-set ::temp_tests {
-    
-    #####
-    ctrip/integration/bug/redis-crash-when-full-sync-hash-merge
-    ctrip/integration/bug/redis-when-full-sync-mater-timeout-vectorclock-update
-    
-    
-    ctrip/unit/merge_different_type
-    ctrip/integration/composite/master-slave-failover
-    ctrip/unit/crdt_hdel_mem_leak
-    ctrip/unit/gc
-    
-    ctrip/unit/crdt_conflict
-    ctrip/unit/crdt_del_conflict
+    set ::temp_tests {
 
-    ctrip/integration/master-slave/replication
-    ctrip/integration/master-slave/replication-1
-    ctrip/integration/master-slave/replication-2
-    ctrip/integration/master-slave/replication-3
-    ctrip/integration/master-slave/replication-4
-    ctrip/integration/master-slave/psync2
-    ctrip/integration/master-slave/psync2-reg
+        #####
+        ctrip/integration/bug/redis-crash-when-full-sync-hash-merge
+        ctrip/integration/bug/redis-when-full-sync-mater-timeout-vectorclock-update
 
 
-    ctrip/integration/master-master/replication
-    ctrip/integration/master-master/full_sync
-    ctrip/integration/master-master/full_sync-2
-    ctrip/integration/master-master/partial-sync
-    ctrip/integration/master-master/replication-2
-    ctrip/integration/master-master/full_sync-3
+        ctrip/unit/merge_different_type
+        ctrip/integration/composite/master-slave-failover
+        ctrip/unit/crdt_hdel_mem_leak
+        ctrip/unit/gc
 
-    ctrip/integration/composite/full-sync
-    ctrip/integration/composite/concurrent-conflict-full
-    ctrip/integration/composite/master-slave-failover
-    ctrip/integration/master-slave/replication-psync
+        ctrip/unit/crdt_conflict
+        ctrip/unit/crdt_del_conflict
+
+        ctrip/integration/master-slave/replication
+        ctrip/integration/master-slave/replication-1
+        ctrip/integration/master-slave/replication-2
+        ctrip/integration/master-slave/replication-3
+        ctrip/integration/master-slave/replication-4
+        ctrip/integration/master-slave/psync2
+        ctrip/integration/master-slave/psync2-reg
+
+
+        ctrip/integration/master-master/replication
+        ctrip/integration/master-master/full_sync
+        ctrip/integration/master-master/full_sync-2
+        ctrip/integration/master-master/partial-sync
+        ctrip/integration/master-master/replication-2
+        ctrip/integration/master-master/full_sync-3
+
+        ctrip/integration/composite/full-sync
+        ctrip/integration/composite/concurrent-conflict-full
+        ctrip/integration/composite/master-slave-failover
+        ctrip/integration/master-slave/replication-psync
 
 }
 

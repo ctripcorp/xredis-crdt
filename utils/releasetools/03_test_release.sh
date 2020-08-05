@@ -21,6 +21,7 @@ ssh antirez@metal "export TERM=xterm;
                    make;
                    ./runtest;
                    ./runtest-sentinel;
+                   ./runtest-crdt
                    if [ -x runtest-cluster ]; then
                        ./runtest-cluster;
                    fi"
