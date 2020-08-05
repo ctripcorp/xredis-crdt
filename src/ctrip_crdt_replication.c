@@ -42,7 +42,7 @@
 
 void crdtReplicationResurrectCachedMaster(CRDT_Master_Instance *crdtMaster, int newfd);
 void crdtReplicationDiscardCachedMaster(CRDT_Master_Instance *crdtMaster);
-void crdtReplicationCreateMasterClient(CRDT_Master_Instance *crdtMaster, int fd, int dbid);
+
 
 
 /**---------------------------CRDT Master Instance Related--------------------------------*/
@@ -197,6 +197,8 @@ void peerofCommand(client *c) {
         serverLog(LL_NOTICE, "[CRDT]PEER OF %lld %s:%d enabled (user request from '%s')",
                   gid, peerMaster->masterhost, peerMaster->masterport, client);
         sdsfree(client);
+    } else {
+        crdtReplicationCreateMasterClient(peerMaster, -1, -1);
     }
     server.dirty ++;
     addReply(c,shared.ok);
@@ -268,12 +270,7 @@ crdtMergeEndCommand(client *c) {
     long long sourceGid, offset;
     if (getLongLongFromObjectOrReply(c, c->argv[1], &sourceGid, NULL) != C_OK) return;
     if(!check_gid(sourceGid)) goto err;
-    CRDT_Master_Instance *peerMaster = NULL;
-    if (isMasterMySelf() == C_OK) {
-       peerMaster = c->peer_master;
-    } else {
-        peerMaster = getPeerMaster(sourceGid);
-    }
+    CRDT_Master_Instance *peerMaster = getPeerMaster(sourceGid);
     peerMaster->repl_transfer_lastio = server.unixtime;
     if (!peerMaster) goto err;
     serverLog(LL_NOTICE, "[CRDT][crdtMergeEndCommand][begin] master gid: %lld", sourceGid);
@@ -284,13 +281,13 @@ crdtMergeEndCommand(client *c) {
     peerMaster->vectorClock = sdsToVectorClock(c->argv[2]->ptr);
     mergeLogicClock(&crdtServer.vectorClock, &peerMaster->vectorClock, sourceGid);
     refreshGcVectorClock(peerMaster->vectorClock);
-    memcpy(peerMaster->master_replid, c->argv[3]->ptr, sizeof(peerMaster->master_replid));
     if (getLongLongFromObjectOrReply(c, c->argv[4], &offset, NULL) != C_OK) return;
-    peerMaster->master_initial_offset = offset;
+    peerMaster->master->reploff = offset;
+    memcpy(peerMaster->master->replid, c->argv[3]->ptr, sdslen(c->argv[3]->ptr));
     if(!crdtServer.repl_backlog) createReplicationBacklog();
     if (isMasterMySelf() == C_OK) {
-        peerMaster->repl_state = REPL_STATE_CONNECTED;
         crdtReplicationSendAck(c->peer_master);
+        peerMaster->repl_state = REPL_STATE_CONNECTED;
     }
     server.dirty ++;
     serverLog(LL_NOTICE, "[CRDT][crdtMergeEndCommand][end] master gid: %lld", sourceGid);
@@ -1041,15 +1038,16 @@ void crdtReplicationDiscardCachedMaster(CRDT_Master_Instance *crdtMaster) {
  * performed, this function materializes the master client we store
  * at server.master, starting from the specified file descriptor. */
 void crdtReplicationCreateMasterClient(CRDT_Master_Instance *crdtMaster, int fd, int dbid) {
-    crdtMaster->master = createClient(fd);
-    crdtMaster->master->peer_master = crdtMaster;
-    crdtMaster->master->flags |= CLIENT_CRDT_MASTER;
-    crdtMaster->master->authenticated = 1;
-    crdtMaster->master->reploff = crdtMaster->master_initial_offset;
-    crdtMaster->master->read_reploff = crdtMaster->master->reploff;
-    memcpy(crdtMaster->master->replid, crdtMaster->master_replid,
+    client* c = createClient(fd);
+    c->peer_master = crdtMaster;
+    c->flags |= CLIENT_CRDT_MASTER;
+    c->authenticated = 1;
+    c->reploff = crdtMaster->master_initial_offset;
+    c->read_reploff = c->reploff;
+    memcpy(c->replid, crdtMaster->master_replid,
            sizeof(crdtMaster->master_replid));
-    if (dbid != -1) selectDb(crdtMaster->master,dbid);
+    if (dbid != -1) selectDb(c,dbid);
+    crdtMaster->master = c;
 }
 
 
@@ -1095,17 +1093,16 @@ int startCrdtBgsaveForReplication(long long min_logic_time) {
     return retval;
 
 }
-void crdtAllReplicationCacheMaster() {
+void crdtReplicationCacheAllMaster() {
     listIter li;
     listNode *ln;
     listRewind(crdtServer.crdtMasters, &li);
     while((ln = listNext(&li)) != NULL) {
         CRDT_Master_Instance *crdtMaster = ln->value;
-        if(crdtMaster->master == NULL) {
-            crdtReplicationCreateMasterClient(crdtMaster, -1, -1);
+        if(crdtMaster->master) {
+            crdtReplicationDiscardCachedMaster(crdtMaster);
+            crdtReplicationCacheMaster(crdtMaster->master);
         }
-        crdtReplicationDiscardCachedMaster(crdtMaster);
-        crdtReplicationCacheMaster(crdtMaster->master);
     }
 }
 void crdtReplicationCacheMaster(client *c) {
@@ -1198,7 +1195,8 @@ void crdtOvcCommand(client *c) {
             freeVectorClock(peerMaster->vectorClock);
         }
         freeVectorClock(vclock);
-        UpdatePeerReplOffset(c, gid);
+        // about peerMaster reploff
+        c->peer_master = peerMaster;
         peerMaster->vectorClock = newVectorClock;
     } else {
         feedCrdtBacklog(c->argv, c->argc);
@@ -1850,14 +1848,4 @@ void crdtRoleCommand(client *c) {
     }
 }
 
-int UpdatePeerReplOffset(client* c, int gid) {
-    if(isMasterMySelf() != C_OK) {
-        CRDT_Master_Instance* instance =  getPeerMaster(gid); 
-        if(instance != NULL) {
-            long long l = c->read_reploff - sdslen(c->querybuf) - c->reploff;
-            instance->master_initial_offset += l;
-        }
-        
-    }
-    return C_OK;
-}
+

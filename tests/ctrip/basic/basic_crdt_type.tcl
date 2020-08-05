@@ -802,6 +802,7 @@ proc basic_test { type create check delete} {
         set slave_hosts {}
         set slave_ports {}
         set slave_logs {}
+        set slave_gids {}
         set peer_stdouts {}
         lappend peer_stdouts [srv 0 stdout]
         lappend peers [srv 0 client]
@@ -814,7 +815,8 @@ proc basic_test { type create check delete} {
             lappend slaves [srv 0 client]
             lappend slave_hosts [srv 0 host]
             lappend slave_ports [srv 0 port]
-            lappend slave_logs  1
+            lappend slave_logs  [srv 0 stdout]
+            lappend slave_gids 1
 
             [lindex $slaves 0] config crdt.set repl-diskless-sync-delay 1
             [lindex $slaves 0] config set repl-diskless-sync-delay 1
