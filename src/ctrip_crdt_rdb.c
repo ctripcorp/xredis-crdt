@@ -427,7 +427,8 @@ int mergeCrdtObjectCommand(client *c, DictFindFunc find, DictAddFunc add, DictDe
     return C_OK;
 
 error:
-    crdtCancelReplicationHandshake(sourceGid);
+    serverLog(LL_NOTICE, "[CRDT][mergeCrdtObjectCommand][freeClient] gid: %lld", sourceGid);
+    freeClient(c);
     return C_ERR;
 }
 

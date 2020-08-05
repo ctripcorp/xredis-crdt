@@ -230,9 +230,9 @@ void crdtReplicationUnsetMaster(int gid) {
 void
 crdtMergeStartCommand(client *c) {
     serverLog(LL_NOTICE, "[CRDT][crdtMergeStartCommand][begin]");
-    long long sourceGid;
-    if (getLongLongFromObjectOrReply(c, c->argv[1], &sourceGid, NULL) != C_OK) return;
-    if(!check_gid(sourceGid)) { return; }
+    long long sourceGid = -1;
+    if (getLongLongFromObjectOrReply(c, c->argv[1], &sourceGid, NULL) != C_OK) goto err;
+    if(!check_gid(sourceGid)) { goto err; }
     CRDT_Master_Instance *peerMaster = getPeerMaster(sourceGid);
     //clear cache_master and master
     if(peerMaster->master) {
@@ -258,14 +258,20 @@ crdtMergeStartCommand(client *c) {
     freeVectorClock(curGcVclock);
     server.dirty ++;
     serverLog(LL_NOTICE, "[CRDT][crdtMergeStartCommand][end] master gid: %lld", sourceGid);
+    return;
+err:
+    serverLog(LL_NOTICE, "[CRDT][crdtMergeStartCommand][crdtCancelReplicationHandshake] master gid: %lld", sourceGid);
+    freeClient(c);
+    return;
+
 }
 
 //CRDT.END_MERGE <gid> <vector-clock> <repl_id> <offset>
 // 0               1        2            3          4
 void
 crdtMergeEndCommand(client *c) {
-    long long sourceGid, offset;
-    if (getLongLongFromObjectOrReply(c, c->argv[1], &sourceGid, NULL) != C_OK) return;
+    long long sourceGid = -1, offset;
+    if (getLongLongFromObjectOrReply(c, c->argv[1], &sourceGid, NULL) != C_OK) goto err;
     if(!check_gid(sourceGid)) goto err;
     CRDT_Master_Instance *peerMaster = getPeerMaster(sourceGid);
     peerMaster->repl_transfer_lastio = server.unixtime;
@@ -294,9 +300,7 @@ crdtMergeEndCommand(client *c) {
 
 err:
     serverLog(LL_NOTICE, "[CRDT][crdtMergeEndCommand][crdtCancelReplicationHandshake] master gid: %lld", sourceGid);
-    if (isMasterMySelf() == C_OK) {
-        crdtCancelReplicationHandshake(sourceGid);
-    }
+    freeClient(c);
     return;
 }
 
