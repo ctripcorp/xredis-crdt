@@ -55,8 +55,8 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
             [lindex $peers 0] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
             wait [lindex $peers 1] 0 crdt.info 
             assert_equal [[lindex $peers 0] get key] value
-            assert_equal [get_info_replication_attr_value [lindex $peers 0] crdt.info "peer0_gid" ] 3
-            assert_equal [get_info_replication_attr_value [lindex $peers 0] crdt.info "peer1_gid" ] 2
+            assert_equal [get_info_replication_attr_value [lindex $peers 0] crdt.info "peer0_gid" ] 2
+            assert_equal [get_info_replication_attr_value [lindex $peers 0] crdt.info "peer1_gid" ] 3
         }
     }   
 }
