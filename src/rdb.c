@@ -1714,6 +1714,7 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                     listAddNodeTail(crdtServer.crdtMasters, masterInstance);
                 }
                 currentMasterInstance = masterInstance;
+                crdtReplicationCreateMasterClient(currentMasterInstance, -1, -1);
             } else if (!strcasecmp(auxkey->ptr,"peer-master-host")) {
                 sdsfree(currentMasterInstance->masterhost);
                 currentMasterInstance->masterhost = sdsdup(auxval->ptr);
@@ -1721,10 +1722,10 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                 currentMasterInstance->masterport = atoi(auxval->ptr);
             } else if (!strcasecmp(auxkey->ptr,"peer-master-repl-id")) {
                 if (sdslen(auxval->ptr) == CONFIG_RUN_ID_SIZE) {
-                    memcpy(currentMasterInstance->master_replid, auxval->ptr,CONFIG_RUN_ID_SIZE+1);
+                    memcpy(currentMasterInstance->master->replid, auxval->ptr,CONFIG_RUN_ID_SIZE+1);
                 }
             } else if (!strcasecmp(auxkey->ptr,"peer-master-repl-offset")) {
-                currentMasterInstance->master_initial_offset = strtoll(auxval->ptr,NULL,10); 
+                currentMasterInstance->master->reploff = strtoll(auxval->ptr,NULL,10); 
             }else {
                 /* We ignore fields we don't understand, as by AUX field
                  * contract. */

@@ -2165,7 +2165,7 @@ void replicationUnsetMaster(void) {
      * a very fast reconnection. */
     disconnectSlaves();
     disconnectCrdtSlaves();
-    crdtAllReplicationCacheMaster();
+    crdtReplicationCacheAllMaster();
     server.repl_state = REPL_STATE_NONE;
 
     /* We need to make sure the new master will start the replication stream

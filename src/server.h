@@ -1593,7 +1593,6 @@ void createReplicationBacklog();
 void feedReplicationBacklogWithObject(struct redisServer *srv, robj *o);
 int isSameTypeWithMaster();
 int isMasterMySelf();
-int UpdatePeerReplOffset(client *c, int gid);
 
 /* CRDT Replications */
 void crdtReplicationCron(void);
