@@ -498,14 +498,25 @@ proc get_info_replication_attr_value {client type attr} {
 proc check_peer_info {peerMaster  peerSlave masteindex} {
     set attr [format "peer%d_repl_offset" $masteindex]
     set replid [format "peer%d_replid" $masteindex]
-    assert  {
+    $peerMaster debug set-crdt-ovc 0
+    after 1000
+    if {
         [ get_info_replication_attr_value  $peerMaster crdt.info master_repl_offset] 
-        ==
+        !=
         [ get_info_replication_attr_value $peerSlave crdt.info $attr]
+    } {
+        puts "check_peer_info offset diff"
+        puts [ get_info_replication_attr_value  $peerMaster crdt.info master_repl_offset] 
+        puts [ get_info_replication_attr_value $peerSlave crdt.info $attr]
     }
-    assert  {
+    if {
         [ get_info_replication_attr_value  $peerMaster crdt.info master_replid] 
-        ==
+        !=
         [ get_info_replication_attr_value $peerSlave crdt.info $replid]
+    } {
+        puts "check_peer_info replid diff"
+        puts [ get_info_replication_attr_value  $peerMaster crdt.info master_repl_offset] 
+        puts [ get_info_replication_attr_value $peerSlave crdt.info $attr]
     }
+    $peerMaster debug set-crdt-ovc 1
 }

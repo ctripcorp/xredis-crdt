@@ -15,6 +15,9 @@ source tests/support/aof.tcl
 
 
 set ::all_tests {
+    ctrip/master-not-crdt/slave-update-peer-repl-offset
+    ctrip/integration/master-slave/slave-update-peer-offset-when-master-slave-full-sync
+    ctrip/integration/master-slave/slave-update-peer-offset-when-master-slave-add-sync
     ctrip/integration/bug/peerof_other_peer_when_master-peer_full_sync
     ctrip/integration/master-slave/auth-gid
     ctrip/integration/bug/master-master-add-sync-when-slave-change-to-master
@@ -102,6 +105,7 @@ set ::all_tests {
 }
 
 set ::temp_tests {
+    
     #####
     ctrip/integration/bug/redis-crash-when-full-sync-hash-merge
     ctrip/integration/bug/redis-when-full-sync-mater-timeout-vectorclock-update
