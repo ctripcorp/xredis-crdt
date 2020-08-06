@@ -13,8 +13,9 @@ source tests/support/util.tcl
 source tests/support/aof.tcl
 
 
-
 set ::all_tests {
+    
+    ctrip/integration/composite/peer-offset-check
     ctrip/integration/bug/peerof_other_peer_when_master-peer_full_sync
     ctrip/integration/master-slave/auth-gid
     ctrip/integration/bug/master-master-add-sync-when-slave-change-to-master

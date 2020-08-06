@@ -15,6 +15,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "adlist.c"
   ],
@@ -36,6 +39,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "quicklist.c"
   ],
@@ -57,6 +63,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "ae.c"
   ],
@@ -78,6 +87,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "anet.c"
   ],
@@ -99,6 +111,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "dict.c"
   ],
@@ -120,6 +135,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "server.c"
   ],
@@ -141,6 +159,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "sds.c"
   ],
@@ -162,6 +183,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "zmalloc.c"
   ],
@@ -183,6 +207,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "lzf_c.c"
   ],
@@ -204,6 +231,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "lzf_d.c"
   ],
@@ -225,6 +255,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "pqsort.c"
   ],
@@ -246,6 +279,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "zipmap.c"
   ],
@@ -267,6 +303,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "sha1.c"
   ],
@@ -288,6 +327,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "ziplist.c"
   ],
@@ -309,6 +351,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "release.c"
   ],
@@ -330,6 +375,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "networking.c"
   ],
@@ -351,6 +399,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "util.c"
   ],
@@ -372,6 +423,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "object.c"
   ],
@@ -393,6 +447,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "db.c"
   ],
@@ -414,6 +471,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "replication.c"
   ],
@@ -435,6 +495,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "rdb.c"
   ],
@@ -456,6 +519,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "t_string.c"
   ],
@@ -477,6 +543,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "t_list.c"
   ],
@@ -498,6 +567,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "t_set.c"
   ],
@@ -519,6 +591,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "t_zset.c"
   ],
@@ -540,6 +615,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "t_hash.c"
   ],
@@ -561,6 +639,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "config.c"
   ],
@@ -582,6 +663,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "aof.c"
   ],
@@ -603,6 +687,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "pubsub.c"
   ],
@@ -624,6 +711,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "multi.c"
   ],
@@ -645,6 +735,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "debug.c"
   ],
@@ -666,6 +759,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "sort.c"
   ],
@@ -687,6 +783,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "intset.c"
   ],
@@ -708,6 +807,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "syncio.c"
   ],
@@ -729,6 +831,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "cluster.c"
   ],
@@ -750,6 +855,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "crc16.c"
   ],
@@ -771,6 +879,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "endianconv.c"
   ],
@@ -792,6 +903,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "slowlog.c"
   ],
@@ -813,6 +927,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "scripting.c"
   ],
@@ -834,6 +951,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "bio.c"
   ],
@@ -855,6 +975,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "rio.c"
   ],
@@ -876,6 +999,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "rand.c"
   ],
@@ -897,6 +1023,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "memtest.c"
   ],
@@ -918,6 +1047,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "crc64.c"
   ],
@@ -939,6 +1071,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "bitops.c"
   ],
@@ -960,6 +1095,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "sentinel.c"
   ],
@@ -981,6 +1119,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "notify.c"
   ],
@@ -1002,6 +1143,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "setproctitle.c"
   ],
@@ -1023,6 +1167,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "blocked.c"
   ],
@@ -1044,6 +1191,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "hyperloglog.c"
   ],
@@ -1065,6 +1215,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "latency.c"
   ],
@@ -1086,6 +1239,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "sparkline.c"
   ],
@@ -1107,6 +1263,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "redis-check-rdb.c"
   ],
@@ -1128,6 +1287,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "redis-check-aof.c"
   ],
@@ -1149,6 +1311,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "geo.c"
   ],
@@ -1170,6 +1335,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "lazyfree.c"
   ],
@@ -1191,6 +1359,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "module.c"
   ],
@@ -1212,6 +1383,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "evict.c"
   ],
@@ -1233,6 +1407,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "expire.c"
   ],
@@ -1254,6 +1431,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "geohash.c"
   ],
@@ -1275,6 +1455,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "geohash_helper.c"
   ],
@@ -1296,6 +1479,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "childinfo.c"
   ],
@@ -1317,6 +1503,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "defrag.c"
   ],
@@ -1338,6 +1527,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "siphash.c"
   ],
@@ -1359,6 +1551,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "rax.c"
   ],
@@ -1380,6 +1575,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "ctrip.c"
   ],
@@ -1401,6 +1599,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "ctrip_vector_clock.c"
   ],
@@ -1422,6 +1623,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "ctrip_crdt_replication.c"
   ],
@@ -1443,6 +1647,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "ctrip_crdt_rdb.c"
   ],
@@ -1464,6 +1671,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "ctrip_crdt_common.c"
   ],
@@ -1485,6 +1695,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "ctrip_crdt_gc.c"
   ],
@@ -1506,6 +1719,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "redis-cli.c"
   ],
@@ -1527,6 +1743,9 @@
    "-I../deps/hiredis",
    "-I../deps/linenoise",
    "-I../deps/lua/src",
+   "-DUSE_JEMALLOC",
+   "-I../deps/jemalloc/include",
+   "-DTCL_TEST",
    "-c",
    "redis-benchmark.c"
   ],
