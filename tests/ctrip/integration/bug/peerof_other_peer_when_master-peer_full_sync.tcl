@@ -31,12 +31,7 @@ proc wait { client index type log}  {
         error "assertion: Master-Slave not correctly synchronized"
     }
 }
-proc check-peer-offset {peers self index} {
-    $peers debug set-crdt-ovc 0
-    after 500
-    assert_equal [crdt_status $peers master_repl_offset] [crdt_status $self [format "peer%s_repl_offset" $index]]
-    $peers debug set-crdt-ovc 1
-}
+
 
 #before slaveof after peerof
 start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
@@ -96,6 +91,7 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
                 wait_for_peer_sync [lindex $peers 2]
                 puts [[lindex $peers 2] crdt.info replication]
                 after 5000
+                check_peer_info  [lindex $peers 0]  [lindex $peers 2] 0
                 assert_equal [[lindex $peers 2] dbsize] [[lindex $peers 0] dbsize]
             }
         }
