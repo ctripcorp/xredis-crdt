@@ -1923,10 +1923,9 @@ void resetServerStats(struct redisServer *srv) {
     srv->stat_rejected_conn = 0;
     srv->stat_sync_full = 0;
     srv->crdt_type_conflict = 0;
-    srv->crdt_non_type_conflict = 0;
-    srv->crdt_data_isomrphic_conflict = 0;
-    srv->crdt_tombstone_isomrphic_conflict = 0;
-    srv->crdt_data_tombstone_conflict = 0;
+    srv->crdt_set_conflict = 0;
+    srv->crdt_del_conflict = 0;
+    srv->crdt_set_del_conflict = 0;
     srv->crdt_modify_conflict = 0;
     srv->crdt_merge_conflict = 0;
     srv->stat_sync_partial_ok = 0;
@@ -3469,24 +3468,18 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                             "sync_partial_ok:%lld\r\n"
                             "sync_partial_err:%lld\r\n"
                             "latest_fork_usec:%lld\r\n"
-                            "crdt_type_conflict:%lld\r\n"
-                            "crdt_non_type_conflict:%lld\r\n"
-                            "crdt_modify_conflict:%lld\r\n"
-                            "crdt_merge_conflict:%lld\r\n"
-                            "crdt_data_isomrphic_conflict:%lld\r\n"
-                            "crdt_tombstone_isomrphic_conflict:%lld\r\n"
-                            "crdt_data_tombstone_conflict:%lld\r\n",
+                            "crdt_conflict:type=%lld,set=%lld,del=%lld,set_del=%lld\r\n"
+                            "crdt_conflict_op:modify=%lld,merge=%lld\r\n",
                             crdtServer.stat_sync_full,
                             crdtServer.stat_sync_partial_ok,
                             crdtServer.stat_sync_partial_err,
                             crdtServer.stat_fork_time,
                             crdtServer.crdt_type_conflict,
-                            crdtServer.crdt_non_type_conflict,
+                            crdtServer.crdt_set_conflict,
+                            crdtServer.crdt_del_conflict,
+                            crdtServer.crdt_set_del_conflict,
                             crdtServer.crdt_modify_conflict,
-                            crdtServer.crdt_merge_conflict,
-                            crdtServer.crdt_data_isomrphic_conflict,
-                            crdtServer.crdt_tombstone_isomrphic_conflict,
-                            crdtServer.crdt_data_tombstone_conflict);
+                            crdtServer.crdt_merge_conflict);
     }
 
     /* CRDT Replication */
