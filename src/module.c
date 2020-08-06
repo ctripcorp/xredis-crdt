@@ -1731,6 +1731,16 @@ int RM_SelectDb(RedisModuleCtx *ctx, int newid) {
     int retval = selectDb(ctx->client,newid);
     return (retval == C_OK) ? REDISMODULE_OK : REDISMODULE_ERR;
 }
+
+int RM_CrdtSelectDb(RedisModuleCtx *ctx, int gid, int newid) {
+    int retval = C_OK;
+    CRDT_Master_Instance* peerMaster = getPeerMaster(gid);
+    if(peerMaster) {
+        retval = selectDb(peerMaster->master, newid);
+    }
+    retval &= selectDb(ctx->client,newid);
+    return (retval == C_OK) ? REDISMODULE_OK : REDISMODULE_ERR;
+}
 void* createModuleKey(redisDb *db, robj *keyname, int mode,robj* value, robj* tombstone) {
     RedisModuleKey *kp;   
     kp = zmalloc(sizeof(*kp));
@@ -3458,11 +3468,27 @@ int RM_ModuleTypeSetValue(RedisModuleKey *key, moduleType *mt, void *value) {
     return REDISMODULE_OK;
 }
 
+int RM_ModuleTypeLoadRdbAddValue(RedisModuleKey *key, moduleType *mt, void *value) {
+    if (!(key->mode & REDISMODULE_WRITE) || key->iter) return REDISMODULE_ERR;
+    robj *o = createModuleObject(mt,value);
+    dbAdd(key->db,key->key,o);
+    key->value = o;
+    return REDISMODULE_OK;
+}
+
 int RM_ModuleTombstoneSetValue(RedisModuleKey *key, moduleType *mt, void *value) {
     if (!(key->mode & REDISMODULE_WRITE) || key->iter) return REDISMODULE_ERR;
     robj *o = createModuleObject(mt,value);
     setKeyToTombstone(key->db,key->key,o);
     decrRefCount(o);
+    key->tombstone = o;
+    return REDISMODULE_OK;
+}
+
+int RM_ModuleTombstoneLoadRdbAddValue(RedisModuleKey *key, moduleType *mt, void *value) {
+    if (!(key->mode & REDISMODULE_WRITE) || key->iter) return REDISMODULE_ERR;
+    robj *o = createModuleObject(mt,value);
+    tombstoneAdd(key->db,key->key,o);
     key->tombstone = o;
     return REDISMODULE_OK;
 }
@@ -4561,6 +4587,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(ReplyWithDouble);
     REGISTER_API(GetSelectedDb);
     REGISTER_API(SelectDb);
+    REGISTER_API(CrdtSelectDb);
     REGISTER_API(OpenKey);
     REGISTER_API(DbAddOrFind);
     REGISTER_API(DbDelete);
@@ -4634,6 +4661,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(PoolAlloc);
     REGISTER_API(CreateDataType);
     REGISTER_API(ModuleTypeSetValue);
+    REGISTER_API(ModuleTypeLoadRdbAddValue);
     REGISTER_API(ModuleTypeGetType);
     REGISTER_API(ModuleTypeGetValue);
     REGISTER_API(SaveUnsigned);
@@ -4682,6 +4710,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(IncrLocalVectorClock);
     REGISTER_API(MergeVectorClock);
     REGISTER_API(ModuleTombstoneSetValue);
+    REGISTER_API(ModuleTombstoneLoadRdbAddValue);
     REGISTER_API(ModuleTypeGetTombstone);
     REGISTER_API(NotifyKeyspaceEvent);
     REGISTER_API(CrdtPubsubPublishMessage);
