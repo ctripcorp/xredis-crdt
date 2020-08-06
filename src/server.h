@@ -1272,9 +1272,9 @@ struct redisServer {
     long long crdt_non_type_conflict;
     long long crdt_modify_conflict;
     long long crdt_merge_conflict;
-    long long crdt_data_isomrphic_conflict;
-    long long crdt_tombstone_isomrphic_conflict;
-    long long crdt_data_tombstone_conflict;
+    long long crdt_set_conflict;
+    long long crdt_del_conflict;
+    long long crdt_set_del_conflict;
     long long local_clock;
 }redisServer;
 
@@ -1672,9 +1672,9 @@ void receiveChildInfo(struct redisServer *srv);
 void *getModuleKey(redisDb *db, robj *keyname, int mode, int needCheck);
 void closeModuleKey(void *moduleKey);
 #define TYPECONFLICT (1<<0)
-#define DATA_CONFLICT (1<<1)
-#define TOMBSTONE_CONFLICT (1<<2)
-#define DATA_TOMBSTONE_CONFLICT (1<<3)
+#define SET_CONFLICT (1<<1)
+#define DEL_CONFLICT (1<<2)
+#define SET_DEL_CONFLICT (1<<3)
 // #define NONTYPECONFLICT (1<<1)
 #define MODIFYCONFLICT (1<<4)
 #define MERGECONFLICT (1<<5)

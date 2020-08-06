@@ -65,6 +65,12 @@ proc crdt_stats {r property} {
     }
 }
 
+proc crdt_conflict {r type} {
+        if {[regexp "$type=(\\d+)" [{*}$r crdt.info stats] _ value]} {
+        set _ $value
+    }
+}
+
 proc waitForBgsave r {
     while 1 {
         if {[status r rdb_bgsave_in_progress] eq 1} {
