@@ -50,14 +50,6 @@ proc is_not_slave {master slave} {
         [ get_info_replication_attr_value $slave info master_replid]
     }
 }
-proc check_peer {peerMaster  peerSlave masteindex} {
-    set attr [format "peer%d_repl_offset" $masteindex]
-    assert  {
-        [ get_info_replication_attr_value  $peerMaster crdt.info master_repl_offset] 
-        ==
-        [ get_info_replication_attr_value $peerSlave crdt.info $attr]
-    }
-}
 
 
 
@@ -114,7 +106,7 @@ proc load_redis_rdb {add check server_path dbfile} {
                 test "master-slave" {
                     run [replace_client $check {$crdt_slave}]  1
                     # puts [log_file_matches $slave_stdout] 
-                    check_peer $slave $crdt_slave 0
+                    check_peer_info $slave $crdt_slave 0
                 } 
             }
         }

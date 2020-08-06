@@ -326,6 +326,7 @@ struct redisCommand redisCommandTable[] = {
     {"crdt.role",crdtRoleCommand,3,"lst",0,NULL,0,0,0,0,0},
     {"crdt.info",crdtinfoCommand,-1,"lt",0,NULL,0,0,0,0,0},
     {"peerof",peerofCommand,4,"ast",0,NULL,0,0,0,0,0},
+    {"crdt.peer.change",peerChangeCommand,3,"lF", 0,NULL,0,0,0,0,0},
     {"debugCancelCrdt",debugCancelCrdt,3,"ast",0,NULL,0,0,0,0,0},
     {"tombstoneSize",tombstoneSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
     {"expireSize",expireSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
@@ -3510,11 +3511,14 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
             CRDT_Master_Instance *masterInstance = crdtServer.crdtMasters[gid];
             if(masterInstance == NULL) continue;
 
-            long long slave_repl_offset = 0;
-            if (masterInstance->master)
-                slave_repl_offset = masterInstance->master->reploff;
-            else if (masterInstance->cached_master) {
-                slave_repl_offset = masterInstance->cached_master->reploff;
+            long long peer_repl_offset = 0;
+            char* peer_replid = "000000";
+            if (masterInstance->master) {
+                peer_repl_offset = masterInstance->master->reploff;
+                peer_replid = masterInstance->master->replid;
+            } else if (masterInstance->cached_master) {
+                peer_repl_offset = masterInstance->cached_master->reploff;
+                peer_replid = masterInstance->cached_master->replid;
             }
 
 
@@ -3526,7 +3530,8 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                                 "peer%d_link_status:%s\r\n"
                                 "peer%d_last_io_seconds_ago:%d\r\n"
                                 "peer%d_sync_in_progress:%d\r\n"
-                                "peer%d_repl_offset:%lld\r\n",
+                                "peer%d_repl_offset:%lld\r\n"
+                                "peer%d_replid:%s\r\n",
                                 masterid,
                                 masterid, masterInstance->masterhost,
                                 masterid, masterInstance->masterport,
@@ -3536,7 +3541,8 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                                 masterid, masterInstance->master ?
                                 ((int) (server.unixtime - masterInstance->master->lastinteraction)) : -1,
                                 masterid, masterInstance->repl_state == REPL_STATE_TRANSFER,
-                                masterid, slave_repl_offset
+                                masterid, peer_repl_offset,
+                                masterid, peer_replid
             );
 
             if (masterInstance->repl_state != REPL_STATE_CONNECTED) {

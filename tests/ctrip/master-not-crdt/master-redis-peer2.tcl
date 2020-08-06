@@ -16,14 +16,7 @@ proc get_info_replication_attr_value {client type attr} {
     regexp $regstr $info match value 
     set _ $value
 }
-proc check_peer {peerMaster  peerSlave masteindex} {
-    set attr [format "peer%d_repl_offset" $masteindex]
-    assert  {
-        [ get_info_replication_attr_value  $peerMaster crdt.info master_repl_offset] 
-        ==
-        [ get_info_replication_attr_value $peerSlave crdt.info $attr]
-    }
-}
+
 proc wait { client index type log}  {
     set retry 50
     set match_str ""
@@ -85,11 +78,11 @@ start_redis [list overrides [list repl-diskless-sync-delay 1 "dir"  $server_path
                 $master set k2 v2
                 after 1000
                 assert_equal [$crdt_slave get k2] v2
-                check_peer $slave $crdt_slave 0
+                check_peer_info $slave $crdt_slave 0
                 $master del k2
                 after 1000
                 assert_equal [$crdt_slave get k2] {}
-                check_peer $slave $crdt_slave 0
+                check_peer_info $slave $crdt_slave 0
             } 
         }
     }
