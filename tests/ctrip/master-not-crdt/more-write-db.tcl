@@ -183,16 +183,16 @@ write_diff_db "write db0 and db5 " {
     $peer_slave slaveof $peer_host $peer_port
     set load_handle0 [start_write_db_load $r_host $r_port 10 0]
     set load_handle1 [start_write_db_load $r_host $r_port 6 1]
-    after 30000
+    after 3000
     stop_write_load $load_handle0
     stop_write_load $load_handle1
     
     $peer slaveof $r_host $r_port
     wait $r 0 info $r_log
-    after 20000
+    after 5000
     $master peerof $peer_gid $peer_host $peer_port
     $master peerof $peer2_gid $peer2_host $peer2_port
-    after 20000
+    after 5000
     wait $peer 0 crdt.info $master_log
     wait $peer2 0 crdt.info $master_log
 
@@ -201,12 +201,12 @@ write_diff_db "write db0 and db5 " {
 
     $slave slaveof $master_host $master_port
     
-    after 20000
+    after 5000
     wait $master 0 info $slave_log
     wait $peer 0 info $peer_slave_log
 
     $slave_slave slaveof $slave_host $slave_port
-    after 20000
+    after 5000
     wait $slave 0 info $slave_slave_log
     
 
@@ -214,13 +214,13 @@ write_diff_db "write db0 and db5 " {
     set load_handle3 [start_write_db_load $peer2_host $peer2_port 8 3]
     set load_handle4 [start_write_db_load $peer2_host $peer2_port 4 4]
 
-    after 20000
+    after 5000
     # # Stop the write load
     
     stop_write_load $load_handle2
     stop_write_load $load_handle3
     stop_write_load $load_handle4
-    after 20000
+    after 5000
     $master debug set-crdt-ovc 0
     $peer debug set-crdt-ovc 0
     $peer2 debug set-crdt-ovc 0

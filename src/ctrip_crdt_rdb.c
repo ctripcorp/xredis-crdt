@@ -188,7 +188,7 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
                                                   dictid_len, llstr));
             needDelete = C_OK;
         }
-        if(rioWriteBulkObject(rdb, selectcmd) == 0) goto werr;
+        if(rioWrite(rdb, selectcmd->ptr, sdslen(selectcmd->ptr)) == 0) goto werr;
         if (needDelete == C_OK) {
             decrRefCount(selectcmd);
         }
@@ -228,7 +228,9 @@ static int updateReplTransferLastio(int gid) {
     if(peerMasterServer == NULL) {
         return C_ERR;
     }
-    peerMasterServer->repl_transfer_lastio = server.unixtime;
+    if(isMasterMySelf() == C_OK) {
+        peerMasterServer->repl_transfer_lastio = server.unixtime;
+    }
     return C_OK;
 }
 typedef robj* (*DictFindFunc)(redisDb* db, robj* key);
@@ -427,7 +429,12 @@ int mergeCrdtObjectCommand(client *c, DictFindFunc find, DictAddFunc add, DictDe
     return C_OK;
 
 error:
-    crdtCancelReplicationHandshake(sourceGid);
+    serverLog(LL_NOTICE, "[CRDT][mergeCrdtObjectCommand][freeClient] gid: %lld", sourceGid);
+    if(isMasterMySelf() == C_OK) {
+        crdtCancelReplicationHandshake(sourceGid);
+    } else {
+        freeClient(c);
+    }
     return C_ERR;
 }
 

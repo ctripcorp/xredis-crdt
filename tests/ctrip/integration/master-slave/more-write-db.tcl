@@ -192,14 +192,14 @@ write_diff_db "write db0 and db5 " {
     set load_handle3 [start_write_db_load $peer2_host $peer2_port 8 3]
     set load_handle4 [start_write_db_load $peer2_host $peer2_port 4 4]
 
-    after 20000
+    after 3000
     # Stop the write load
     stop_write_load $load_handle0
     stop_write_load $load_handle1
     stop_write_load $load_handle2
     stop_write_load $load_handle3
     stop_write_load $load_handle4
-    after 10000
+    after 3000
     $master debug set-crdt-ovc 0
     $peer debug set-crdt-ovc 0
     $peer2 debug set-crdt-ovc 0

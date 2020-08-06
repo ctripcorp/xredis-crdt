@@ -1,4 +1,9 @@
-
+proc print_log_file {log} {
+    set fp [open $log r]
+    set content [read $fp]
+    close $fp
+    puts $content
+}
 set dl yes
 start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskless-sync-delay 1} module {crdt.so}} {
     set peers {}
