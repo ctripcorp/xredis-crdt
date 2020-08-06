@@ -1731,6 +1731,16 @@ int RM_SelectDb(RedisModuleCtx *ctx, int newid) {
     int retval = selectDb(ctx->client,newid);
     return (retval == C_OK) ? REDISMODULE_OK : REDISMODULE_ERR;
 }
+
+int RM_CrdtSelectDb(RedisModuleCtx *ctx, int gid, int newid) {
+    int retval = C_OK;
+    CRDT_Master_Instance* peerMaster = getPeerMaster(gid);
+    if(peerMaster) {
+        retval = selectDb(peerMaster->master, newid);
+    }
+    retval &= selectDb(ctx->client,newid);
+    return (retval == C_OK) ? REDISMODULE_OK : REDISMODULE_ERR;
+}
 void* createModuleKey(redisDb *db, robj *keyname, int mode,robj* value, robj* tombstone) {
     RedisModuleKey *kp;   
     kp = zmalloc(sizeof(*kp));
@@ -4561,6 +4571,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(ReplyWithDouble);
     REGISTER_API(GetSelectedDb);
     REGISTER_API(SelectDb);
+    REGISTER_API(CrdtSelectDb);
     REGISTER_API(OpenKey);
     REGISTER_API(DbAddOrFind);
     REGISTER_API(DbDelete);

@@ -18,16 +18,6 @@ proc get_info_replication_attr_value {client type attr} {
     set _ $value
 }
 
-proc check_peer {peerMaster  peerSlave masteindex} {
-    set attr [format "peer%d_repl_offset" $masteindex]
-    puts [ get_info_replication_attr_value  $peerMaster crdt.info master_repl_offset] 
-    puts [ get_info_replication_attr_value $peerSlave crdt.info $attr]
-    assert  {
-        [ get_info_replication_attr_value  $peerMaster crdt.info master_repl_offset] 
-        ==
-        [ get_info_replication_attr_value $peerSlave crdt.info $attr]
-    }
-}
 proc wait { client index type log}  {
     set retry 50
     set match_str ""
@@ -112,8 +102,8 @@ start_redis [list overrides [list repl-diskless-sync-delay 1  ]] {
                     after 500
                     assert_equal [[lindex $slave 1] get key] value
                     assert_equal [[lindex $slave 0] hget hash k] v 
-                    check_peer [lindex $slave 0] [lindex $slave 1] 0
-                    check_peer [lindex $slave 1] [lindex $slave 0] 0
+                    check_peer_info [lindex $slave 0] [lindex $slave 1] 0
+                    check_peer_info [lindex $slave 1] [lindex $slave 0] 0
 
                 }
                 
@@ -188,8 +178,8 @@ start_redis [list overrides [list repl-diskless-sync-delay 1  ]] {
                     assert_equal [[lindex $slave 1] get key] value
                     assert_equal [[lindex $slave 0] hget hash k] v 
                     print_log_file [lindex $slave_stdouts 1]
-                    check_peer [lindex $slave 0] [lindex $slave 1] 0
-                    check_peer [lindex $slave 1] [lindex $slave 0] 0
+                    check_peer_info [lindex $slave 0] [lindex $slave 1] 0
+                    check_peer_info [lindex $slave 1] [lindex $slave 0] 0
 
                 }
                 
