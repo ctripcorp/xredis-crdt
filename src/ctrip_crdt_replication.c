@@ -200,13 +200,15 @@ void crdtReplicationSetMaster(int gid, char *ip, int port) {
     }
     peerMaster->masterhost = sdsnew(ip);
     peerMaster->masterport = port;
-    if (peerMaster->master) {
-        freeClient(peerMaster->master);
-    } 
-    crdtCancelReplicationHandshake(gid);
-    
-    peerMaster->repl_state = REPL_STATE_CONNECT;
-    peerMaster->repl_down_since = 0;
+    if(isMasterMySelf() == C_OK) {
+        if (peerMaster->master) {
+            freeClient(peerMaster->master);
+        } 
+        crdtCancelReplicationHandshake(gid);
+        
+        peerMaster->repl_state = REPL_STATE_CONNECT;
+        peerMaster->repl_down_since = 0;
+    }
 }
 
 /* Cancel replication, setting the instance as a master itself. */
@@ -467,11 +469,8 @@ void peerChangeCommand(client *c) {
         return;
     if(!check_gid(gid)) return;
     CRDT_Master_Instance* peer =  getPeerMaster(gid);
-    if(!peer->master && peer->cached_master) {
-        peer->master = peer->cached_master;
-        peer->cached_master = NULL;
-    }
     memcpy(peer->master->replid, c->argv[2]->ptr, sdslen(c->argv[2]->ptr));
+    memcpy(peer->master_replid, c->argv[2]->ptr, sdslen(c->argv[2]->ptr));
     server.dirty++;
     addReply(c,shared.ok);
 }
@@ -601,7 +600,7 @@ int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, i
             memcpy(new,start,CONFIG_RUN_ID_SIZE);
             new[CONFIG_RUN_ID_SIZE] = '\0';
 
-            serverLog(LL_WARNING,"[crdt]Master replication ID changed to %s",new);
+            serverLog(LL_WARNING,"[CRDT]Master replication ID changed to %s",new);
 
             memcpy(masterInstance->master_replid, new, CONFIG_RUN_ID_SIZE);
             masterInstance->master_replid[CONFIG_RUN_ID_SIZE] = '\0';
