@@ -228,7 +228,7 @@ static int updateReplTransferLastio(int gid) {
     if(peerMasterServer == NULL) {
         return C_ERR;
     }
-    if(isMasterMySelf() == C_OK) {
+    if(iAmMaster() == C_OK) {
         peerMasterServer->repl_transfer_lastio = server.unixtime;
     }
     return C_OK;
@@ -430,7 +430,7 @@ int mergeCrdtObjectCommand(client *c, DictFindFunc find, DictAddFunc add, DictDe
 
 error:
     serverLog(LL_NOTICE, "[CRDT][mergeCrdtObjectCommand][freeClient] gid: %lld", sourceGid);
-    if(isMasterMySelf() == C_OK) {
+    if(iAmMaster() == C_OK) {
         crdtCancelReplicationHandshake(sourceGid);
     } else {
         freeClient(c);
@@ -576,7 +576,7 @@ int initedCrdtServer() {
     }
     return 1;
 }
-int isMasterMySelf() {
+int iAmMaster() {
     if(crdt_enabled && !server.master_is_crdt && server.masterhost ) {
         return C_OK;
     }
