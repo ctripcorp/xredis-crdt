@@ -1592,7 +1592,7 @@ void putSlaveOnline(client *slave);
 void createReplicationBacklog();
 void feedReplicationBacklogWithObject(struct redisServer *srv, robj *o);
 int isSameTypeWithMaster();
-int isMasterMySelf();
+int iAmMaster();
 
 /* CRDT Replications */
 void crdtReplicationCron(void);
