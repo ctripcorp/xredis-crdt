@@ -160,7 +160,7 @@ proc slave-peer-offset {type arrange} {
         $peer2 config set repl-diskless-sync yes
         $peer2 config set repl-diskless-sync-delay 1
         $peer2 config crdt.set repl-diskless-sync-delay 1
-        $peer2 config crdt.set repl-backlog-size 1M
+        $peer2 config crdt.set repl-backlog-size 10M
         start_server {overrides {crdt-gid 1} module {crdt.so}} {
             set slave [srv 0 client]
             set slave_host [srv 0 host]
@@ -170,7 +170,7 @@ proc slave-peer-offset {type arrange} {
             $slave config set repl-diskless-sync yes
             $slave config set repl-diskless-sync-delay 1
             $slave config crdt.set repl-diskless-sync-delay 1
-            $slave config crdt.set repl-backlog-size 1M
+            $slave config crdt.set repl-backlog-size 10M
             start_server {overrides {crdt-gid 1} module {crdt.so}} {
                 set slave_slave [srv 0 client]
                 set slave_slave_host [srv 0 host]
@@ -180,7 +180,7 @@ proc slave-peer-offset {type arrange} {
                 $slave_slave config set repl-diskless-sync yes
                 $slave_slave config set repl-diskless-sync-delay 1
                 $slave_slave config crdt.set repl-diskless-sync-delay 1
-                $slave_slave config crdt.set repl-backlog-size 1M
+                $slave_slave config crdt.set repl-backlog-size 10M
                 start_server {overrides {crdt-gid 1} module {crdt.so}} {
                     set master [srv 0 client]
                     set master_host [srv 0 host]
@@ -190,7 +190,7 @@ proc slave-peer-offset {type arrange} {
                     $master config set repl-diskless-sync yes
                     $master config set repl-diskless-sync-delay 1
                     $master config crdt.set repl-diskless-sync-delay 1
-                    $master config crdt.set repl-backlog-size 1M
+                    $master config crdt.set repl-backlog-size 10M
                     start_server {tags {"repl"} overrides {crdt-gid 2} module {crdt.so} } {
                         set peer_slave [srv 0 client]
                         set peer_slave_host [srv 0 host]
@@ -200,7 +200,7 @@ proc slave-peer-offset {type arrange} {
                         $peer_slave config set repl-diskless-sync yes
                         $peer_slave config set repl-diskless-sync-delay 1
                         $peer_slave config crdt.set repl-diskless-sync-delay 1
-                        $peer_slave config crdt.set repl-backlog-size 1M
+                        $peer_slave config crdt.set repl-backlog-size 10M
                         start_server {overrides {crdt-gid 2} module {crdt.so}} {
                             set peer [srv 0 client]
                             set peer_host [srv 0 host]
@@ -210,7 +210,7 @@ proc slave-peer-offset {type arrange} {
                             $peer config set repl-diskless-sync yes
                             $peer config set repl-diskless-sync-delay 1
                             $peer config crdt.set repl-diskless-sync-delay 1
-                            $peer config crdt.set repl-backlog-size 1M
+                            $peer config crdt.set repl-backlog-size 10M
                             test $type {
                                 if {[catch [uplevel 0 $arrange ] result]} {
                                     puts $result
@@ -560,7 +560,84 @@ slave-peer-offset "1.  peer -> master partial  2. peer -> master partial sync " 
 }
 
 
+slave-peer-offset "check master replid and offset when master-master add sync" {
+    $peer_slave slaveof  $peer_host $peer_port
+    $slave slaveof  $master_host $master_port
+    wait_for_sync $peer_slave
+    wait_for_sync $slave
+    $master peerof $peer_gid $peer_host $peer_port
+    $peer peerof $master_gid $master_host $master_port
+    wait_for_peer_sync $master
+    wait_for_peer_sync $peer 
+    set load_handle0 [start_write_load $master_host $master_port 3]
+    set load_handle1 [start_write_load $peer_host $peer_port 3]
+    after 3000
+    stop_write_load $load_handle0
+    stop_write_load $load_handle1
 
+    check_peer_info $peer $master 0
+    check_peer_info $peer $slave 0
+    check_peer_info $master $peer_slave 0
+    check_peer_info $master $peer_slave 0
+
+    #peer->peer_slave =>   peer_slave->peer
+    $peer slaveof $peer_slave_host $peer_slave_port
+    $peer_slave slaveof no one 
+    set load_handle2 [start_write_load $peer_slave_host $peer_slave_port 3]
+    $master peerof $peer_slave_gid $peer_slave_host $peer_slave_port
+    after 1000
+    stop_write_load $load_handle2
+    wait_for_peer_sync $master 
+    check_peer_info $peer_slave $master 0
+    check_peer_info $peer_slave $slave 0
+    check_peer_info $master $peer_slave 0
+    check_peer_info $master $peer_slave 0
+    #master->slave =>   slave->master
+    $master slaveof $slave_host $slave_port
+    $slave slaveof no one 
+    set load_handle2 [start_write_load $slave_host $slave_port 3]
+    $peer_slave peerof $slave_gid $slave_host $slave_port
+    after 1000
+    stop_write_load $load_handle2
+    wait_for_peer_sync $peer_slave 
+    check_peer_info $slave $peer_slave 0
+    check_peer_info $slave $peer 0   
+    check_peer_info $peer_slave $slave 0
+    check_peer_info $peer_slave $master 0
+
+    #peer_slave->peer =>   peer->peer_slave
+    $peer_slave slaveof $peer_host $peer_port
+    $peer slaveof no one 
+    set load_handle2 [start_write_load $peer_host $peer_port 3]
+    after 1000
+    stop_write_load $load_handle2
+    $slave peerof $peer_gid $peer_host $peer_port
+    wait_for_peer_sync $slave 
+    check_peer_info $peer $slave 0
+    check_peer_info $peer $master 0
+    check_peer_info $slave $peer_slave 0
+    check_peer_info $slave $peer 0
+
+
+    #slave->master =>   master->slave
+    $slave slaveof $master_host $master_port
+    $master slaveof no one 
+    set load_handle2 [start_write_load $master_host $master_port 3]
+    $peer peerof $master_gid $master_host $master_port
+    after 1000
+    stop_write_load $load_handle2
+    wait_for_peer_sync $peer 
+    check_peer_info $master $peer 0
+    check_peer_info $master $peer_slave 0   
+    check_peer_info $peer $master 0
+    check_peer_info $peer $slave 0
+
+    assert_equal [crdt_stats $master sync_full ] 1
+    assert_equal [crdt_stats $peer sync_full ] 1
+    assert_equal [crdt_stats $slave sync_full ] 0
+    assert_equal [crdt_stats $peer_slave sync_full ] 0
+
+}
 
 
 # slave-peer-offset "1.other peer peerof 2. add data  3.peerof 4.slaveof" {
