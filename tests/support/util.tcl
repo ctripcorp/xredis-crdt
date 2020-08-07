@@ -498,6 +498,21 @@ proc gen_key_set {length} {
     }
     return $key_set
 }
+proc wait_script {script err} {
+    set retry 100
+    while {$retry} {
+        set conditionCmd [list expr $script] 
+        if {[uplevel 1 $conditionCmd]} {
+            break
+        } else {
+            incr retry -1
+            after 100
+        }
+    }
+    if {$retry == 0} {
+        catch [uplevel 1 $err] error
+    }
+}
 
 proc get_info_replication_attr_value {client type attr} {
     set info [$client $type replication]
@@ -511,23 +526,24 @@ proc check_peer_info {peerMaster  peerSlave masteindex} {
     set replid [format "peer%d_replid" $masteindex]
     $peerMaster debug set-crdt-ovc 0
     after 1000
-    if {
+    wait_script {
         [ get_info_replication_attr_value  $peerMaster crdt.info master_repl_offset] 
-        !=
+        ==
         [ get_info_replication_attr_value $peerSlave crdt.info $attr]
     } {
-        puts "check_peer_info offset diff"
         puts [ get_info_replication_attr_value  $peerMaster crdt.info master_repl_offset] 
         puts [ get_info_replication_attr_value $peerSlave crdt.info $attr]
+        fail "check_peer_info offset diff"
     }
-    if {
+    wait_script {
         [ get_info_replication_attr_value  $peerMaster crdt.info master_replid] 
-        !=
+        ==
         [ get_info_replication_attr_value $peerSlave crdt.info $replid]
     } {
-        puts "check_peer_info replid diff"
+        
         puts [ get_info_replication_attr_value  $peerMaster crdt.info master_repl_offset] 
         puts [ get_info_replication_attr_value $peerSlave crdt.info $attr]
+        fail "check_peer_info replid diff"
     }
     $peerMaster debug set-crdt-ovc 1
 }

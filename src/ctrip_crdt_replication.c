@@ -599,13 +599,16 @@ int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, i
             char new[CONFIG_RUN_ID_SIZE+1];
             memcpy(new,start,CONFIG_RUN_ID_SIZE);
             new[CONFIG_RUN_ID_SIZE] = '\0';
+            if (strcmp(new, masterInstance->cached_master->replid)) {
+                serverLog(LL_WARNING,"[CRDT]Master replication ID changed to %s",new);
 
-            serverLog(LL_WARNING,"[CRDT]Master replication ID changed to %s",new);
-
-            memcpy(masterInstance->master_replid, new, CONFIG_RUN_ID_SIZE);
-            masterInstance->master_replid[CONFIG_RUN_ID_SIZE] = '\0';
+                memcpy(masterInstance->master_replid, new, CONFIG_RUN_ID_SIZE);
+                masterInstance->master_replid[CONFIG_RUN_ID_SIZE] = '\0';
         
-            replicationFeedPeerChangeCommand(masterInstance->gid, new);
+                memcpy(masterInstance->cached_master->replid, new , CONFIG_RUN_ID_SIZE);
+                
+                replicationFeedPeerChangeCommand(masterInstance->gid, new);
+            }
         }
 
         /* Setup the replication to continue. */
