@@ -14,10 +14,13 @@ XRedis-CRDT 1.0.5  Released Sat Aug  8 20:59:30 CST 2020
 ================================================================================
 Upgrade urgency LOW: Compared with the previous version, there are some improvements, mainly:
 Major things:
-* fix memory out of bound in vectorClock string parsing
-* slave record the offset of other peer masters
-* choose a node to execute expire first, avoid multiple nodes executing at the same time
-* optimize performance of master-slave full sync
+* [bugfix] that out-of-bound memory access when loading RDB file.
+* [opt] master-master psync: an enhanced partial sync implementation is now allowed for master-master replication while master-slave switching.
+*      slave now is able to record offsets for master-master replication.
+*      PSYNC2.0 also works for master-master replication.
+* [opt] shrink down conflict made by simutenously expiration. 
+* [opt] seeking for peer-master is theoretically faster than before.
+* [opt] better performance for master-master replication stream offset calculation.
 
 ================================================================================
 XRedis-CRDT 1.0.4  Released Tue Jun  9 15:58:31 CST 2020
