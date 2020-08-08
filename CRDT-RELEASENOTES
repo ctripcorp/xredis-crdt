@@ -10,6 +10,16 @@ HIGH:     There is a critical bug that may affect a subset of users. Upgrade!
 CRITICAL: There is a critical bug affecting MOST USERS. Upgrade ASAP.
 --------------------------------------------------------------------------------
 ================================================================================
+XRedis-CRDT 1.0.5  Released Sat Aug  8 20:59:30 CST 2020
+================================================================================
+Upgrade urgency LOW: Compared with the previous version, there are some improvements, mainly:
+Major things:
+* fix memory bounds when parse vectorClock string
+* slave supports recording the offset of the backlog of other nodes
+* choose a node to execute expire first, avoid multiple nodes executing at the same time
+* optimize master-slave full sync
+
+================================================================================
 XRedis-CRDT 1.0.4  Released Tue Jun  9 15:58:31 CST 2020
 ================================================================================
 Upgrade urgency LOW: Compared with the previous version, there are some improvements, mainly:
