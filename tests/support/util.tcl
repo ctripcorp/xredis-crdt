@@ -65,6 +65,12 @@ proc crdt_stats {r property} {
     }
 }
 
+proc crdt_conflict {r type} {
+        if {[regexp "$type=(\\d+)" [{*}$r crdt.info stats] _ value]} {
+        set _ $value
+    }
+}
+
 proc waitForBgsave r {
     while 1 {
         if {[status r rdb_bgsave_in_progress] eq 1} {
@@ -457,6 +463,11 @@ proc start_write_load {host port seconds} {
     exec $tclsh tests/helpers/gen_write_load.tcl $host $port $seconds &
 }
 
+proc start_write_load_with_interval {host port seconds interval} {
+    set tclsh [info nameofexecutable]
+    exec $tclsh tests/helpers/gen_write_load_with_interval.tcl $host $port $seconds $interval &
+}
+
 proc start_write_db_load {host port seconds db} {
     set tclsh [info nameofexecutable]
     exec $tclsh tests/helpers/gen_write_db_load.tcl $host $port $seconds $db &
@@ -487,6 +498,21 @@ proc gen_key_set {length} {
     }
     return $key_set
 }
+proc wait_script {script err} {
+    set retry 100
+    while {$retry} {
+        set conditionCmd [list expr $script] 
+        if {[uplevel 1 $conditionCmd]} {
+            break
+        } else {
+            incr retry -1
+            after 100
+        }
+    }
+    if {$retry == 0} {
+        catch [uplevel 1 $err] error
+    }
+}
 
 proc get_info_replication_attr_value {client type attr} {
     set info [$client $type replication]
@@ -498,14 +524,26 @@ proc get_info_replication_attr_value {client type attr} {
 proc check_peer_info {peerMaster  peerSlave masteindex} {
     set attr [format "peer%d_repl_offset" $masteindex]
     set replid [format "peer%d_replid" $masteindex]
-    assert  {
+    $peerMaster debug set-crdt-ovc 0
+    after 1000
+    wait_script {
         [ get_info_replication_attr_value  $peerMaster crdt.info master_repl_offset] 
         ==
         [ get_info_replication_attr_value $peerSlave crdt.info $attr]
+    } {
+        puts [ get_info_replication_attr_value  $peerMaster crdt.info master_repl_offset] 
+        puts [ get_info_replication_attr_value $peerSlave crdt.info $attr]
+        fail "check_peer_info offset diff"
     }
-    assert  {
+    wait_script {
         [ get_info_replication_attr_value  $peerMaster crdt.info master_replid] 
         ==
         [ get_info_replication_attr_value $peerSlave crdt.info $replid]
+    } {
+        
+        puts [ get_info_replication_attr_value  $peerMaster crdt.info master_repl_offset] 
+        puts [ get_info_replication_attr_value $peerSlave crdt.info $attr]
+        fail "check_peer_info replid diff"
     }
+    $peerMaster debug set-crdt-ovc 1
 }

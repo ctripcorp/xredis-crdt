@@ -178,7 +178,7 @@ void peerofCommand(client *c) {
      * we can continue. */
     crdtReplicationSetMaster(gid, c->argv[2]->ptr, (int)port);
     peerMaster = getPeerMaster(gid);
-    if (isMasterMySelf() == C_OK) {
+    if (iAmMaster() == C_OK) {
         sds client = catClientInfoString(sdsempty(), c);
         serverLog(LL_NOTICE, "[CRDT]PEER OF %lld %s:%d enabled (user request from '%s')",
                   gid, peerMaster->masterhost, peerMaster->masterport, client);
@@ -200,7 +200,7 @@ void crdtReplicationSetMaster(int gid, char *ip, int port) {
     }
     peerMaster->masterhost = sdsnew(ip);
     peerMaster->masterport = port;
-    if(isMasterMySelf() == C_OK) {
+    if(iAmMaster() == C_OK) {
         if (peerMaster->master) {
             freeClient(peerMaster->master);
         } 
@@ -243,7 +243,7 @@ crdtMergeStartCommand(client *c) {
         freeClient(peerMaster->cached_master);
         peerMaster->cached_master = NULL;
     }
-    if(isMasterMySelf() != C_OK) {
+    if(iAmMaster() != C_OK) {
         if(peerMaster->master) {
             peerMaster->master->flags &= ~CLIENT_CRDT_MASTER;
             peerMaster->master->peer_master = NULL;
@@ -267,7 +267,7 @@ crdtMergeStartCommand(client *c) {
     return;
 err:
     serverLog(LL_NOTICE, "[CRDT][crdtMergeStartCommand][crdtCancelReplicationHandshake] master gid: %lld", sourceGid);
-    if(isMasterMySelf() == C_OK) {
+    if(iAmMaster() == C_OK) {
         crdtCancelReplicationHandshake(sourceGid);
     }else{
         freeClient(c);
@@ -299,7 +299,7 @@ crdtMergeEndCommand(client *c) {
     peerMaster->master->reploff = offset;
     peerMaster->master->read_reploff = offset;
     memcpy(peerMaster->master_replid, c->argv[3]->ptr, sdslen(c->argv[3]->ptr));
-    if(isMasterMySelf() == C_OK) {
+    if(iAmMaster() == C_OK) {
         crdtReplicationSendAck(c->peer_master);
         peerMaster->repl_state = REPL_STATE_CONNECTED;
         peerMaster->repl_transfer_lastio = server.unixtime;
@@ -310,7 +310,7 @@ crdtMergeEndCommand(client *c) {
 
 err:
     serverLog(LL_NOTICE, "[CRDT][crdtMergeEndCommand][crdtCancelReplicationHandshake] master gid: %lld", sourceGid);
-    if(isMasterMySelf() == C_OK) {
+    if(iAmMaster() == C_OK) {
         crdtCancelReplicationHandshake(sourceGid);
     }else{
         freeClient(c);
@@ -599,13 +599,16 @@ int crdtSlaveTryPartialResynchronization(CRDT_Master_Instance *masterInstance, i
             char new[CONFIG_RUN_ID_SIZE+1];
             memcpy(new,start,CONFIG_RUN_ID_SIZE);
             new[CONFIG_RUN_ID_SIZE] = '\0';
+            if (strcmp(new, masterInstance->cached_master->replid)) {
+                serverLog(LL_WARNING,"[CRDT]Master replication ID changed to %s",new);
 
-            serverLog(LL_WARNING,"[CRDT]Master replication ID changed to %s",new);
-
-            memcpy(masterInstance->master_replid, new, CONFIG_RUN_ID_SIZE);
-            masterInstance->master_replid[CONFIG_RUN_ID_SIZE] = '\0';
+                memcpy(masterInstance->master_replid, new, CONFIG_RUN_ID_SIZE);
+                masterInstance->master_replid[CONFIG_RUN_ID_SIZE] = '\0';
         
-            replicationFeedPeerChangeCommand(masterInstance->gid, new);
+                memcpy(masterInstance->cached_master->replid, new , CONFIG_RUN_ID_SIZE);
+                
+                replicationFeedPeerChangeCommand(masterInstance->gid, new);
+            }
         }
 
         /* Setup the replication to continue. */
@@ -1648,7 +1651,7 @@ void crdtReplicationCron(void) {
     /**!!!!Important!!!!!
      * Connect crdt master if and only if I'm NOT a SLAVE here
      * SLAVE SHOULD RECEIVE DATA from their masters*/
-    if (isMasterMySelf() == C_OK) {
+    if (iAmMaster() == C_OK) {
         for (int gid = 0; gid < (MAX_PEERS + 1); gid++) {
             CRDT_Master_Instance *crdtMaster = crdtServer.crdtMasters[gid];
             if (crdtMaster == NULL) {
@@ -1768,7 +1771,7 @@ void crdtReplicationCron(void) {
      * without sub-slaves attached should still accumulate data into the
      * backlog, in order to reply to PSYNC queries if they are turned into
      * masters after a failover. */
-    if (isMasterMySelf() == C_OK && listLength(crdtServer.slaves) == 0 && crdtServer.repl_backlog_time_limit &&
+    if (iAmMaster() == C_OK && listLength(crdtServer.slaves) == 0 && crdtServer.repl_backlog_time_limit &&
         crdtServer.repl_backlog && listLength(server.slaves) == 0 && server.repl_backlog_time_limit && server.repl_backlog)
     {
         time_t crdt_idle = server.unixtime - crdtServer.repl_no_slaves_since;

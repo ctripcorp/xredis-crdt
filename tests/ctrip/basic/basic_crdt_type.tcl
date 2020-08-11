@@ -19,7 +19,7 @@ proc get_info_replication_attr_value {client type attr} {
 }
 proc get_conflict {client type} {
     set info [$client crdt.info stats]
-    set regstr [format "\r\n%s:(.*?)\r\n" $type]
+    set regstr [format "%s=(\\d+)" $type]
     regexp $regstr $info match value 
     set _ $value
 }
@@ -128,8 +128,8 @@ proc basic_test { type create check delete} {
             wait [lindex $peers 0] 0 crdt.info [lindex $peer_stdouts 1]
             wait [lindex $peers 1] 0 crdt.info [lindex $peer_stdouts 0]
             test [format "%s-merge-conflict" $type] {
-                assert {[get_conflict [lindex $peers 0] crdt_non_type_conflict] == 2 ||
-                [get_conflict [lindex $peers 1] crdt_non_type_conflict] == 2}
+                assert {[expr [get_conflict [lindex $peers 0] set]+[get_conflict [lindex $peers 0] del]] == 2 ||
+                [expr [get_conflict [lindex $peers 1] set]+[get_conflict [lindex $peers 1] del]] == 2}
                 # assert_equal [get_conflict [lindex $peers 0] crdt_merge_conflict] 1;
             }
             test [format "%s-peerof-create" $type] {
@@ -912,8 +912,8 @@ proc basic_test { type create check delete} {
                     run [replace [replace_client $create {[lindex $peers 0]}] $argv1] 1
                     set argv2 {key field v2 2 100000 {"1:99;2:100"} }
                     run [replace [replace_client $create {[lindex $peers 0]}] $argv2] 1
-                    assert_equal [get_conflict [lindex $peers 0] crdt_non_type_conflict] 1
-                    assert_equal [get_conflict [lindex $peers 0] crdt_modify_conflict] 1
+                    assert_equal [get_conflict [lindex $peers 0] set] 1
+                    assert_equal [get_conflict [lindex $peers 0] modify] 1
                     assert {
                         $old 
                         !=
