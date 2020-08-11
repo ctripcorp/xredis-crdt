@@ -921,9 +921,9 @@ void clientsCron(void) {
 void databasesCron(void) {
     /* Expire keys by random sampling. Not required for slaves
      * as master will synthesize DELs for us. */
-    if (server.active_expire_enabled && isMasterMySelf() == C_OK) {
+    if (server.active_expire_enabled && iAmMaster() == C_OK) {
         activeExpireCycle(ACTIVE_EXPIRE_CYCLE_SLOW);
-    } else if ((isMasterMySelf() != C_OK)) {
+    } else if ((iAmMaster() != C_OK)) {
         expireSlaveKeys();
     }
 
@@ -1296,7 +1296,7 @@ void beforeSleep(struct aeEventLoop *eventLoop) {
 
     /* Run a fast expire cycle (the called function will return
      * ASAP if a fast cycle is not needed). */
-    if (server.active_expire_enabled && isMasterMySelf() == C_OK)
+    if (server.active_expire_enabled && iAmMaster() == C_OK)
         activeExpireCycle(ACTIVE_EXPIRE_CYCLE_FAST);
 
     activeGcCycle(ACTIVE_GC_CYCLE_FAST);
@@ -1923,10 +1923,9 @@ void resetServerStats(struct redisServer *srv) {
     srv->stat_rejected_conn = 0;
     srv->stat_sync_full = 0;
     srv->crdt_type_conflict = 0;
-    srv->crdt_non_type_conflict = 0;
-    srv->crdt_data_isomrphic_conflict = 0;
-    srv->crdt_tombstone_isomrphic_conflict = 0;
-    srv->crdt_data_tombstone_conflict = 0;
+    srv->crdt_set_conflict = 0;
+    srv->crdt_del_conflict = 0;
+    srv->crdt_set_del_conflict = 0;
     srv->crdt_modify_conflict = 0;
     srv->crdt_merge_conflict = 0;
     srv->stat_sync_partial_ok = 0;
@@ -2594,7 +2593,7 @@ int processCommand(client *c) {
           server.saveparamslen > 0 &&
           server.lastbgsave_status == C_ERR) ||
           server.aof_last_write_status == C_ERR) &&
-        isMasterMySelf() == C_OK &&
+        iAmMaster() == C_OK &&
         (c->cmd->flags & CMD_WRITE ||
          c->cmd->proc == pingCommand))
     {
@@ -2611,7 +2610,7 @@ int processCommand(client *c) {
 
     /* Don't accept write commands if there are not enough good slaves and
      * user configured the min-slaves-to-write option. */
-    if (isMasterMySelf() == C_OK &&
+    if (iAmMaster() == C_OK &&
         server.repl_min_slaves_to_write &&
         server.repl_min_slaves_max_lag &&
         c->cmd->flags & CMD_WRITE &&
@@ -2624,7 +2623,7 @@ int processCommand(client *c) {
 
     /* Don't accept write commands if this is a read only slave. But
      * accept write commands if this is our master. */
-    if ((isMasterMySelf() != C_OK) && server.repl_slave_ro &&
+    if ((iAmMaster() != C_OK) && server.repl_slave_ro &&
         !(c->flags & CLIENT_MASTER) &&
         c->cmd->flags & CMD_WRITE)
     {
@@ -2649,7 +2648,7 @@ int processCommand(client *c) {
 
     /* Only allow INFO and SLAVEOF when slave-serve-stale-data is no and
      * we are a slave with a broken link with master. */
-    if ((isMasterMySelf() != C_OK) && server.repl_state != REPL_STATE_CONNECTED &&
+    if ((iAmMaster() != C_OK) && server.repl_state != REPL_STATE_CONNECTED &&
         server.repl_serve_stale_data == 0 &&
         !(c->cmd->flags & CMD_STALE))
     {
@@ -3469,24 +3468,18 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                             "sync_partial_ok:%lld\r\n"
                             "sync_partial_err:%lld\r\n"
                             "latest_fork_usec:%lld\r\n"
-                            "crdt_type_conflict:%lld\r\n"
-                            "crdt_non_type_conflict:%lld\r\n"
-                            "crdt_modify_conflict:%lld\r\n"
-                            "crdt_merge_conflict:%lld\r\n"
-                            "crdt_data_isomrphic_conflict:%lld\r\n"
-                            "crdt_tombstone_isomrphic_conflict:%lld\r\n"
-                            "crdt_data_tombstone_conflict:%lld\r\n",
+                            "crdt_conflict:type=%lld,set=%lld,del=%lld,set_del=%lld\r\n"
+                            "crdt_conflict_op:modify=%lld,merge=%lld\r\n",
                             crdtServer.stat_sync_full,
                             crdtServer.stat_sync_partial_ok,
                             crdtServer.stat_sync_partial_err,
                             crdtServer.stat_fork_time,
                             crdtServer.crdt_type_conflict,
-                            crdtServer.crdt_non_type_conflict,
+                            crdtServer.crdt_set_conflict,
+                            crdtServer.crdt_del_conflict,
+                            crdtServer.crdt_set_del_conflict,
                             crdtServer.crdt_modify_conflict,
-                            crdtServer.crdt_merge_conflict,
-                            crdtServer.crdt_data_isomrphic_conflict,
-                            crdtServer.crdt_tombstone_isomrphic_conflict,
-                            crdtServer.crdt_data_tombstone_conflict);
+                            crdtServer.crdt_merge_conflict);
     }
 
     /* CRDT Replication */

@@ -1389,12 +1389,12 @@ void processInputBuffer(client *c) {
         if (c->argc == 0) {
             resetClient(c);
         } else {
-            if (c->flags & CLIENT_MASTER && isMasterMySelf() != C_OK) {
+            if (c->flags & CLIENT_MASTER && iAmMaster() != C_OK) {
                 c->peer_master = NULL;
             }
             /* Only reset the client when the command was executed. */
             if (processCommand(c) == C_OK) {
-                if (c->flags & CLIENT_MASTER && c->peer_master != NULL && isMasterMySelf() != C_OK) {
+                if (c->flags & CLIENT_MASTER && c->peer_master != NULL && iAmMaster() != C_OK) {
                     CRDT_Master_Instance* peer = c->peer_master;
                     if(peer) { //
                         peer->master->reploff += c->read_reploff - sdslen(c->querybuf) - c->reploff;
@@ -1924,6 +1924,8 @@ int getClientType(client *c) {
     if (c->flags & CLIENT_MASTER) return CLIENT_TYPE_MASTER;
     if ((c->flags & CLIENT_SLAVE) && !(c->flags & CLIENT_MONITOR))
         return CLIENT_TYPE_SLAVE;
+    if (c->flags & CLIENT_CRDT_MASTER) return CLIENT_TYPE_CRDT_MASTER;
+    if (c->flags & CLIENT_CRDT_SLAVE) return CLIENT_TYPE_CRDT_SLAVE;
     if (c->flags & CLIENT_PUBSUB ) return CLIENT_TYPE_PUBSUB;
     return CLIENT_TYPE_NORMAL;
 }

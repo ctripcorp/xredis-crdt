@@ -228,7 +228,7 @@ static int updateReplTransferLastio(int gid) {
     if(peerMasterServer == NULL) {
         return C_ERR;
     }
-    if(isMasterMySelf() == C_OK) {
+    if(iAmMaster() == C_OK) {
         peerMasterServer->repl_transfer_lastio = server.unixtime;
     }
     return C_OK;
@@ -430,7 +430,7 @@ int mergeCrdtObjectCommand(client *c, DictFindFunc find, DictAddFunc add, DictDe
 
 error:
     serverLog(LL_NOTICE, "[CRDT][mergeCrdtObjectCommand][freeClient] gid: %lld", sourceGid);
-    if(isMasterMySelf() == C_OK) {
+    if(iAmMaster() == C_OK) {
         crdtCancelReplicationHandshake(sourceGid);
     } else {
         freeClient(c);
@@ -496,7 +496,8 @@ int rdbLoadCrdtData(rio* rdb, redisDb* db, long long current_expire_time, LoadCr
     // assert(dictFind(db->dict,key->ptr) == NULL);
     moduleKey = createModuleKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE, NULL, NULL);
     if(load(db, key, rdb, moduleKey) == C_ERR) goto eoferr;
-    if(current_expire_time != -1) {
+    //use dictFind function for compatibility(version1.0.3) when rdb has expire but no data
+    if(dictFind(db->dict,key->ptr) != NULL && current_expire_time != -1) {
         setExpire(NULL, db, key, current_expire_time);
     }
     result = C_OK;
@@ -576,7 +577,7 @@ int initedCrdtServer() {
     }
     return 1;
 }
-int isMasterMySelf() {
+int iAmMaster() {
     if(crdt_enabled && !server.master_is_crdt && server.masterhost ) {
         return C_OK;
     }
