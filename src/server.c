@@ -330,7 +330,7 @@ struct redisCommand redisCommandTable[] = {
     {"debugCancelCrdt",debugCancelCrdt,3,"ast",0,NULL,0,0,0,0,0},
     {"tombstoneSize",tombstoneSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
     {"expireSize",expireSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
-    {"crdt.ovc",crdtOvcCommand,3,"rF",0,NULL,0,0,0,0,0},
+    // {"crdt.ovc",crdtOvcCommand,3,"rF",0,NULL,0,0,0,0,0},
     {"crdt.authGid", crdtAuthGidCommand,2,"rF", 0, NULL,0,0,0,0,0},
     {"crdt.auth", crdtAuthCommand, 3, "rF", 0,NULL,0,0,0,0,0}
 };
@@ -2398,6 +2398,7 @@ void call(client *c, int flags) {
     redisOpArrayInit(&server.also_propagate);
 
     /* Call the command. */
+    int was_crdt_connected = c->flags & CLIENT_CRDT_MASTER?  c->peer_master->repl_state == REPL_STATE_CONNECTED? 1: 0:0;
     dirty = server.dirty;
     start = ustime();
     c->cmd->proc(c);
@@ -2451,6 +2452,7 @@ void call(client *c, int flags) {
             propagate_flags |= PROPAGATE_CRDT_REPL;
         }
 
+        if (c ->flags & CLIENT_CRDT_MASTER && iAmMaster() == C_OK && was_crdt_connected) propagate_flags &= ~PROPAGATE_REPL;
         /* However prevent AOF / replication propagation if the command
          * implementatino called preventCommandPropagation() or similar,
          * or if we don't have the call() flags to do so. */
@@ -2488,6 +2490,7 @@ void call(client *c, int flags) {
                 /* Whatever the command wish is, we honor the call() flags. */
                 if (!(flags&CMD_CALL_PROPAGATE_AOF)) target &= ~PROPAGATE_AOF;
                 if (!(flags&CMD_CALL_PROPAGATE_REPL)) target &= ~PROPAGATE_REPL;
+                if (c ->flags & CLIENT_CRDT_MASTER && iAmMaster() == C_OK && was_crdt_connected) target &= ~PROPAGATE_REPL;
                 if (target)
                     propagate(rop->cmd,rop->dbid,rop->argv,rop->argc,target);
             }
@@ -4254,4 +4257,39 @@ refreshGcVectorClock(VectorClock other) {
     freeVectorClock(gcVectorClock);
 }
 
+void sendSelectCommandToSlave(int dictid) {
+    listNode *ln;
+    listIter li;
+    char llstr[LONG_STR_SIZE];
+    robj *selectcmd;
+    /* For a few DBs we have pre-computed SELECT command. */
+    if (dictid >= 0 && dictid < PROTO_SHARED_SELECT_CMDS) {
+        selectcmd = shared.select[dictid];
+    } else {
+        int dictid_len;
+
+        dictid_len = ll2string(llstr,sizeof(llstr),dictid);
+        selectcmd = createObject(OBJ_STRING,
+            sdscatprintf(sdsempty(),
+            "*2\r\n$6\r\nSELECT\r\n$%d\r\n%s\r\n",
+            dictid_len, llstr));
+    }
+    
+    
+
+    /* Add the SELECT command into the backlog. */
+    if (server.repl_backlog) feedReplicationBacklogWithObject(&server, selectcmd);
+
+    /* Send it to slaves. */
+    listRewind(server.slaves,&li);
+    while((ln = listNext(&li))) {
+        client *slave = ln->value;
+        if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) continue;
+        addReply(slave,selectcmd);
+    }
+
+    if (dictid < 0 || dictid >= PROTO_SHARED_SELECT_CMDS)
+        decrRefCount(selectcmd);
+    server.slaveseldb = dictid;
+}
 /* The End */

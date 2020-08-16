@@ -200,37 +200,8 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
     serverAssert(!(listLength(slaves) != 0 && server.repl_backlog == NULL));
     /* Send SELECT command to every slave if needed. */
     if (server.slaveseldb != dictid) {
-        robj *selectcmd;
-        /* For a few DBs we have pre-computed SELECT command. */
-        if (dictid >= 0 && dictid < PROTO_SHARED_SELECT_CMDS) {
-            selectcmd = shared.select[dictid];
-        } else {
-            int dictid_len;
-
-            dictid_len = ll2string(llstr,sizeof(llstr),dictid);
-            selectcmd = createObject(OBJ_STRING,
-                sdscatprintf(sdsempty(),
-                "*2\r\n$6\r\nSELECT\r\n$%d\r\n%s\r\n",
-                dictid_len, llstr));
-        }
-        
-        
-
-        /* Add the SELECT command into the backlog. */
-        if (server.repl_backlog) feedReplicationBacklogWithObject(&server, selectcmd);
-
-        /* Send it to slaves. */
-        listRewind(slaves,&li);
-        while((ln = listNext(&li))) {
-            client *slave = ln->value;
-            if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) continue;
-            addReply(slave,selectcmd);
-        }
-
-        if (dictid < 0 || dictid >= PROTO_SHARED_SELECT_CMDS)
-            decrRefCount(selectcmd);
+        sendSelectCommandToSlave(dictid);
     }
-    server.slaveseldb = dictid;
 
     /* Write the command to the replication backlog if any. */
     if (server.repl_backlog) {
