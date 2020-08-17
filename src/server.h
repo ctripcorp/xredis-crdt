@@ -757,6 +757,7 @@ typedef struct client {
     /* Crdt Stuff*/
     VectorClock vectorClock; // used for slave client only, when the client is a master, use crdtMasterInstance
     struct CRDT_Master_Instance* peer_master;
+    long long pending_used_offset;
 } client;
 
 struct saveparam {

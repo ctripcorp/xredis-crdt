@@ -100,7 +100,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                 set sync_partial_ok [ crdt_status $slave "sync_partial_ok" ]
                 if {$sync_partial_ok==0} {
                     print_log_content $slave_stdout
-                    # print_log_content $master_stdout
+                    print_log_content $master_stdout
                     fail "crdt sync_partial_error"
                 }
             }

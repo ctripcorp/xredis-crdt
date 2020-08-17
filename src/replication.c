@@ -190,6 +190,10 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
      * advertise the same replication ID as the master (since it shares the
      * master replication history and has the same backlog and offsets). */
     if (server.masterhost != NULL && !server.repl_slave_repl_all && isSameTypeWithMaster() == C_OK) return;
+    /*
+     *
+     * 
+     * */ 
     if (server.current_client && server.current_client->flags &CLIENT_CRDT_MASTER && server.current_client->peer_master->repl_state == REPL_STATE_CONNECTED) {
         if(server.current_client->cmd->proc != crdtMergeEndCommand) {
             return;

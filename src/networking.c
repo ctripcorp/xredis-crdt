@@ -97,6 +97,7 @@ client *createClient(int fd) {
     c->bufpos = 0;
     c->querybuf = sdsempty();
     c->pending_querybuf = sdsempty();
+    c->pending_used_offset = 0;
     c->querybuf_peak = 0;
     c->reqtype = 0;
     c->argc = 0;
@@ -1404,7 +1405,9 @@ void processInputBuffer(client *c) {
                     || ((c->flags & CLIENT_CRDT_MASTER) && c->peer_master->repl_state == REPL_STATE_CONNECTED))
                     && !(c->flags & CLIENT_MULTI)) {
                     /* Update the applied replication offset of our master. */
+                    c->pending_used_offset += c->read_reploff - sdslen(c->querybuf) - c->reploff;
                     c->reploff = c->read_reploff - sdslen(c->querybuf);
+                    
                 }
                 
                 /* Don't reset the client structure for clients blocked in a
@@ -1508,6 +1511,7 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
      * repl offset, so that, when a failover happend locally, the globally repl_offset
      * will not be any different*/
     if(c->flags & CLIENT_MASTER) {
+        
         size_t prev_offset = c->reploff;
         processInputBuffer(c);
         size_t applied = c->reploff - prev_offset;
@@ -1517,6 +1521,7 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
                     c->pending_querybuf, applied);
         	}
             sdsrange(c->pending_querybuf,applied,-1);
+            c->pending_used_offset = 0;
         }
     } else if(c->flags & CLIENT_CRDT_MASTER && c->peer_master->repl_state == REPL_STATE_CONNECTED) {
         int dictid = c->db->id;
@@ -1530,6 +1535,7 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
             replicationFeedSlavesFromMasterStream(server.slaves,
                 c->pending_querybuf, applied);
             sdsrange(c->pending_querybuf,applied,-1);
+            c->pending_used_offset = 0;
         }
     } else {
         processInputBuffer(c);

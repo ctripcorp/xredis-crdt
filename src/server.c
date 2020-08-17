@@ -2273,7 +2273,11 @@ void propagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
         feedAppendOnlyFile(cmd,dbid,argv,argc);
     if (flags & PROPAGATE_CRDT_REPL) {
         if (server.master && isSameTypeWithMaster() == C_OK) {
-            feedCrdtBacklog(argv, argc);
+            //slave set slave-read-only 0
+            if(server.current_client == server.master) {
+                feedReplicationBacklog(&crdtServer, server.current_client->pending_querybuf + server.current_client->pending_used_offset, server.current_client->read_reploff - server.current_client->reploff- sdslen(server.current_client->querybuf));
+            }
+            
         } else {
             replicationFeedAllSlaves(dbid, argv, argc);
         }
