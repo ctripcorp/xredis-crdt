@@ -243,8 +243,8 @@ slave-peer-offset "1.other peer peerof 2. add data 3.slaveof 4.peerof" {
     after 2000
     # puts [$peer crdt.info replication]
     # puts [$peer_slave crdt.info replication]
-    print_file_matches $peer_log
-    print_file_matches $peer_slave_log
+    # print_file_matches $peer_log
+    # print_file_matches $peer_slave_log
     # $peer_slave 
     test_write_data_offset 1 $master $slave $slave_slave $peer $peer_slave 
     $peer2 peerof $peer_gid no one

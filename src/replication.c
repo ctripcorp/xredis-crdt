@@ -183,7 +183,6 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
     listNode *ln;
     listIter li;
     int j, len;
-    char llstr[LONG_STR_SIZE];
 
     /* If the instance is not a top level master, return ASAP: we'll just proxy
      * the stream of data we receive from our master instead, in order to
@@ -191,7 +190,11 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
      * advertise the same replication ID as the master (since it shares the
      * master replication history and has the same backlog and offsets). */
     if (server.masterhost != NULL && !server.repl_slave_repl_all && isSameTypeWithMaster() == C_OK) return;
-
+    if (server.current_client && server.current_client->flags &CLIENT_CRDT_MASTER && server.current_client->peer_master->repl_state == REPL_STATE_CONNECTED) {
+        if(server.current_client->cmd->proc != crdtMergeEndCommand) {
+            return;
+        }
+    }
     /* If there aren't slaves, and there is no backlog buffer to populate,
      * we can return ASAP. */
     if (server.repl_backlog == NULL && listLength(slaves) == 0) return;

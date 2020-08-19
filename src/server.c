@@ -2277,8 +2277,7 @@ void propagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
         } else {
             replicationFeedAllSlaves(dbid, argv, argc);
         }
-    }
-    if (flags & PROPAGATE_REPL) {
+    } else if (flags & PROPAGATE_REPL) {
         replicationFeedSlaves(server.slaves, dbid, argv, argc);
     }
 }
@@ -2398,7 +2397,6 @@ void call(client *c, int flags) {
     redisOpArrayInit(&server.also_propagate);
 
     /* Call the command. */
-    int was_crdt_connected = c->flags & CLIENT_CRDT_MASTER?  c->peer_master->repl_state == REPL_STATE_CONNECTED? 1: 0:0;
     dirty = server.dirty;
     start = ustime();
     c->cmd->proc(c);
@@ -2452,7 +2450,6 @@ void call(client *c, int flags) {
             propagate_flags |= PROPAGATE_CRDT_REPL;
         }
 
-        if (c ->flags & CLIENT_CRDT_MASTER && iAmMaster() == C_OK && was_crdt_connected) propagate_flags &= ~PROPAGATE_REPL;
         /* However prevent AOF / replication propagation if the command
          * implementatino called preventCommandPropagation() or similar,
          * or if we don't have the call() flags to do so. */
@@ -2490,7 +2487,6 @@ void call(client *c, int flags) {
                 /* Whatever the command wish is, we honor the call() flags. */
                 if (!(flags&CMD_CALL_PROPAGATE_AOF)) target &= ~PROPAGATE_AOF;
                 if (!(flags&CMD_CALL_PROPAGATE_REPL)) target &= ~PROPAGATE_REPL;
-                if (c ->flags & CLIENT_CRDT_MASTER && iAmMaster() == C_OK && was_crdt_connected) target &= ~PROPAGATE_REPL;
                 if (target)
                     propagate(rop->cmd,rop->dbid,rop->argv,rop->argc,target);
             }
