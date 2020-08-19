@@ -159,6 +159,8 @@ char *REDISMODULE_API_FUNC(RedisModule_Strdup)(const char *str);
 int REDISMODULE_API_FUNC(RedisModule_GetApi)(const char *, void *);
 int REDISMODULE_API_FUNC(RedisModule_CreateCommand)(RedisModuleCtx *ctx, const char *name, RedisModuleCmdFunc cmdfunc, const char *strflags, int firstkey, int lastkey, int keystep);
 void REDISMODULE_API_FUNC(RedisModule_SetModuleAttribs)(RedisModuleCtx *ctx, const char *name, int ver, int apiver);
+void REDISMODULE_API_FUNC(RedisModule_SetOvc)(RedisModuleCtx *ctx, long long vc);
+void* REDISMODULE_API_FUNC(RedisModule_GetOvc)(RedisModuleCtx *ctx);
 int REDISMODULE_API_FUNC(RedisModule_IsModuleNameBusy)(const char *name);
 int REDISMODULE_API_FUNC(RedisModule_WrongArity)(RedisModuleCtx *ctx);
 int REDISMODULE_API_FUNC(RedisModule_ReplyWithLongLong)(RedisModuleCtx *ctx, long long ll);
@@ -332,6 +334,8 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(Strdup);
     REDISMODULE_GET_API(CreateCommand);
     REDISMODULE_GET_API(SetModuleAttribs);
+    REDISMODULE_GET_API(SetOvc);
+    REDISMODULE_GET_API(GetOvc);
     REDISMODULE_GET_API(IsModuleNameBusy);
     REDISMODULE_GET_API(WrongArity);
     REDISMODULE_GET_API(ReplyWithLongLong);

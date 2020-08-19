@@ -1619,6 +1619,7 @@ CRDT_Master_Instance *createPeerMaster(client *c, int gid);
 void crdtOvcCommand(client *c);
 void crdtAuthGidCommand(client *c);
 
+void sendSelectCommandToSlave(int dictid);
 void crdtAuthCommand(client *c);
 void freeClientArgv(client* c);
 void feedCrdtBacklog(robj **argv, int argc);

@@ -1258,36 +1258,6 @@ void sendObservedVectorClock() {
     decrRefCount(crdt_ovc_argv[2]);
 }
 
-void crdtOvcCommand(client *c) {
-    if (c->argc != 3) {
-        addReply(c, shared.syntaxerr);
-        return;
-    }
-    long long gid;
-    if (getLongLongFromObject(c->argv[1], &gid) != C_OK) {
-        addReply(c, shared.syntaxerr);
-    }
-    int flags = PROPAGATE_REPL;
-    if (gid != crdtServer.crdt_gid) {
-        sds vclockStr = (sds) c->argv[2]->ptr;
-        VectorClock vclock = sdsToVectorClock(vclockStr);
-
-        CRDT_Master_Instance *peerMaster = getPeerMaster(gid);
-        VectorClock newVectorClock = vectorClockMerge(peerMaster->vectorClock, vclock);
-        if (!isNullVectorClock(peerMaster->vectorClock)) {
-            freeVectorClock(peerMaster->vectorClock);
-        }
-        freeVectorClock(vclock);
-        // about peerMaster reploff
-        c->peer_master = peerMaster;
-        peerMaster->vectorClock = newVectorClock;
-    } else {
-        feedCrdtBacklog(c->argv, c->argc);
-    }
-    addReply(c, shared.ok);
-    forceCommandPropagation(c, flags);
-}
-
 void crdtAuthGidCommand(client *c) {
     if (c->argc != 2) {
         addReply(c, shared.syntaxerr);

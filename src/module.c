@@ -737,6 +737,12 @@ int RM_CreateCommand(RedisModuleCtx *ctx, const char *name, RedisModuleCmdFunc c
     return REDISMODULE_OK;
 }
 
+void RM_SetOvc(RedisModuleCtx *ctx, VectorClock vc) {
+    ctx->client->peer_master->vectorClock = vc;
+}
+VectorClock RM_GetOvc(RedisModuleCtx *ctx) {
+    return ctx->client->peer_master->vectorClock;
+}
 /* Called by RM_Init() to setup the `ctx->module` structure.
  *
  * This is an internal function, Redis modules developers don't need
@@ -4569,6 +4575,8 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(Strdup);
     REGISTER_API(CreateCommand);
     REGISTER_API(SetModuleAttribs);
+    REGISTER_API(SetOvc);
+    REGISTER_API(GetOvc);
     REGISTER_API(IsModuleNameBusy);
     REGISTER_API(WrongArity);
     REGISTER_API(ReplyWithOk);
