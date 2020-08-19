@@ -330,7 +330,7 @@ struct redisCommand redisCommandTable[] = {
     {"debugCancelCrdt",debugCancelCrdt,3,"ast",0,NULL,0,0,0,0,0},
     {"tombstoneSize",tombstoneSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
     {"expireSize",expireSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
-    {"crdt.ovc",crdtOvcCommand,3,"rF",0,NULL,0,0,0,0,0},
+    // {"crdt.ovc",crdtOvcCommand,3,"rF",0,NULL,0,0,0,0,0},
     {"crdt.authGid", crdtAuthGidCommand,2,"rF", 0, NULL,0,0,0,0,0},
     {"crdt.auth", crdtAuthCommand, 3, "rF", 0,NULL,0,0,0,0,0}
 };
@@ -2277,8 +2277,7 @@ void propagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
         } else {
             replicationFeedAllSlaves(dbid, argv, argc);
         }
-    }
-    if (flags & PROPAGATE_REPL) {
+    } else if (flags & PROPAGATE_REPL) {
         replicationFeedSlaves(server.slaves, dbid, argv, argc);
     }
 }
@@ -4254,4 +4253,39 @@ refreshGcVectorClock(VectorClock other) {
     freeVectorClock(gcVectorClock);
 }
 
+void sendSelectCommandToSlave(int dictid) {
+    listNode *ln;
+    listIter li;
+    char llstr[LONG_STR_SIZE];
+    robj *selectcmd;
+    /* For a few DBs we have pre-computed SELECT command. */
+    if (dictid >= 0 && dictid < PROTO_SHARED_SELECT_CMDS) {
+        selectcmd = shared.select[dictid];
+    } else {
+        int dictid_len;
+
+        dictid_len = ll2string(llstr,sizeof(llstr),dictid);
+        selectcmd = createObject(OBJ_STRING,
+            sdscatprintf(sdsempty(),
+            "*2\r\n$6\r\nSELECT\r\n$%d\r\n%s\r\n",
+            dictid_len, llstr));
+    }
+    
+    
+
+    /* Add the SELECT command into the backlog. */
+    if (server.repl_backlog) feedReplicationBacklogWithObject(&server, selectcmd);
+
+    /* Send it to slaves. */
+    listRewind(server.slaves,&li);
+    while((ln = listNext(&li))) {
+        client *slave = ln->value;
+        if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) continue;
+        addReply(slave,selectcmd);
+    }
+
+    if (dictid < 0 || dictid >= PROTO_SHARED_SELECT_CMDS)
+        decrRefCount(selectcmd);
+    server.slaveseldb = dictid;
+}
 /* The End */

@@ -57,7 +57,6 @@ set ::all_tests {
     ctrip/unit/aof
 
     ctrip/unit/expire
-    ctrip/integration/composite/master-slave-failover
     ctrip/unit/crdt_publish
     ctrip/integration/master-slave/rdb3
     ctrip/integration/bug/redis-unfree-client-when-master-to-slave
@@ -73,7 +72,6 @@ set ::all_tests {
     ctrip/unit/crdt_del
     ctrip/unit/crdt_register
     ctrip/unit/merge_different_type
-    ctrip/integration/composite/master-slave-failover
     ctrip/unit/crdt_hdel_mem_leak
     ctrip/unit/gc
     ctrip/unit/pubsub

@@ -1467,7 +1467,7 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
         }
         freeClient(c);
         return;
-    } else if (c->flags & CLIENT_MASTER) {
+    } else if (c->flags & CLIENT_MASTER || (c->flags & CLIENT_CRDT_MASTER && c->peer_master->repl_state == REPL_STATE_CONNECTED)) {
         /* Append the query buffer to the pending (not applied) buffer
          * of the master. We'll use this buffer later in order to have a
          * copy of the string applied by the last command executed. */
@@ -1507,19 +1507,32 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
      * a crdt(peer) master, as we wish our slaves to keeper align with peer master's
      * repl offset, so that, when a failover happend locally, the globally repl_offset
      * will not be any different*/
-    if (!(c->flags & CLIENT_MASTER)) {
-        processInputBuffer(c);
-    } else {
+    if(c->flags & CLIENT_MASTER) {
         size_t prev_offset = c->reploff;
         processInputBuffer(c);
         size_t applied = c->reploff - prev_offset;
         if (applied) {
-        	if(!server.repl_slave_repl_all){
-        		replicationFeedSlavesFromMasterStream(server.slaves,
+            if(!server.repl_slave_repl_all){
+                replicationFeedSlavesFromMasterStream(server.slaves,
                     c->pending_querybuf, applied);
         	}
             sdsrange(c->pending_querybuf,applied,-1);
         }
+    } else if(c->flags & CLIENT_CRDT_MASTER && c->peer_master->repl_state == REPL_STATE_CONNECTED) {
+        int dictid = c->db->id;
+        size_t prev_offset = c->reploff;
+        processInputBuffer(c);
+        size_t applied = c->reploff - prev_offset;
+        if (applied) {
+            if(server.slaveseldb != dictid) {
+                sendSelectCommandToSlave(dictid);
+            }
+            replicationFeedSlavesFromMasterStream(server.slaves,
+                c->pending_querybuf, applied);
+            sdsrange(c->pending_querybuf,applied,-1);
+        }
+    } else {
+        processInputBuffer(c);
     }
 }
 
