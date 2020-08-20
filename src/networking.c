@@ -1392,13 +1392,18 @@ void processInputBuffer(client *c) {
         } else {
             if (c->flags & CLIENT_MASTER && iAmMaster() != C_OK) {
                 c->peer_master = NULL;
+                c->gid = -1;
             }
             /* Only reset the client when the command was executed. */
             if (processCommand(c) == C_OK) {
-                if (c->flags & CLIENT_MASTER && c->peer_master != NULL && iAmMaster() != C_OK) {
-                    CRDT_Master_Instance* peer = c->peer_master;
-                    if(peer) { //
-                        peer->master->reploff += c->read_reploff - sdslen(c->querybuf) - c->reploff;
+                if (c->flags & CLIENT_MASTER && iAmMaster() != C_OK) {
+                    if(c->gid == crdtServer.crdt_gid) {
+                        feedReplicationBacklog(&crdtServer, c->pending_querybuf + c->pending_used_offset, c->read_reploff - c->reploff- sdslen(c->querybuf));
+                    } else if(c->gid != -1) {
+                        CRDT_Master_Instance* peer = c->peer_master;
+                        if(peer) { //
+                            peer->master->reploff += c->read_reploff - sdslen(c->querybuf) - c->reploff;
+                        }
                     }
                 }
                 if ((c->flags & CLIENT_MASTER

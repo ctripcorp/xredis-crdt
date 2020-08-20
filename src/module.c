@@ -1368,6 +1368,7 @@ int RM_ReplicateVerbatim(RedisModuleCtx *ctx) {
     return Verbatim(ctx, PROPAGATE_AOF|PROPAGATE_REPL);
 }
 int RM_CrdtReplicateVerbatim(int gid, RedisModuleCtx *ctx) {
+    ctx->client->gid = gid;
     if(crdtServer.crdt_gid == gid) {
         return Verbatim(ctx, PROPAGATE_AOF|PROPAGATE_CRDT_REPL);
     } else {

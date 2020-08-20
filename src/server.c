@@ -2271,16 +2271,9 @@ void propagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
 {
     if (server.aof_state != AOF_OFF && flags & PROPAGATE_AOF)
         feedAppendOnlyFile(cmd,dbid,argv,argc);
-    if (flags & PROPAGATE_CRDT_REPL) {
-        if (server.master && isSameTypeWithMaster() == C_OK) {
-            //slave set slave-read-only 0
-            if(server.current_client == server.master) {
-                feedReplicationBacklog(&crdtServer, server.current_client->pending_querybuf + server.current_client->pending_used_offset, server.current_client->read_reploff - server.current_client->reploff- sdslen(server.current_client->querybuf));
-            }
-            
-        } else {
+    if (flags & PROPAGATE_CRDT_REPL && iAmMaster() == C_OK) {
             replicationFeedAllSlaves(dbid, argv, argc);
-        }
+        
     } else if (flags & PROPAGATE_REPL) {
         replicationFeedSlaves(server.slaves, dbid, argv, argc);
     }
