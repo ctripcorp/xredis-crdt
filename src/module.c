@@ -738,10 +738,10 @@ int RM_CreateCommand(RedisModuleCtx *ctx, const char *name, RedisModuleCmdFunc c
 }
 
 void RM_SetOvc(RedisModuleCtx *ctx, VectorClock vc) {
-    ctx->client->peer_master->vectorClock = vc;
+    getPeerMaster(ctx->client->gid)->vectorClock = vc;
 }
 VectorClock RM_GetOvc(RedisModuleCtx *ctx) {
-    return ctx->client->peer_master->vectorClock;
+    return getPeerMaster(ctx->client->gid)->vectorClock;
 }
 /* Called by RM_Init() to setup the `ctx->module` structure.
  *
@@ -1372,7 +1372,6 @@ int RM_CrdtReplicateVerbatim(int gid, RedisModuleCtx *ctx) {
     if(crdtServer.crdt_gid == gid) {
         return Verbatim(ctx, PROPAGATE_AOF|PROPAGATE_CRDT_REPL);
     } else {
-        ctx->client->peer_master = getPeerMaster(gid);
         return RM_ReplicateVerbatim(ctx);
     }
 }
