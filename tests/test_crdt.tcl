@@ -15,6 +15,7 @@ source tests/support/aof.tcl
 
 set ::all_tests {
     ctrip/master-not-crdt/convert-zipmap-hash-on-load
+    ctrip/unit/multi
     ctrip/integration/bug/slave-non-read-only-peer-backlog
     ctrip/integration/bug/slave-non-read-only-send-slave
     ctrip/integration/composite/peer-offset-check
