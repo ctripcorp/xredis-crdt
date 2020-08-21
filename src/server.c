@@ -246,7 +246,9 @@ struct redisCommand redisCommandTable[] = {
     {"lastsave",lastsaveCommand,1,"RF",0,NULL,0,0,0,0,0},
     {"type",typeCommand,2,"rF",0,NULL,1,1,1,0,0},
     {"multi",multiCommand,1,"sF",0,NULL,0,0,0,0,0},
+    {"crdt.multi", multiCommand, 2, "sF", 0,NULL, 0,0,0,0,0},
     {"exec",execCommand,1,"sM",0,NULL,0,0,0,0,0},
+    {"crdt.exec", crdtExecCommand,2, "sM", 0, NULL, 0,0,0,0,0},
    {"discard",discardCommand,1,"sF",0,NULL,0,0,0,0,0},
     {"sync",syncCommand,1,"ars",0,NULL,0,0,0,0,0},
     {"psync",syncCommand,3,"ars",0,NULL,0,0,0,0,0},
@@ -1432,6 +1434,7 @@ void createSharedObjects(void) {
     shared.lpush = createStringObject("LPUSH",5);
     shared.set = createStringObject("SET", 3);
     shared.hset = createStringObject("HSET", 4);
+    shared.crdtexec = createStringObject("CRDT.EXEC", 9);
     shared.expireat = createStringObject("EXPIREAt", 8);
     for (j = 0; j < OBJ_SHARED_INTEGERS; j++) {
         shared.integers[j] =
@@ -2272,7 +2275,7 @@ void propagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
     if (server.aof_state != AOF_OFF && flags & PROPAGATE_AOF)
         feedAppendOnlyFile(cmd,dbid,argv,argc);
     if (flags & PROPAGATE_CRDT_REPL && iAmMaster() == C_OK) {
-            replicationFeedAllSlaves(dbid, argv, argc);
+        replicationFeedAllSlaves(dbid, argv, argc);
         
     } else if (flags & PROPAGATE_REPL) {
         replicationFeedSlaves(server.slaves, dbid, argv, argc);
@@ -2456,7 +2459,6 @@ void call(client *c, int flags) {
         if (c->flags & CLIENT_PREVENT_AOF_PROP ||
             !(flags & CMD_CALL_PROPAGATE_AOF))
                 propagate_flags &= ~PROPAGATE_AOF;
-
         /* Call propagate() only if at least one of AOF / replication
          * propagation is needed. Note that modules commands handle replication
          * in an explicit way, so we never replicate them automatically. */
@@ -2680,7 +2682,7 @@ int processCommand(client *c) {
     /* Exec the command */
     if (c->flags & CLIENT_MULTI &&
         c->cmd->proc != execCommand && c->cmd->proc != discardCommand &&
-        c->cmd->proc != multiCommand && c->cmd->proc != watchCommand)
+        c->cmd->proc != multiCommand && c->cmd->proc != watchCommand && c->cmd->proc != crdtExecCommand)
     {
         queueMultiCommand(c);
         addReply(c,shared.queued);
