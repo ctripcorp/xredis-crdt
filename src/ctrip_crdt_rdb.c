@@ -622,7 +622,7 @@ robj* reverseHashToArgv(hashTypeIterator* hi, int type) {
         }
     }else if(hi->encoding == OBJ_ENCODING_HT) {
         sds value = hashTypeCurrentFromHashTable(hi, type);
-        return createObject(OBJ_STRING, value);
+        return createObject(OBJ_STRING, sdsdup(value));
     }else{
         serverLog(LL_WARNING, "hash encoding error");
         return NULL;
