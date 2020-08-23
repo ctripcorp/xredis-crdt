@@ -1572,7 +1572,7 @@ void initServerConfig(struct redisServer *srv) {
     srv->masterauth = NULL;
     srv->masterhost = NULL;
     srv->masterport = 6379;
-    srv->master_is_crdt = 0;
+    srv->master_is_crdt = 1;
     srv->master = NULL;
     srv->cached_master = NULL;
     srv->master_initial_offset = -1;

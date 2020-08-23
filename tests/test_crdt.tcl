@@ -14,6 +14,8 @@ source tests/support/aof.tcl
 
 
 set ::all_tests {
+    ctrip/integration/bug/slave-non-read-only-peer-backlog
+    ctrip/integration/bug/slave-non-read-only-send-slave
     ctrip/integration/composite/peer-offset-check
     ctrip/master-not-crdt/slave-update-peer-repl-offset
     ctrip/integration/master-slave/slave-update-peer-offset-when-master-slave-full-sync
@@ -57,7 +59,6 @@ set ::all_tests {
     ctrip/unit/aof
 
     ctrip/unit/expire
-    ctrip/integration/composite/master-slave-failover
     ctrip/unit/crdt_publish
     ctrip/integration/master-slave/rdb3
     ctrip/integration/bug/redis-unfree-client-when-master-to-slave
@@ -73,7 +74,6 @@ set ::all_tests {
     ctrip/unit/crdt_del
     ctrip/unit/crdt_register
     ctrip/unit/merge_different_type
-    ctrip/integration/composite/master-slave-failover
     ctrip/unit/crdt_hdel_mem_leak
     ctrip/unit/gc
     ctrip/unit/pubsub
