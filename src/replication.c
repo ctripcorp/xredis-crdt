@@ -2131,7 +2131,7 @@ void replicationUnsetMaster(void) {
     }
     sdsfree(server.masterhost);
     server.masterhost = NULL;
-    server.master_is_crdt = 0;
+    server.master_is_crdt = 1;
     /* When a slave is turned into a master, the current replication ID
      * (that was inherited from the master at synchronization time) is
      * used as secondary ID up to the current offset, and a new replication
