@@ -662,11 +662,11 @@ int data2CrdtData(client* fakeClient,robj* key, robj* val) {
             incrRefCount(key);
             long long result;
             if(getLongLongFromObject(val, &result) == C_OK) {
-                serverLog(LL_WARNING, "data2crdtData  kv type value is int, key: %s", (sds)key->ptr);
-                goto error;
+                fakeClient->argv[2] = createObject(OBJ_STRING, sdsfromlonglong(result));
+            } else {
+                fakeClient->argv[2] = val;
+                incrRefCount(val);
             }
-            fakeClient->argv[2] = val;
-            incrRefCount(val);
             processInputRdb(fakeClient);
         break;
         // case OBJ_LIST: freeListObject(o); break;
