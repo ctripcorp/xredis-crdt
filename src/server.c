@@ -2522,6 +2522,7 @@ int processCommand(client *c) {
     c->cmd = c->lastcmd = lookupCommand(c->argv[0]->ptr);
     if (!c->cmd) {
         flagTransaction(c);
+        serverLog(LL_WARNING, "crdt-redis server receive unknown command '%s'", (char*)c->argv[0]->ptr);
         addReplyErrorFormat(c,"unknown command '%s'",
             (char*)c->argv[0]->ptr);
         return C_OK;
