@@ -77,7 +77,7 @@ static inline clk *get_clock_unit(VectorClock *vc, char gid) {
     VectorClock
     newVectorClock(int numVcUnits) {
         long long vc = 0ull;
-        VectorClock result = VC(vc);
+        VectorClock result = LL2VC(vc);
         if(numVcUnits == 0) {
             return result;
         }
