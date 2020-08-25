@@ -82,9 +82,9 @@ test "sadd" {
 }
 
 
-test "kv int" {
-    set server_path [tmpdir "kv-int"]
-    full-sync-error-data {
-        $redis set k 1
-    } $server_path
-}
+# test "kv int" {
+#     set server_path [tmpdir "kv-int"]
+#     full-sync-error-data {
+#         $redis set k 1
+#     } $server_path
+# }
