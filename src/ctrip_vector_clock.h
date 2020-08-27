@@ -178,7 +178,8 @@ int isNullVectorClock(VectorClock vc);
 int isNullVectorClockUnit(VectorClockUnit unit);
 void set_clock_unit_by_index(VectorClock *vclock, char index, clk gid_logic_time); 
 #define VCU(unit) (*(clk*)(&unit))
-#define VC(vc) (*(VectorClock*)(&vc))
+#define VC2LL(a) *(long long*)((void*)&a)
+#define LL2VC(vc) (*(VectorClock*)(&vc))
 //
 static inline clk init_clock(char gid, long long logic_clk) {
     long long unit = 0;

@@ -78,22 +78,22 @@ proc test_write_data_offset {hasSlave master slave slave_slave peer peer_slave} 
         wait_script {$pv == [get_info_replication_attr_value $ps crdt.info master_repl_offset]} {
             puts $pv
             puts [get_info_replication_attr_value $ps crdt.info master_repl_offset]
-            fail [format "%s master and peer-slave offset error" $type]
+            fail [format "%s peer and peer-slave offset error" $type]
         }
         wait_script  { $pv == [get_info_replication_attr_value $m crdt.info peer0_repl_offset]} {
             puts $pv
             puts [get_info_replication_attr_value $m crdt.info peer0_repl_offset]
-            fail [format "%s master and peer-slave offset error" $type]
+            fail [format "%s peer and master offset error" $type]
         }
         wait_script { $pv == [get_info_replication_attr_value $ms crdt.info peer0_repl_offset]} {
             puts $pv
             puts [get_info_replication_attr_value $ms crdt.info peer0_repl_offset]
-            fail [format "%s peer and peer-slave offset error" $type]
+            fail [format "%s peer and slave offset error" $type]
         }
         wait_script { $pv == [get_info_replication_attr_value $mss crdt.info peer0_repl_offset]} {
             puts $pv
             puts [get_info_replication_attr_value $mss crdt.info peer0_repl_offset]
-            fail [format "<%s>,slave-slave and peer-slave offset error" $type]
+            fail [format "<%s>,peer and slave-slave offset error" $type]
         }
         $m debug set-crdt-ovc 1
         $p debug set-crdt-ovc 1
@@ -240,10 +240,17 @@ slave-peer-offset "1.other peer peerof 2. add data 3.slaveof 4.peerof" {
     $peer peerof $master_gid $master_host $master_port
     wait $master 0 crdt.info $master_log
     wait $peer 1 crdt.info $peer_log
+    after 2000
+    # puts [$peer crdt.info replication]
+    # puts [$peer_slave crdt.info replication]
+    # print_file_matches $peer_log
+    # print_file_matches $peer_slave_log
+    # $peer_slave 
     test_write_data_offset 1 $master $slave $slave_slave $peer $peer_slave 
     $peer2 peerof $peer_gid no one
     test_slave_peer $slave $peer $slave_log
     test_write_data_offset 0 $master $slave $slave_slave $peer $peer_slave 
+    
 }
 
 slave-peer-offset "1.other peer peerof 2. add data  3.peerof 4.slaveof" {

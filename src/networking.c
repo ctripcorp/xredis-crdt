@@ -97,6 +97,7 @@ client *createClient(int fd) {
     c->bufpos = 0;
     c->querybuf = sdsempty();
     c->pending_querybuf = sdsempty();
+    c->pending_used_offset = 0;
     c->querybuf_peak = 0;
     c->reqtype = 0;
     c->argc = 0;
@@ -135,7 +136,6 @@ client *createClient(int fd) {
     c->crdt_pubsub_channels = dictCreate(&objectKeyPointerValueDictType,NULL);
     c->crdt_pubsub_patterns = listCreate();
     c->peerid = NULL;
-    c->peer_master = NULL;
     c->vectorClock = newVectorClock(0);
     listSetFreeMethod(c->pubsub_patterns,decrRefCountVoid);
     listSetMatchMethod(c->pubsub_patterns,listMatchObjects);
@@ -1390,21 +1390,27 @@ void processInputBuffer(client *c) {
             resetClient(c);
         } else {
             if (c->flags & CLIENT_MASTER && iAmMaster() != C_OK) {
-                c->peer_master = NULL;
+                c->gid = -1;
             }
             /* Only reset the client when the command was executed. */
             if (processCommand(c) == C_OK) {
-                if (c->flags & CLIENT_MASTER && c->peer_master != NULL && iAmMaster() != C_OK) {
-                    CRDT_Master_Instance* peer = c->peer_master;
-                    if(peer) { //
-                        peer->master->reploff += c->read_reploff - sdslen(c->querybuf) - c->reploff;
+                if (c->flags & CLIENT_MASTER && iAmMaster() != C_OK) {
+                    if(c->gid == crdtServer.crdt_gid) {
+                        feedReplicationBacklog(&crdtServer, c->pending_querybuf + c->pending_used_offset, c->read_reploff - c->reploff- sdslen(c->querybuf));
+                    } else if(c->gid != -1) {
+                        CRDT_Master_Instance* peer = getPeerMaster(c->gid);
+                        if(peer) { //
+                            peer->master->reploff += c->read_reploff - sdslen(c->querybuf) - c->reploff;
+                        }
                     }
                 }
                 if ((c->flags & CLIENT_MASTER
-                    || ((c->flags & CLIENT_CRDT_MASTER) && c->peer_master->repl_state == REPL_STATE_CONNECTED))
+                    || ((c->flags & CLIENT_CRDT_MASTER) && getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED))
                     && !(c->flags & CLIENT_MULTI)) {
                     /* Update the applied replication offset of our master. */
+                    c->pending_used_offset += c->read_reploff - sdslen(c->querybuf) - c->reploff;
                     c->reploff = c->read_reploff - sdslen(c->querybuf);
+                    
                 }
                 
                 /* Don't reset the client structure for clients blocked in a
@@ -1462,12 +1468,12 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
         if (c->flags & CLIENT_CRDT_SLAVE) {
             serverLog(LL_NOTICE, "[CRDT]slave disconnect: %s:%d", c->slave_ip, c->slave_listening_port);
         } else if (c->flags & CLIENT_CRDT_MASTER) {
-            CRDT_Master_Instance *masterInstance = c->peer_master;
+            CRDT_Master_Instance *masterInstance = getPeerMaster(c->gid);
             serverLog(LL_NOTICE, "[CRDT]master disconnect: %s:%d", masterInstance->masterhost, masterInstance->masterport);
         }
         freeClient(c);
         return;
-    } else if (c->flags & CLIENT_MASTER) {
+    } else if (c->flags & CLIENT_MASTER || (c->flags & CLIENT_CRDT_MASTER && getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED)) {
         /* Append the query buffer to the pending (not applied) buffer
          * of the master. We'll use this buffer later in order to have a
          * copy of the string applied by the last command executed. */
@@ -1480,7 +1486,7 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
     if (c->flags & CLIENT_MASTER) {
         c->read_reploff += nread;
     } else if (c->flags & CLIENT_CRDT_MASTER) {
-        if (c->peer_master->repl_state == REPL_STATE_CONNECTED)  {
+        if (getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED)  {
             c->read_reploff += nread;
         }
     }
@@ -1507,19 +1513,35 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
      * a crdt(peer) master, as we wish our slaves to keeper align with peer master's
      * repl offset, so that, when a failover happend locally, the globally repl_offset
      * will not be any different*/
-    if (!(c->flags & CLIENT_MASTER)) {
-        processInputBuffer(c);
-    } else {
+    if(c->flags & CLIENT_MASTER) {
+        
         size_t prev_offset = c->reploff;
         processInputBuffer(c);
         size_t applied = c->reploff - prev_offset;
         if (applied) {
-        	if(!server.repl_slave_repl_all){
-        		replicationFeedSlavesFromMasterStream(server.slaves,
+            if(!server.repl_slave_repl_all){
+                replicationFeedSlavesFromMasterStream(server.slaves,
                     c->pending_querybuf, applied);
         	}
             sdsrange(c->pending_querybuf,applied,-1);
+            c->pending_used_offset = 0;
         }
+    } else if(c->flags & CLIENT_CRDT_MASTER && getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED) {
+        int dictid = c->db->id;
+        size_t prev_offset = c->reploff;
+        processInputBuffer(c);
+        size_t applied = c->reploff - prev_offset;
+        if (applied) {
+            if(server.slaveseldb != dictid) {
+                sendSelectCommandToSlave(dictid);
+            }
+            replicationFeedSlavesFromMasterStream(server.slaves,
+                c->pending_querybuf, applied);
+            sdsrange(c->pending_querybuf,applied,-1);
+            c->pending_used_offset = 0;
+        }
+    } else {
+        processInputBuffer(c);
     }
 }
 

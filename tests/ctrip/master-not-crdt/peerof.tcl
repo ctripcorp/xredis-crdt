@@ -177,7 +177,7 @@ start_redis [list overrides [list repl-diskless-sync-delay 1  ]] {
                     after 500
                     assert_equal [[lindex $slave 1] get key] value
                     assert_equal [[lindex $slave 0] hget hash k] v 
-                    print_log_file [lindex $slave_stdouts 1]
+                    # print_log_file [lindex $slave_stdouts 1]
                     check_peer_info [lindex $slave 0] [lindex $slave 1] 0
                     check_peer_info [lindex $slave 1] [lindex $slave 0] 0
 
