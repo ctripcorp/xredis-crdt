@@ -756,7 +756,9 @@ typedef struct client {
     char buf[PROTO_REPLY_CHUNK_BYTES];
     /* Crdt Stuff*/
     VectorClock vectorClock; // used for slave client only, when the client is a master, use crdtMasterInstance
-    struct CRDT_Master_Instance* peer_master;
+    // struct CRDT_Master_Instance* peer_master;
+    int gid;
+    long long pending_used_offset;
 } client;
 
 struct saveparam {
@@ -1619,6 +1621,7 @@ CRDT_Master_Instance *createPeerMaster(client *c, int gid);
 void crdtOvcCommand(client *c);
 void crdtAuthGidCommand(client *c);
 
+void sendSelectCommandToSlave(int dictid);
 void crdtAuthCommand(client *c);
 void freeClientArgv(client* c);
 void feedCrdtBacklog(robj **argv, int argc);

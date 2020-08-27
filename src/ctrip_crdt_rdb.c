@@ -622,7 +622,7 @@ robj* reverseHashToArgv(hashTypeIterator* hi, int type) {
         }
     }else if(hi->encoding == OBJ_ENCODING_HT) {
         sds value = hashTypeCurrentFromHashTable(hi, type);
-        return createObject(OBJ_STRING, value);
+        return createObject(OBJ_STRING, sdsdup(value));
     }else{
         serverLog(LL_WARNING, "hash encoding error");
         return NULL;
@@ -662,11 +662,11 @@ int data2CrdtData(client* fakeClient,robj* key, robj* val) {
             incrRefCount(key);
             long long result;
             if(getLongLongFromObject(val, &result) == C_OK) {
-                serverLog(LL_WARNING, "data2crdtData  kv type value is int, key: %s", (sds)key->ptr);
-                goto error;
+                fakeClient->argv[2] = createObject(OBJ_STRING, sdsfromlonglong(result));
+            } else {
+                fakeClient->argv[2] = val;
+                incrRefCount(val);
             }
-            fakeClient->argv[2] = val;
-            incrRefCount(val);
             processInputRdb(fakeClient);
         break;
         // case OBJ_LIST: freeListObject(o); break;

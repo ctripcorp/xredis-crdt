@@ -190,6 +190,13 @@ set adds(4) {
 set checks(4) {
     assert_equal [$redis get key4]  {}
 }
+set adds(5) {
+    $redis set key5 1
+}
+set checks(5) {
+    assert_equal [$redis get key5]  1
+}
+
 
 ####### tests
 

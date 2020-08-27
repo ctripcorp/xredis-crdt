@@ -737,6 +737,12 @@ int RM_CreateCommand(RedisModuleCtx *ctx, const char *name, RedisModuleCmdFunc c
     return REDISMODULE_OK;
 }
 
+void RM_SetOvc(RedisModuleCtx *ctx, VectorClock vc) {
+    getPeerMaster(ctx->client->gid)->vectorClock = vc;
+}
+VectorClock RM_GetOvc(RedisModuleCtx *ctx) {
+    return getPeerMaster(ctx->client->gid)->vectorClock;
+}
 /* Called by RM_Init() to setup the `ctx->module` structure.
  *
  * This is an internal function, Redis modules developers don't need
@@ -1362,10 +1368,10 @@ int RM_ReplicateVerbatim(RedisModuleCtx *ctx) {
     return Verbatim(ctx, PROPAGATE_AOF|PROPAGATE_REPL);
 }
 int RM_CrdtReplicateVerbatim(int gid, RedisModuleCtx *ctx) {
+    ctx->client->gid = gid;
     if(crdtServer.crdt_gid == gid) {
         return Verbatim(ctx, PROPAGATE_AOF|PROPAGATE_CRDT_REPL);
     } else {
-        ctx->client->peer_master = getPeerMaster(gid);
         return RM_ReplicateVerbatim(ctx);
     }
 }
@@ -4569,6 +4575,8 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(Strdup);
     REGISTER_API(CreateCommand);
     REGISTER_API(SetModuleAttribs);
+    REGISTER_API(SetOvc);
+    REGISTER_API(GetOvc);
     REGISTER_API(IsModuleNameBusy);
     REGISTER_API(WrongArity);
     REGISTER_API(ReplyWithOk);
