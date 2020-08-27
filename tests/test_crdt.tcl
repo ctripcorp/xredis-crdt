@@ -14,6 +14,7 @@ source tests/support/aof.tcl
 
 
 set ::all_tests {
+    ctrip/integration/bug/hashtombstone_purge_kv
     ctrip/integration/bug/slave-non-read-only-send-slave
     ctrip/integration/composite/peer-offset-check
     ctrip/master-not-crdt/slave-update-peer-repl-offset
