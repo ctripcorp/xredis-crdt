@@ -1903,7 +1903,8 @@ int RM_SaveModuleValue(rio* rio, moduleType *t, void* value) {
 void closeModuleKey(void* k) {
     RedisModuleKey *key = k;
     if (key == NULL) return;
-    if (key->mode & REDISMODULE_WRITE) signalModifiedKey(key->db,key->key);
+    //add REDISMODULE_NO_TOUCH_KEY,becase expire not signalModifiedKey
+    if (key->mode & REDISMODULE_WRITE && !(key->mode & REDISMODULE_NO_TOUCH_KEY)) signalModifiedKey(key->db,key->key);
     /* TODO: if (key->iter) RM_KeyIteratorStop(kp); */
     RM_ZsetRangeStop(key);
     decrRefCount(key->key);

@@ -32,8 +32,9 @@ proc gen_write_load_with_interval {host port seconds interval} {
         $r del $key
 
         set key [randomRangeString 30]
-        $r hset $key [randomRangeString 30] [randomRangeString 30]
-        $r hdel $key
+        set field [randomRangeString 30]
+        $r hset $key $field [randomRangeString 30]
+        $r hdel $key $field
 
         after $interval
         if {[clock seconds]-$start_time > $seconds} {
