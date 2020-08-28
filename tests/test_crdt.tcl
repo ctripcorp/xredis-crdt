@@ -15,6 +15,7 @@ source tests/support/aof.tcl
 
 set ::all_tests {
     ctrip/master-not-crdt/convert-zipmap-hash-on-load
+    ctrip/unit/multi
     ctrip/integration/bug/slave-non-read-only-peer-backlog
     ctrip/integration/bug/slave-non-read-only-send-slave
     ctrip/integration/composite/peer-offset-check
@@ -554,7 +555,39 @@ for {set j 0} {$j < [llength $argv]} {incr j} {
         exit 1
     }
 }
+proc attach_to_crdt_replication_stream {gid host port} {
+    # set s [socket [srv 0 "host"] [srv 0 "port"]]
+    set s [socket $host $port]
+    puts -nonewline $s [format "crdt.authGid %s\r\n" $gid]
+    flush $s
+    while 1 {
+        set count [gets $s]
+        set prefix [string range $count 0 0]
+        if {$prefix ne {}} break; # Newlines are allowed as PINGs.
+    }
+    
+    fconfigure $s -translation binary
+    puts -nonewline $s "SYNC\r\n"
+    flush $s
 
+    # Get the count
+    while 1 {
+        set count [gets $s]
+        set prefix [string range $count 0 0]
+        if {$prefix ne {}} break; # Newlines are allowed as PINGs.
+    }
+    if {$prefix ne {$}} {
+        error "attach_to_replication_stream error. Received '$count' as count."
+    }
+    set count [string range $count 1 end]
+
+    # Consume the bulk payload
+    while {$count} {
+        set buf [read $s $count]
+        set count [expr {$count-[string length $buf]}]
+    }
+    return $s
+}
 proc attach_to_replication_stream {} {
     set s [socket [srv 0 "host"] [srv 0 "port"]]
     fconfigure $s -translation binary

@@ -1124,13 +1124,12 @@ int crdtPropagateExpire(redisDb *db, robj *key, int lazy, long long expireTime) 
                 }
                 struct moduleValue* rm = (struct moduleValue*)val->ptr;
                 CrdtObject* obj = ((CrdtObject*)(rm->value));
-                mk = getModuleKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE, 1);
+                mk = getModuleKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE | REDISMODULE_NO_TOUCH_KEY, 1);
                 if(mk != NULL) {
                     CrdtDataMethod* method = getCrdtDataMethod(obj);
                     if(method == NULL) {
                         return C_ERR;
                     }
-                    
                     method->propagateDel(db->id, key, mk, obj);
                     closeModuleKey(mk);
                 }
