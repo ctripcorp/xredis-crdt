@@ -727,7 +727,10 @@ int data2CrdtData(client* fakeClient,robj* key, robj* val) {
             hashTypeReleaseIterator(hi);          
         break;
         // case OBJ_MODULE: freeModuleObject(o); break;
-        default:  goto error;
+        default:  {
+            serverLog(LL_WARNING, "load data fail key: %s, type: %d", (sds)key->ptr, val->type);
+            goto error;
+        }
     }
     decrRefCount(val);  
     return C_OK;
