@@ -13,11 +13,7 @@ source tests/support/util.tcl
 source tests/support/aof.tcl
 
 set ::all_tests {
-    # #107: https://github.com/ctripcorp/xredis-crdt/issues/107
-    ctrip/integration/bug/
-}
-
-set ::all_tests_1 {
+    ctrip/integration/bug/peer-full-sync-losing-meta-data
     ctrip/master-not-crdt/convert-zipmap-hash-on-load
     ctrip/unit/multi
     ctrip/integration/bug/slave-non-read-only-peer-backlog
