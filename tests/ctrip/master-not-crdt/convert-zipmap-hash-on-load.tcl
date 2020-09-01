@@ -1,8 +1,17 @@
 # Copy RDB with zipmap encoded hash to server path
 set server_path [tmpdir "server.convert-zipmap-hash-on-load"]
 
+set module_path [exec pwd]
+append module_path "/tests/assets/"
+set uname_S [exec uname -s]
+if {$uname_S eq "Darwin"} {
+    append module_path "mac/"
+} elseif {$uname_S eq "Linux"} {
+    append module_path "linux/"
+}
+append module_path "crdt.so"
 exec cp -f tests/assets/hash-zipmap.rdb $server_path
-exec cp -f tests/assets/crdt.so $server_path
+exec cp -f $module_path $server_path
 # start_server [list overrides [list "dir" $server_path "dbfilename" "hash-zipmap.rdb"]] {
 # start_server {tags {"ziplist"} overrides {crdt-gid 1  "dir" $server_path "dbfilename" "hash-zipmap.rdb"} config {crdt.conf} module {crdt.so} } {
 

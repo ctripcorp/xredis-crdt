@@ -71,6 +71,13 @@ proc crdt_conflict {r type} {
     }
 }
 
+proc crdt_repl { client property } {
+    set info [ $client crdt.info replication]
+    if {[regexp "\r\n$property:(.*?)\r\n" $info _ value]} {
+        set _ $value
+    }
+}
+
 proc waitForBgsave r {
     while 1 {
         if {[status r rdb_bgsave_in_progress] eq 1} {

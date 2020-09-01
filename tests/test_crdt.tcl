@@ -12,8 +12,8 @@ source tests/support/test.tcl
 source tests/support/util.tcl
 source tests/support/aof.tcl
 
-
 set ::all_tests {
+    ctrip/integration/bug/peer-full-sync-losing-meta-data
     ctrip/master-not-crdt/convert-zipmap-hash-on-load
     ctrip/unit/multi
     ctrip/integration/bug/slave-non-read-only-peer-backlog
