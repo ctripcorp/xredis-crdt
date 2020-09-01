@@ -82,7 +82,7 @@ void setKeyToTombstone(redisDb *db, robj *key, robj *val) {
         tombstoneOverwrite(db, key, val);
     }
     incrRefCount(val);
-    signalModifiedKey(db,key);
+    // signalModifiedKey(db,key);
 }
 
 /* Lookup a key for write operations
