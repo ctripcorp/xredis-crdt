@@ -46,7 +46,7 @@ typedef void *(*crdtMergeFunc)(void *curVal, void *value);
 typedef int (*crdtPropagateDelFunc)(int db_id, void *keyRobj, void *key, void *crdtObj);
 typedef CrdtObject* (*crdtFilterFunc)(CrdtObject* obj,int gid, long long logic_time);
 typedef int (*crdtGCFunc)(void *crdtObj, VectorClock clock);
-typedef int (*crdtPurgeFunc)(void* tombstone, void* value);
+typedef int (*crdtPurageFunc)(void* tombstone, void* value);
 
 typedef struct CrdtObjectMethod {
     crdtMergeFunc merge;
@@ -68,7 +68,7 @@ typedef struct CrdtTombstoneMethod {
     crdtMergeFunc merge;
     crdtFilterFunc filter;
     crdtGCFunc gc;
-    crdtPurgeFunc purge;
+    crdtPurageFunc purage;
 } CrdtTombstoneMethod;
 
 CrdtDataMethod* getCrdtDataMethod(CrdtObject* expire);
