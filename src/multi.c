@@ -92,6 +92,7 @@ void multiCommand(client *c) {
     addReply(c,shared.ok);
 }
 
+
 void discardCommand(client *c) {
     if (!(c->flags & CLIENT_MULTI)) {
         addReplyError(c,"DISCARD without MULTI");
@@ -109,6 +110,16 @@ void execCommandPropagateMulti(client *c) {
     propagate(server.multiCommand,c->db->id,&multistring,1,
               PROPAGATE_AOF|PROPAGATE_REPL);
     decrRefCount(multistring);
+}
+
+void execCrdtCommandPropagateMulti(client* c, int flags) {
+    robj *multistring = createStringObject("CRDT.MULTI",10);
+    robj *gidstring = createStringObjectFromLongLong(crdtServer.crdt_gid);
+    robj* commands[2] = {multistring, gidstring};
+    propagate(server.multiCommand,c->db->id,commands,2,
+              PROPAGATE_AOF| flags);
+    decrRefCount(multistring);
+    decrRefCount(gidstring);
 }
 
 void execCommand(client *c) {
@@ -154,7 +165,111 @@ void execCommand(client *c) {
          * both the AOF and the replication link will have the same consistency
          * and atomicity guarantees. */
         if (!must_propagate && !(c->cmd->flags & (CMD_READONLY|CMD_ADMIN))) {
-            execCommandPropagateMulti(c);
+            execCrdtCommandPropagateMulti(c, PROPAGATE_CRDT_REPL);
+            must_propagate = 1;
+            c->flags |= CLIENT_FORCE_REPL_CRDT;
+        }
+
+        call(c,CMD_CALL_FULL);
+
+        /* Commands may alter argc/argv, restore mstate. */
+        c->mstate.commands[j].argc = c->argc;
+        c->mstate.commands[j].argv = c->argv;
+        c->mstate.commands[j].cmd = c->cmd;
+    }
+    // zfree(orig_argv);
+    c->argv = orig_argv;
+    c->argc = orig_argc;
+    c->cmd = orig_cmd;
+    discardTransaction(c);
+    freeFakeClientArgv(c);
+    c->argv = zmalloc(sizeof(robj*)*2);
+    c->argv[0] = shared.crdtexec;
+    incrRefCount(shared.crdtexec);
+    c->argv[1] = createStringObjectFromLongLong(crdtServer.crdt_gid);
+    c->argc = 2;
+    /* Make sure the EXEC command will be propagated as well if MULTI
+     * was already propagated. */
+    if (must_propagate) {
+        int is_master = server.masterhost == NULL;
+        
+        server.dirty++;
+        /* If inside the MULTI/EXEC block this instance was suddenly
+         * switched from master to slave (using the SLAVEOF command), the
+         * initial MULTI was propagated into the replication backlog, but the
+         * rest was not. We need to make sure to at least terminate the
+         * backlog with the final EXEC. */
+        if (server.repl_backlog && was_master && !is_master) {
+            char execcmd[29];
+            int len = sprintf(execcmd, "*2\r\n$9\r\nCRDT.EXEC\r\n$%d\r\n%d\r\n", crdtServer.crdt_gid > 9? 2: 1, crdtServer.crdt_gid);
+            feedReplicationBacklog(&server,execcmd,len);
+            feedReplicationBacklog(&crdtServer, execcmd,len);
+        }
+    }
+
+handle_monitor:
+    /* Send EXEC to clients waiting data from MONITOR. We do it here
+     * since the natural order of commands execution is actually:
+     * MUTLI, EXEC, ... commands inside transaction ...
+     * Instead EXEC is flagged as CMD_SKIP_MONITOR in the command
+     * table, and we do it here with correct ordering. */
+    if (listLength(server.monitors) && !server.loading)
+        replicationFeedMonitors(c,server.monitors,c->db->id,c->argv,c->argc);
+}
+//crdt.exec gid
+void crdtExecCommand(client *c) {
+    int j;
+    robj **orig_argv;
+    int orig_argc;
+    struct redisCommand *orig_cmd;
+    int must_propagate = 0; /* Need to propagate MULTI/EXEC to AOF / slaves? */
+    int was_master = server.masterhost == NULL;
+
+    if (!(c->flags & CLIENT_MULTI)) {
+        addReplyError(c,"EXEC without MULTI");
+        return;
+    }
+    long long gid;
+    if (getLongLongFromObject(c->argv[1], &gid) != C_OK) {
+        addReply(c, shared.syntaxerr);
+        return;
+    }
+    if (!check_gid(gid)) {
+        addReply(c, shared.syntaxerr);
+        return; 
+    }
+    c->gid = gid;
+    /* Check if we need to abort the EXEC because:
+     * 1) Some WATCHed key was touched.
+     * 2) There was a previous error while queueing commands.
+     * A failed EXEC in the first case returns a multi bulk nil object
+     * (technically it is not an error but a special behavior), while
+     * in the second an EXECABORT error is returned. */
+    if (c->flags & (CLIENT_DIRTY_CAS|CLIENT_DIRTY_EXEC)) {
+        addReply(c, c->flags & CLIENT_DIRTY_EXEC ? shared.execaborterr :
+                                                  shared.nullmultibulk);
+        discardTransaction(c);
+        goto handle_monitor;
+    }
+
+    /* Exec all the queued commands */
+    unwatchAllKeys(c); /* Unwatch ASAP otherwise we'll waste CPU cycles */
+    orig_argv = c->argv;
+    orig_argc = c->argc;
+    orig_cmd = c->cmd;
+    addReplyMultiBulkLen(c,c->mstate.count);
+    for (j = 0; j < c->mstate.count; j++) {
+        c->argc = c->mstate.commands[j].argc;
+        c->argv = c->mstate.commands[j].argv;
+        c->cmd = c->mstate.commands[j].cmd;
+
+        /* Propagate a MULTI request once we encounter the first command which
+         * is not readonly nor an administrative one.
+         * This way we'll deliver the MULTI/..../EXEC block as a whole and
+         * both the AOF and the replication link will have the same consistency
+         * and atomicity guarantees. */
+        if (!must_propagate && !(c->cmd->flags & (CMD_READONLY|CMD_ADMIN))) {
+            // execCrdtCommandPropagateMulti(c, PROPAGATE_REPL);
             must_propagate = 1;
         }
 
@@ -181,8 +296,10 @@ void execCommand(client *c) {
          * rest was not. We need to make sure to at least terminate the
          * backlog with the final EXEC. */
         if (server.repl_backlog && was_master && !is_master) {
-            char *execcmd = "*1\r\n$4\r\nEXEC\r\n";
-            feedReplicationBacklog(&server, execcmd,strlen(execcmd));
+            char execcmd[29];
+            int len = sprintf(execcmd, "*2\r\n$9\r\nCRDT.EXEC\r\n$%d\r\n%lld\r\n", gid > 9? 2: 1, gid);
+            feedReplicationBacklog(&server,execcmd,len);
+            feedReplicationBacklog(&crdtServer, execcmd,len);
         }
     }
 
@@ -195,7 +312,6 @@ handle_monitor:
     if (listLength(server.monitors) && !server.loading)
         replicationFeedMonitors(c,server.monitors,c->db->id,c->argv,c->argc);
 }
-
 /* ===================== WATCH (CAS alike for MULTI/EXEC) ===================
  *
  * The implementation uses a per-DB hash table mapping keys to list of clients

@@ -780,7 +780,7 @@ struct sharedObjectsStruct {
     *masterdownerr, *roslaveerr, *execaborterr, *noautherr, *noreplicaserr,
     *busykeyerr, *oomerr, *plus, *messagebulk, *pmessagebulk, *subscribebulk, *crdtsubscribebulk,
     *unsubscribebulk, *uncrdtsubscribebulk, *psubscribebulk, *crdtpsubscribebulk, *punsubscribebulk, *crdtpunsubscribebulk, *del, *unlink, *crdtdel,
-    *rpop, *lpop, *lpush,*set,*hset,*expireat, *emptyscan,
+    *rpop, *lpop, *lpush,*set,*hset,*expireat, *emptyscan, *crdtexec,
     *crdtmergeerr,
     *select[PROTO_SHARED_SELECT_CMDS],
     *integers[OBJ_SHARED_INTEGERS],
@@ -1672,6 +1672,7 @@ void receiveChildInfo(struct redisServer *srv);
 #define REDISMODULE_READ (1<<0)
 #define REDISMODULE_WRITE (1<<1)
 #define REDISMODULE_TOMBSTONE (1<<2)
+#define REDISMODULE_NO_TOUCH_KEY (1<<3)
 void *getModuleKey(redisDb *db, robj *keyname, int mode, int needCheck);
 void closeModuleKey(void *moduleKey);
 #define TYPECONFLICT (1<<0)
@@ -2090,6 +2091,7 @@ void zremrangebyscoreCommand(client *c);
 void zremrangebylexCommand(client *c);
 void multiCommand(client *c);
 void execCommand(client *c);
+void crdtExecCommand(client *c);
 void discardCommand(client *c);
 void blpopCommand(client *c);
 void brpopCommand(client *c);

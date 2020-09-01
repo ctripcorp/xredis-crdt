@@ -110,7 +110,7 @@ int crdtSendMergeRequest(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di, const
         sds keystr = dictGetKey(de);
         robj key, *o = dictGetVal(de);
         if(o->type != OBJ_MODULE || isModuleCrdt(o) != C_OK) {
-            serverLog(LL_NOTICE, "[CRDT] [crdtSendMergeDelRequest] NOT CRDT MODULE, SKIP");
+            serverLog(LL_NOTICE, "[CRDT][%s] key: %s,NOT CRDT MODULE OBJECT, SKIP", cmdname, keystr);
             continue;
         }
         initStaticStringObject(key,keystr);
@@ -237,7 +237,8 @@ typedef robj* (*DictFindFunc)(redisDb* db, robj* key);
 typedef int (*DictDeleteFunc)(redisDb* db, robj* key);
 typedef void (*DictAddFunc)(redisDb* db, robj* key, robj* value);
 typedef int (*CheckTypeFunc)(void* current, void* merge, robj* key);
-int crdtMergeTomstoneCommand(client* c, DictFindFunc findtombstone, DictAddFunc addtombstone, DictFindFunc findval, DictDeleteFunc deleteval, CheckTypeFunc checktype) {
+typedef int (*CheckTombstoneDataFunc)(void* tombstone, void* data, robj* key);
+int crdtMergeTomstoneCommand(client* c, DictFindFunc findtombstone, DictAddFunc addtombstone, DictFindFunc findval, DictDeleteFunc deleteval, CheckTypeFunc checktype, CheckTombstoneDataFunc checktdtype) {
     rio payload;
     robj *obj;
     int type;
@@ -293,14 +294,18 @@ int crdtMergeTomstoneCommand(client* c, DictFindFunc findtombstone, DictAddFunc 
     robj *currentVal = findval(c->db, key);
     if(currentVal != NULL) {
         CrdtObject *currentCrdtCommon = retrieveCrdtObject(currentVal);
-        CrdtTombstoneMethod* method = getCrdtTombstoneMethod(tombstoneCrdtCommon);
-        if(method == NULL) {
-            serverLog(LL_WARNING, "no purage method type:%d", tombstoneCrdtCommon->type);
-            return C_ERR;
-        }
-        if(method->purage(tombstoneCrdtCommon, currentCrdtCommon)) {
-            // dbDelete(c->db, key);
-            deleteval(c->db, key);
+        if(checktdtype(tombstoneCrdtCommon, currentCrdtCommon, key) == C_OK) {
+            CrdtTombstoneMethod* method = getCrdtTombstoneMethod(tombstoneCrdtCommon);
+            if(method == NULL) {
+                serverLog(LL_WARNING, "no purge method type:%d", tombstoneCrdtCommon->type);
+                return C_ERR;
+            }
+            if(method->purge(tombstoneCrdtCommon, currentCrdtCommon)) {
+                // dbDelete(c->db, key);
+                deleteval(c->db, key);
+            }
+        } else {
+            serverLog(LL_WARNING, "[crdtMergeTomstoneCommand] key:%s ,tombstone and value  purge error", (sds)key->ptr);
         }
     }
     
@@ -340,6 +345,28 @@ int checkTombstoneType(void* current, void* other, robj* key) {
     }
     return C_OK;
 }
+
+int checkTombstoneDataType(void* current, void* other, robj* key) {
+    CrdtObject* c = (CrdtObject*)current;
+    CrdtObject* o = (CrdtObject*)other;
+    if(!isTombstone(c)) {
+        serverLog(LL_WARNING, "[INCONSIS][TOMBSTONE DATA] TOMBSTONE TYPE key: %s, tombstone type: %d",
+                key->ptr, c->type);
+        return C_ERR;
+    }
+    if(!isData(other)) {
+        serverLog(LL_WARNING, "[INCONSIS][TOMBSTONE DATA] DATA TYPE key: %s, data type: %d",
+                key->ptr, c->type);
+        return C_ERR;
+    }
+    if(getDataType(c)!= getDataType(o)) {
+        serverLog(LL_WARNING, "[INCONSIS][TOMBSTONE DATA] key: %s, tombstone type: %d, data type %d",
+                key->ptr, c->type, o->type);
+        incrCrdtConflict(MERGECONFLICT | TYPECONFLICT);
+        return C_ERR;
+    }
+    return C_OK;
+}
 void
 crdtMergeDelCommand(client *c) {
     crdtMergeTomstoneCommand(c, 
@@ -347,11 +374,12 @@ crdtMergeDelCommand(client *c) {
         addTombstone,
         lookupKeyWrite,
         dbDelete,
-        checkTombstoneType
+        checkTombstoneType,
+        checkTombstoneDataType
     );
 }
 
-int mergeCrdtObjectCommand(client *c, DictFindFunc find, DictAddFunc add, DictDeleteFunc delete, DictFindFunc findtombstone, CheckTypeFunc checktype) {
+int mergeCrdtObjectCommand(client *c, DictFindFunc find, DictAddFunc add, DictDeleteFunc delete, DictFindFunc findtombstone, CheckTypeFunc checktype, CheckTombstoneDataFunc checktdtype) {
     rio payload;
     robj *obj;
     int type;
@@ -409,11 +437,15 @@ int mergeCrdtObjectCommand(client *c, DictFindFunc find, DictAddFunc add, DictDe
     robj* tombstone = findtombstone(c->db,key);
     if(tombstone != NULL) {
         CrdtObject* tom = retrieveCrdtObject(tombstone);
-        CrdtTombstoneMethod* tombstone_method = getCrdtTombstoneMethod(tom);
-        if(tombstone_method == NULL) return C_ERR;
-        if(tombstone_method->purage(tom, mergedVal)) {
-            mt->free(mergedVal);
-            mergedVal = NULL;
+        if(checktdtype(tom, mergedVal, key) == C_OK) {
+            CrdtTombstoneMethod* tombstone_method = getCrdtTombstoneMethod(tom);
+            if(tombstone_method == NULL) return C_ERR;
+            if(tombstone_method->purge(tom, mergedVal)) {
+                mt->free(mergedVal);
+                mergedVal = NULL;
+            }
+        } else {
+            serverLog(LL_WARNING, "[mergeCrdtObjectCommand] key: %s, tombstone and value purge error", (sds)key->ptr);
         }
     }
     /* Create the key and set the TTL if any */
@@ -470,7 +502,8 @@ void crdtMergeCommand(client *c) {
         dbAdd,
         dbDelete,
         findTombstone,
-        checkDataType
+        checkDataType,
+        checkTombstoneDataType
     );
 }
 //crdt save rdb
@@ -494,7 +527,7 @@ int rdbLoadCrdtData(rio* rdb, redisDb* db, long long current_expire_time, LoadCr
     int result = C_ERR;
     if ((key = rdbLoadStringObject(rdb)) == NULL) goto eoferr;
     // assert(dictFind(db->dict,key->ptr) == NULL);
-    moduleKey = createModuleKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE, NULL, NULL);
+    moduleKey = createModuleKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE | REDISMODULE_NO_TOUCH_KEY, NULL, NULL);
     if(load(db, key, rdb, moduleKey) == C_ERR) goto eoferr;
     //use dictFind function for compatibility(version1.0.3) when rdb has expire but no data
     if(dictFind(db->dict,key->ptr) != NULL && current_expire_time != -1) {
@@ -694,7 +727,10 @@ int data2CrdtData(client* fakeClient,robj* key, robj* val) {
             hashTypeReleaseIterator(hi);          
         break;
         // case OBJ_MODULE: freeModuleObject(o); break;
-        default:  goto error;
+        default:  {
+            serverLog(LL_WARNING, "load data fail key: %s, type: %d", (sds)key->ptr, val->type);
+            goto error;
+        }
     }
     decrRefCount(val);  
     return C_OK;

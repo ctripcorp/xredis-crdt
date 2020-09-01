@@ -10,6 +10,14 @@ HIGH:     There is a critical bug that may affect a subset of users. Upgrade!
 CRITICAL: There is a critical bug affecting MOST USERS. Upgrade ASAP.
 --------------------------------------------------------------------------------
 ================================================================================
+XRedis-CRDT 1.0.6 Released Sat Aug 29 21:04:25 CST 2020
+================================================================================
+Upgrade urgency LOW: Compared with the previous version, there are some improvements, mainly:
+Major things:
+* [bugfix] redis-server crash when load non-crdt hash object(encoding=obj_encoding_ht)
+* [bugfix] redis-server crash when hashtombstone and kv value merge 
+* [opt] master_is_crdt default is true
+================================================================================
 XRedis-CRDT 1.0.5  Released Sat Aug  8 20:59:30 CST 2020
 ================================================================================
 Upgrade urgency LOW: Compared with the previous version, there are some improvements, mainly:
