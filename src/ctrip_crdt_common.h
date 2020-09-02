@@ -44,13 +44,15 @@ int check_gid(int gid);
 typedef void *(*crdtMergeFunc)(void *curVal, void *value);
 // RM_CrdtMultiWrappedReplicate should be called during this
 typedef int (*crdtPropagateDelFunc)(int db_id, void *keyRobj, void *key, void *crdtObj);
-typedef CrdtObject* (*crdtFilterFunc)(CrdtObject* obj,int gid, long long logic_time);
+typedef CrdtObject** (*crdtFilterSplitFunc)(CrdtObject* obj,int gid, long long logic_time, long long maxsize, int* length);
+typedef void (*crdtFreeFilterResultFunc)(CrdtObject** obj, int length);
 typedef int (*crdtGCFunc)(void *crdtObj, VectorClock clock);
 typedef int (*crdtPurgeFunc)(void* tombstone, void* value);
 
 typedef struct CrdtObjectMethod {
     crdtMergeFunc merge;
-    crdtFilterFunc filter;
+    crdtFilterSplitFunc filterAndSplit;
+    crdtFreeFilterResultFunc freefilter;
 } CrdtObjectMethod;
 
 
@@ -66,7 +68,8 @@ typedef struct CrdtDataMethod {
 
 typedef struct CrdtTombstoneMethod {
     crdtMergeFunc merge;
-    crdtFilterFunc filter;
+    crdtFilterSplitFunc filterAndSplit;
+    crdtFreeFilterResultFunc freefilter;
     crdtGCFunc gc;
     crdtPurgeFunc purge;
 } CrdtTombstoneMethod;
