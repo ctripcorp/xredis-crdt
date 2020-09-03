@@ -14,6 +14,7 @@ source tests/support/aof.tcl
 
 set ::all_tests {
     ctrip/integration/bug/peer-full-sync-losing-meta-data
+    ctrip/integration/master-master/full_sync_memory_limit
     ctrip/master-not-crdt/convert-zipmap-hash-on-load
     ctrip/unit/multi
     ctrip/integration/bug/slave-non-read-only-peer-backlog

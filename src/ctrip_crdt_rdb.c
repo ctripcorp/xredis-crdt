@@ -82,25 +82,51 @@ werr: /* Write error. */
     return C_ERR;
 }
 
-CrdtObject* dataFilter(CrdtObject* data, int gid, long long logic_time) {
+CrdtObject** dataFilter(CrdtObject* data, int gid, long long logic_time, long long maxsize, int* length) {
     CrdtObjectMethod* method = getCrdtObjectMethod(data);
     if(method == NULL) {
-        serverLog(LL_WARNING, "[CRDT] [crdtRdbSaveRio] NOT FIND CRDT OBJECT FILTER METHOD");
+        serverLog(LL_WARNING, "[CRDT][crdtRdbSaveRio][dataFilter] NOT FIND CRDT OBJECT FILTER METHOD");
         return NULL;
     }
-    return method->filter(data, gid, logic_time);
+    return method->filterAndSplit(data, gid, logic_time, maxsize, length);
 }
-CrdtObject* tombstoneFilter(CrdtObject* tombstone, int gid, long long logic_time) {
+void freeDataFilter(CrdtObject** data, int length) {
+    if(length == 0) return;
+    CrdtObjectMethod* method = getCrdtObjectMethod(data[0]);
+    if(method == NULL) {
+        serverLog(LL_WARNING, "[CRDT][crdtRdbSaveRio][freeDataFilter] NOT FIND CRDT OBJECT FILTER METHOD");
+        return ;
+    }
+    method->freefilter(data, length);
+}
+
+CrdtObject* tombstoneFilter(CrdtObject* tombstone, int gid, long long logic_time, long long maxsize, int* length) {
     CrdtTombstoneMethod* method = getCrdtTombstoneMethod(tombstone);
     if(method == NULL) {
-        serverLog(LL_WARNING, "[CRDT] [crdtRdbSaveRio] NOT FIND CRDT TOMBSTONE FILTER METHOD");
+        serverLog(LL_WARNING, "[CRDT][crdtRdbSaveRio][tombstoneFilter] NOT FIND CRDT TOMBSTONE FILTER METHOD");
         return NULL;
     }
-    return method->filter(tombstone, gid, logic_time);
+    return method->filterAndSplit(tombstone, gid, logic_time, maxsize, length);
 }
+void freeTombstoneFilter(CrdtObject** tombstone, int length) {
+    CrdtTombstoneMethod* method = getCrdtTombstoneMethod(tombstone[0]);
+    if(method == NULL) {
+        serverLog(LL_WARNING, "[CRDT][crdtRdbSaveRio][freeTombstoneFilter] NOT FIND CRDT TOMBSTONE FILTER METHOD");
+        return ;
+    }
+    method->freefilter(tombstone, length);
+}
+
+#define initStaticModuleObject(_var,_ptr) do { \
+    _var.refcount = 1; \
+    _var.type = OBJ_MODULE; \
+    _var.encoding = OBJ_ENCODING_RAW; \
+    _var.ptr = _ptr; \
+} while(0)
+
 // CRDT.Merge_Del <gid> <key> <val>
 // CRDT.Merge <gid> <key> <val>
-int crdtSendMergeRequest(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di, const char* cmdname, crdtFilterFunc filterFun, redisDb *db) {
+int crdtSendMergeRequest(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di, const char* cmdname, crdtFilterSplitFunc filterFun, crdtFreeFilterResultFunc freeFilterFunc, redisDb *db) {
     dictEntry *de;
     rio payload;
     robj *result = NULL;
@@ -121,31 +147,45 @@ int crdtSendMergeRequest(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di, const
         }
         /* Check if the crdt module's vector clock on local gid is avaiable for crdt merge */
         CrdtObject *object = retrieveCrdtObject(o);
-        CrdtObject *filter = filterFun(object, crdtServer.crdt_gid, rsi->logic_time);
+        int length = 0;
+        CrdtObject **filter = filterFun(object, crdtServer.crdt_gid, rsi->logic_time, server.proto_max_bulk_len, &length);
+        if(length == -1) {
+            serverLog(LL_WARNING, "[CRDT][FILTER] key:{%s} ,value is too big", keystr);
+            goto error;
+        }
         if(filter == NULL) {
             continue;
         }
-        moduleValue *mv = o->ptr;
-        result = createModuleObject(mv->type, filter);
-        //CRDT.Merge_Del <gid> <key> <val>
-        
-        if(!rioWriteBulkCount(rdb, '*', 5)) goto error;
-        if(!rioWriteBulkString(rdb,cmdname,strlen(cmdname))) goto error;
-        if(!rioWriteBulkLongLong(rdb, crdtServer.crdt_gid)) goto error;
-        if(!rioWriteBulkString(rdb, (&key)->ptr,sdslen((&key)->ptr))) goto error;
-        
-        /* Emit the payload argument, that is the serialized object using
-         * * the DUMP format. */
-        createDumpPayload(&payload, result);
-        if(!rioWriteBulkString(rdb, payload.io.buffer.ptr,
-                                                sdslen(payload.io.buffer.ptr))) {
-            sdsfree(payload.io.buffer.ptr);
-            goto error;
+        if(length >= 2) {
+            serverLog(LL_WARNING, "[CRDT][SENDMERGE] key:{%s} %d splitted", keystr, length);
         }
-        sdsfree(payload.io.buffer.ptr);
-        decrRefCount(result);
-        result = NULL;
-        if(!rioWriteBulkLongLong(rdb, expire)) return C_ERR;
+        robj result;
+        moduleValue *mv = o->ptr;
+        moduleValue v = {
+            .type = mv->type
+        };
+        initStaticModuleObject(result, &v);
+        for(int i = 0; i < length; i++) {
+            v.value = filter[i];
+            //CRDT.Merge_Del <gid> <key> <val>
+            if(!rioWriteBulkCount(rdb, '*', 5)) goto error;
+            if(!rioWriteBulkString(rdb,cmdname,strlen(cmdname))) goto error;
+            if(!rioWriteBulkLongLong(rdb, crdtServer.crdt_gid)) goto error;
+            if(!rioWriteBulkString(rdb, (&key)->ptr,sdslen((&key)->ptr))) goto error;
+            
+            /* Emit the payload argument, that is the serialized object using
+            * * the DUMP format. */
+            createDumpPayload(&payload, &result);
+            if(!rioWriteBulkString(rdb, payload.io.buffer.ptr,
+                                                    sdslen(payload.io.buffer.ptr))) {
+                sdsfree(payload.io.buffer.ptr);
+                goto error;
+            }
+            sdsfree(payload.io.buffer.ptr);
+            if(!rioWriteBulkLongLong(rdb, expire)) return C_ERR;
+        }
+        freeFilterFunc(filter, length);
+        
         num++;
     }
     return num;
@@ -193,7 +233,7 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
             decrRefCount(selectcmd);
         }
         if (dictSize(d) != 0) {
-            int num = crdtSendMergeRequest(rdb, rsi, di, "CRDT.Merge", dataFilter, db);
+            int num = crdtSendMergeRequest(rdb, rsi, di, "CRDT.Merge", dataFilter, freeDataFilter,db);
             if(num == C_ERR) {
                 goto werr;
             }
@@ -205,7 +245,7 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
         di = dictGetSafeIterator(d);
         if (!di) return C_ERR;
         if (dictSize(d) != 0) {
-            int num = crdtSendMergeRequest(rdb, rsi, di, "CRDT.Merge_Del", tombstoneFilter, NULL);
+            int num = crdtSendMergeRequest(rdb, rsi, di, "CRDT.Merge_Del", tombstoneFilter, freeTombstoneFilter ,NULL);
             if(num == C_ERR) {
                 goto werr;
             }
