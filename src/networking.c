@@ -1473,7 +1473,7 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
         }
         freeClient(c);
         return;
-    } else if (c->flags & CLIENT_MASTER || (c->flags & CLIENT_CRDT_MASTER && getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED)) {
+    } else if ((c->flags & CLIENT_MASTER && iAmMaster() != C_OK) || (c->flags & CLIENT_CRDT_MASTER && getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED)) {
         /* Append the query buffer to the pending (not applied) buffer
          * of the master. We'll use this buffer later in order to have a
          * copy of the string applied by the last command executed. */
@@ -1513,7 +1513,7 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
      * a crdt(peer) master, as we wish our slaves to keeper align with peer master's
      * repl offset, so that, when a failover happend locally, the globally repl_offset
      * will not be any different*/
-    if(c->flags & CLIENT_MASTER) {
+    if(c->flags & CLIENT_MASTER && iAmMaster() != C_OK) {
         
         size_t prev_offset = c->reploff;
         processInputBuffer(c);
