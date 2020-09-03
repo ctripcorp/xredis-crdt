@@ -89,9 +89,10 @@ start_server {tags {"gc"} config {crdt.conf} overrides {crdt-gid 1} module {crdt
         }
 
         test {also gc in A} {
-            wait_for_condition 100 50 {
+            wait_for_condition 100 100 {
                 [$A tombstonesize] eq 0
             } else {
+                puts [$A tombstonesize]
                 fail "other(A) not gc the tombstone"
             }
         }

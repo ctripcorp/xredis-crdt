@@ -1966,6 +1966,15 @@ int RM_DeleteKey(RedisModuleKey *key) {
     return REDISMODULE_OK;
 }
 
+int RM_DeleteTombstone(RedisModuleKey *key) {
+    if (!(key->mode & REDISMODULE_WRITE)) return REDISMODULE_ERR;
+    if (key->tombstone) {
+        dictDelete(key->db->deleted_keys,key->key->ptr);
+        key->tombstone = NULL;
+    }
+    return REDISMODULE_OK;
+}
+
 /* If the key is open for writing, unlink it (that is delete it in a 
  * non-blocking way, not reclaiming memory immediately) and setup the key to
  * accept new writes as an empty key (that will be created on demand).
@@ -3480,6 +3489,7 @@ int RM_ModuleTypeLoadRdbAddValue(RedisModuleKey *key, moduleType *mt, void *valu
     return REDISMODULE_OK;
 }
 
+
 int RM_ModuleTombstoneSetValue(RedisModuleKey *key, moduleType *mt, void *value) {
     if (!(key->mode & REDISMODULE_WRITE) || key->iter) return REDISMODULE_ERR;
     robj *o = createModuleObject(mt,value);
@@ -4639,6 +4649,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(ReplicationFeedStringToAllSlaves);
     REGISTER_API(ReplicationFeedRobjToAllSlaves);
     REGISTER_API(DeleteKey);
+    REGISTER_API(DeleteTombstone);
     REGISTER_API(UnlinkKey);
     REGISTER_API(StringSet);
     REGISTER_API(StringDMA);
