@@ -65,7 +65,8 @@ typedef struct CrdtDataMethod {
     crdtPropagateDelFunc propagateDel;
     crdtInfoFunc info;
 } CrdtDataMethod;
-
+#define PURGE_VAL 1
+#define PURGE_TOMBSTONE -1
 typedef struct CrdtTombstoneMethod {
     crdtMergeFunc merge;
     crdtFilterSplitFunc filterAndSplit;
