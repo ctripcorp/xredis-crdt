@@ -4080,6 +4080,8 @@ int main(int argc, char **argv) {
     zmalloc_set_oom_handler(redisOutOfMemoryHandler);
     srand(time(NULL)^getpid());
     gettimeofday(&tv,NULL);
+    crc64_init();
+
     char hashseed[16];
     getRandomHexChars(hashseed,sizeof(hashseed));
     dictSetHashFunctionSeed((uint8_t*)hashseed);
