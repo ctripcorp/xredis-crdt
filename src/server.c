@@ -300,7 +300,7 @@ struct redisCommand redisCommandTable[] = {
 //    {"bitcount",bitcountCommand,-2,"r",0,NULL,1,1,1,0,0},
 //    {"bitpos",bitposCommand,-3,"r",0,NULL,1,1,1,0,0},
 //    {"wait",waitCommand,3,"s",0,NULL,0,0,0,0,0},
-//    {"command",commandCommand,0,"lt",0,NULL,0,0,0,0,0},
+    {"command",commandCommand,0,"lt",0,NULL,0,0,0,0,0},
 //    {"geoadd",geoaddCommand,-5,"wm",0,NULL,1,1,1,0,0},
 //    {"georadius",georadiusCommand,-6,"w",0,georadiusGetKeys,1,1,1,0,0},
 //    {"georadius_ro",georadiusroCommand,-6,"r",0,georadiusGetKeys,1,1,1,0,0},
@@ -320,9 +320,7 @@ struct redisCommand redisCommandTable[] = {
     {"crdt.psync",crdtPsyncCommand,3,"ars",0,NULL,0,0,0,0,0},
     {"crdt.merge_start", crdtMergeStartCommand,-1,"ars",0,NULL,0,0,0,0,0},
     {"crdt.merge",crdtMergeCommand,-1,"wm",0,NULL,0,0,0,0,0},
-    // {"crdt.merge_expire",crdtMergeExpireCommand,-1,"ars",0,NULL,0,0,0,0,0},
     {"crdt.merge_del",crdtMergeDelCommand,-1,"wm",0,NULL,0,0,0,0,0},
-    // {"crdt.merge_del_expire",crdtMergeDelExpireCommand,-1,"ars",0,NULL,0,0,0,0,0},
     {"crdt.merge_end",crdtMergeEndCommand,-1,"ars",0,NULL,0,0,0,0,0},
     {"crdt.replconf",replconfCommand,-1,"aslt",0,NULL,0,0,0,0,0},
     {"crdt.role",crdtRoleCommand,3,"lst",0,NULL,0,0,0,0,0},
@@ -332,7 +330,6 @@ struct redisCommand redisCommandTable[] = {
     {"debugCancelCrdt",debugCancelCrdt,3,"ast",0,NULL,0,0,0,0,0},
     {"tombstoneSize",tombstoneSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
     {"expireSize",expireSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
-    // {"crdt.ovc",crdtOvcCommand,3,"rF",0,NULL,0,0,0,0,0},
     {"crdt.authGid", crdtAuthGidCommand,2,"rF", 0, NULL,0,0,0,0,0},
     {"crdt.auth", crdtAuthCommand, 3, "rF", 0,NULL,0,0,0,0,0}
 };
