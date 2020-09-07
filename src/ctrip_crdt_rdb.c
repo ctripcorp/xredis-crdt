@@ -100,7 +100,7 @@ void freeDataFilter(CrdtObject** data, int length) {
     method->freefilter(data, length);
 }
 
-CrdtObject* tombstoneFilter(CrdtObject* tombstone, int gid, long long logic_time, long long maxsize, int* length) {
+CrdtObject** tombstoneFilter(CrdtObject* tombstone, int gid, long long logic_time, long long maxsize, int* length) {
     CrdtTombstoneMethod* method = getCrdtTombstoneMethod(tombstone);
     if(method == NULL) {
         serverLog(LL_WARNING, "[CRDT][crdtRdbSaveRio][tombstoneFilter] NOT FIND CRDT TOMBSTONE FILTER METHOD");
