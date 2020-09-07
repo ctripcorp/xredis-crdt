@@ -230,149 +230,149 @@ proc slave-peer-offset {type arrange} {
     }
 }
 
-slave-peer-offset "1. master->slave full sync 2. peer -> master full sync" {
-    set load_handle0 [start_write_load $r_host $r_port 3]
-    set load_handle1 [start_write_load $peer_host $peer_port 3]
-    after 3000
-    stop_write_load $load_handle0
-    stop_write_load $load_handle1
-    $master slaveof $r_host $r_port 
-    wait_for_sync $master
-    $slave slaveof $master_host $master_port 
-    wait_for_sync $slave
-    $master peerof $peer_gid $peer_host $peer_port
-    wait $peer 0 crdt.info $peer_log
+# slave-peer-offset "1. master->slave full sync 2. peer -> master full sync" {
+#     set load_handle0 [start_write_load $r_host $r_port 3]
+#     set load_handle1 [start_write_load $peer_host $peer_port 3]
+#     after 3000
+#     stop_write_load $load_handle0
+#     stop_write_load $load_handle1
+#     $master slaveof $r_host $r_port 
+#     wait_for_sync $master
+#     $slave slaveof $master_host $master_port 
+#     wait_for_sync $slave
+#     $master peerof $peer_gid $peer_host $peer_port
+#     wait $peer 0 crdt.info $peer_log
 
-    after 1000
-    assert_equal [crdt_stats $peer sync_full] 1
-    assert_equal [status $master sync_full] 1
-    check_peer_info $peer $slave 0
+#     after 1000
+#     assert_equal [crdt_stats $peer sync_full] 1
+#     assert_equal [status $master sync_full] 1
+#     check_peer_info $peer $slave 0
     
-}
+# }
 
-slave-peer-offset "1. master->slave full sync 2. peer -> master (null) full sync add data" {
-    set load_handle0 [start_write_load $r_host $r_port 3]
-    after 3000
-    stop_write_load $load_handle0
+# slave-peer-offset "1. master->slave full sync 2. peer -> master (null) full sync add data" {
+#     set load_handle0 [start_write_load $r_host $r_port 3]
+#     after 3000
+#     stop_write_load $load_handle0
     
-    $master slaveof $r_host $r_port 
-    wait_for_sync $master
-    $slave slaveof $master_host $master_port 
-    wait_for_sync $slave
-    $master peerof $peer_gid $peer_host $peer_port
-    wait $peer 0 crdt.info $peer_log
-    set load_handle1 [start_write_load $peer_host $peer_port 3]
-    after 3000
-    stop_write_load $load_handle1
-    after 1000
-    assert_equal [crdt_stats $peer sync_full] 1
-    assert_equal [status $master sync_full] 1
-    check_peer_info $peer $slave 0
-}
+#     $master slaveof $r_host $r_port 
+#     wait_for_sync $master
+#     $slave slaveof $master_host $master_port 
+#     wait_for_sync $slave
+#     $master peerof $peer_gid $peer_host $peer_port
+#     wait $peer 0 crdt.info $peer_log
+#     set load_handle1 [start_write_load $peer_host $peer_port 3]
+#     after 3000
+#     stop_write_load $load_handle1
+#     after 1000
+#     assert_equal [crdt_stats $peer sync_full] 1
+#     assert_equal [status $master sync_full] 1
+#     check_peer_info $peer $slave 0
+# }
 
-slave-peer-offset "1. master->slave full sync 2. peer -> master  partial sync" {
-    $peer_slave slaveof $peer_host $peer_port
-    set load_handle0 [start_write_load $r_host $r_port 3]
-    set load_handle1 [start_write_load $peer_host $peer_port 3]
-    after 3000
-    stop_write_load $load_handle0
-    stop_write_load $load_handle1
+# slave-peer-offset "1. master->slave full sync 2. peer -> master  partial sync" {
+#     $peer_slave slaveof $peer_host $peer_port
+#     set load_handle0 [start_write_load $r_host $r_port 3]
+#     set load_handle1 [start_write_load $peer_host $peer_port 3]
+#     after 3000
+#     stop_write_load $load_handle0
+#     stop_write_load $load_handle1
 
-    $master slaveof $r_host $r_port 
-    wait_for_sync $master
-    $slave slaveof $master_host $master_port 
-    wait_for_sync $slave
+#     $master slaveof $r_host $r_port 
+#     wait_for_sync $master
+#     $slave slaveof $master_host $master_port 
+#     wait_for_sync $slave
 
-    $master peerof $peer_slave_gid $peer_slave_host $peer_slave_port
-    wait_for_peer_sync $master
-    $master peerof $peer_gid $peer_host $peer_port
-    $peer set k v 
-    wait $peer 0 crdt.info $peer_log
-    after 1000
-    puts [$peer crdt.info stats]
-    # print_file_matches $master_log
-    assert_equal [crdt_stats $peer sync_full] 0
-    assert_equal [crdt_stats $peer sync_partial_ok] 1
-    check_peer_info $peer $slave 0
-}
+#     $master peerof $peer_slave_gid $peer_slave_host $peer_slave_port
+#     wait_for_peer_sync $master
+#     $master peerof $peer_gid $peer_host $peer_port
+#     $peer set k v 
+#     wait $peer 0 crdt.info $peer_log
+#     after 1000
+#     puts [$peer crdt.info stats]
+#     # print_file_matches $master_log
+#     assert_equal [crdt_stats $peer sync_full] 0
+#     assert_equal [crdt_stats $peer sync_partial_ok] 1
+#     check_peer_info $peer $slave 0
+# }
 
 
-slave-peer-offset "1. master->slave (null) full sync add data 2. peer -> master full sync" {
-    $master slaveof $r_host $r_port 
-    wait_for_sync $master
-    $slave slaveof $master_host $master_port 
-    wait_for_sync $slave
+# slave-peer-offset "1. master->slave (null) full sync add data 2. peer -> master full sync" {
+#     $master slaveof $r_host $r_port 
+#     wait_for_sync $master
+#     $slave slaveof $master_host $master_port 
+#     wait_for_sync $slave
 
-    set load_handle0 [start_write_load $r_host $r_port 3]
-    set load_handle1 [start_write_load $peer_host $peer_port 3]
-    after 3000
-    stop_write_load $load_handle0
-    stop_write_load $load_handle1
+#     set load_handle0 [start_write_load $r_host $r_port 3]
+#     set load_handle1 [start_write_load $peer_host $peer_port 3]
+#     after 3000
+#     stop_write_load $load_handle0
+#     stop_write_load $load_handle1
     
     
-    $master peerof $peer_gid $peer_host $peer_port
-    wait $peer 0 crdt.info $peer_log
+#     $master peerof $peer_gid $peer_host $peer_port
+#     wait $peer 0 crdt.info $peer_log
 
-    after 1000
-    assert_equal [crdt_stats $peer sync_full] 1
-    assert_equal [status $master sync_full] 1
-    check_peer_info $peer $slave 0
+#     after 1000
+#     assert_equal [crdt_stats $peer sync_full] 1
+#     assert_equal [status $master sync_full] 1
+#     check_peer_info $peer $slave 0
     
-}
+# }
 
-slave-peer-offset "1. master->slave partial sync 2. peer -> master full sync" {
-    $master slaveof $r_host $r_port 
-    wait_for_sync $master
-    $slave slaveof $master_host $master_port 
-    wait_for_sync $slave
-    set load_handle1 [start_write_load $peer_host $peer_port 3]
-    set load_handle0 [start_write_load $r_host $r_port 3]
-    after 3000
-    stop_write_load $load_handle0
-    stop_write_load $load_handle1
+# slave-peer-offset "1. master->slave partial sync 2. peer -> master full sync" {
+#     $master slaveof $r_host $r_port 
+#     wait_for_sync $master
+#     $slave slaveof $master_host $master_port 
+#     wait_for_sync $slave
+#     set load_handle1 [start_write_load $peer_host $peer_port 3]
+#     set load_handle0 [start_write_load $r_host $r_port 3]
+#     after 3000
+#     stop_write_load $load_handle0
+#     stop_write_load $load_handle1
     
-    $slave_slave slaveof $slave_host $slave_port
-    wait_for_sync $slave_slave
+#     $slave_slave slaveof $slave_host $slave_port
+#     wait_for_sync $slave_slave
 
-    $slave_slave slaveof $master_host $master_port
-    wait_for_sync $slave_slave
-    set load_handle0 [start_write_load $r_host $r_port 3]
-    after 3000
-    stop_write_load $load_handle0
-    # print_file_matches $master_log
+#     $slave_slave slaveof $master_host $master_port
+#     wait_for_sync $slave_slave
+#     set load_handle0 [start_write_load $r_host $r_port 3]
+#     after 3000
+#     stop_write_load $load_handle0
+#     # print_file_matches $master_log
 
-    $master peerof $peer_gid $peer_host $peer_port
-    wait $peer 0 crdt.info $peer_log
+#     $master peerof $peer_gid $peer_host $peer_port
+#     wait $peer 0 crdt.info $peer_log
     
-    after 1000
-    assert_equal [crdt_stats $peer sync_full] 1
-    assert_equal [status $master sync_full] 1
-    assert_equal [status $master sync_partial_ok] 1
-    check_peer_info $peer $slave 0
-}
+#     after 1000
+#     assert_equal [crdt_stats $peer sync_full] 1
+#     assert_equal [status $master sync_full] 1
+#     assert_equal [status $master sync_partial_ok] 1
+#     check_peer_info $peer $slave 0
+# }
 
-slave-peer-offset "1. master->slave (null) full sync add data 2. peer -> master (null) full sync add data" {
-    $master slaveof $r_host $r_port 
-    wait_for_sync $master
-    $slave slaveof $master_host $master_port 
-    wait_for_sync $slave
+# slave-peer-offset "1. master->slave (null) full sync add data 2. peer -> master (null) full sync add data" {
+#     $master slaveof $r_host $r_port 
+#     wait_for_sync $master
+#     $slave slaveof $master_host $master_port 
+#     wait_for_sync $slave
 
-    set load_handle0 [start_write_load $r_host $r_port 3]
+#     set load_handle0 [start_write_load $r_host $r_port 3]
 
-    after 3000
-    stop_write_load $load_handle0
-    $master peerof $peer_gid $peer_host $peer_port
-    wait $peer 0 crdt.info $peer_log
+#     after 3000
+#     stop_write_load $load_handle0
+#     $master peerof $peer_gid $peer_host $peer_port
+#     wait $peer 0 crdt.info $peer_log
 
-    set load_handle1 [start_write_load $peer_host $peer_port 3]
-    after 3000
-    stop_write_load $load_handle1
-    after 1000
-    assert_equal [crdt_stats $peer sync_full] 1
-    assert_equal [status $master sync_full] 1
-    check_peer_info $peer $slave 0
+#     set load_handle1 [start_write_load $peer_host $peer_port 3]
+#     after 3000
+#     stop_write_load $load_handle1
+#     after 1000
+#     assert_equal [crdt_stats $peer sync_full] 1
+#     assert_equal [status $master sync_full] 1
+#     check_peer_info $peer $slave 0
     
-}
+# }
 
 slave-peer-offset "1. master->slave partial sync 2. peer -> master (null) full sync add data" {
     $master slaveof $r_host $r_port 
@@ -383,7 +383,7 @@ slave-peer-offset "1. master->slave partial sync 2. peer -> master (null) full s
     set load_handle0 [start_write_load $r_host $r_port 3]
     after 3000
     stop_write_load $load_handle0
-    
+    print_file_matches $master_log
     $slave_slave slaveof $slave_host $slave_port
     wait_for_sync $slave_slave
 
@@ -392,7 +392,7 @@ slave-peer-offset "1. master->slave partial sync 2. peer -> master (null) full s
     set load_handle0 [start_write_load $r_host $r_port 3]
     after 3000
     stop_write_load $load_handle0
-    # print_file_matches $master_log
+    print_file_matches $master_log
 
     $master peerof $peer_gid $peer_host $peer_port
     wait $peer 0 crdt.info $peer_log
@@ -420,6 +420,7 @@ slave-peer-offset "1. master->slave (null) full sync add data 2. peer -> master 
     after 3000
     stop_write_load $load_handle0
     stop_write_load $load_handle1
+    print_file_matches $master_log
     $master peerof $peer_slave_gid $peer_slave_host $peer_slave_port
     wait_for_peer_sync $master
 

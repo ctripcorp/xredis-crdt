@@ -222,6 +222,7 @@ write_diff_db "write db0 and db5 " {
     stop_write_load $load_handle4
     after 5000
     $master debug set-crdt-ovc 0
+    print_file_matches $peer_log
     $peer debug set-crdt-ovc 0
     $peer2 debug set-crdt-ovc 0
     # print_file_matches $peer_slave_log

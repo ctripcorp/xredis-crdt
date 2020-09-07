@@ -37,17 +37,23 @@ proc wait { client index type}  {
         error "assertion: Master-Slave not correctly synchronized"
     }
 }
-
+proc print_log_file {log} {
+    set fp [open $log r]
+    set content [read $fp]
+    close $fp
+    puts $content
+}
 proc basic_test { type create check delete} {
     start_server {tags {[format "crdt-basic-%s" $type]} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
         set peers {}
         set peer_hosts {}
         set peer_ports {}
         set peer_gids {}
-
+        set peer_stdouts {}
         lappend peers [srv 0 client]
         lappend peer_hosts [srv 0 host]
         lappend peer_ports [srv 0 port]
+        lappend peer_stdouts [srv 0 stdout]
         lappend peer_gids 1
         [lindex $peers 0] config crdt.set repl-diskless-sync-delay 1
         [lindex $peers 0] config set repl-diskless-sync-delay 1
@@ -72,6 +78,7 @@ proc basic_test { type create check delete} {
             lappend peers [srv 0 client]
             lappend peer_hosts [srv 0 host]
             lappend peer_ports [srv 0 port]
+            lappend peer_stdouts [srv 0 stdout]
             lappend peer_gids 2
             [lindex $peers 1] config crdt.set repl-diskless-sync-delay 1
             [lindex $peers 1] config set repl-diskless-sync-delay 1
@@ -84,20 +91,29 @@ proc basic_test { type create check delete} {
             
             test [format "%s-del-tombstone2" $type] {
                 set add1 {key field value 1 100000 {"1:11;2:11"} }
+                puts [[lindex $peers 0] crdt.datainfo key ]
                 run [replace [replace_client $create {[lindex $peers 0]}] $add1] 1
+                
+                print_log_file [lindex $peer_stdouts 0]
                 run [replace [replace_client $check {[lindex $peers 0]}] $add1] 1
+                
                 set delete1 {key field {} 1 100000 {"1:12;2:11"} }
+                
                 [lindex $peers 0] del key
                 after 1000
                 run [replace [replace_client $check {[lindex $peers 1]}] $delete1] 1
                 run [replace [replace_client $create {[lindex $peers 1]}] $add1] 1
+                
                 run [replace [replace_client $check {[lindex $peers 1]}] $delete1] 1
                 run [replace [replace_client $create {[lindex $peers 0]}] $add1] 1
+                
                 run [replace [replace_client $check {[lindex $peers 0]}] $delete1] 1
                 set add2 {key field value2 2 100000 {"1:11;2:12"}}
                 run [replace [replace_client $create {[lindex $peers 1]}] $add2] 1
+                # print_log_file [lindex $peer_stdouts 0]
                 run [replace [replace_client $check {[lindex $peers 1]}] $delete1] 1
                 run [replace [replace_client $create {[lindex $peers 0]}] $add2] 1
+                print_log_file [lindex $peer_stdouts 0]
                 run [replace [replace_client $check {[lindex $peers 0]}] $delete1] 1
                 
             }  
@@ -146,8 +162,8 @@ basic_test "mset" {
 }
 
 
-# key field value gid timestamp vc
-#  0   1     2    3    4        5
+# # key field value gid timestamp vc
+# #  0   1     2    3    4        5
 basic_test "hash" {
     $redis crdt.hset $0 $3 $4 $5 2 $1 $2
 } {
