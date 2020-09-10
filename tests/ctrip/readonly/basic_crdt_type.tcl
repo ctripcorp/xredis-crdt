@@ -171,38 +171,38 @@ proc basic_test { type create check delete} {
                     set argv2 {tombstone field value2 1 99999 {"1:11;2:10"}}
                     run [replace [replace_client $create {[lindex $peers 0]}] $argv2] 1
                     run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
-
-
-                    set argv3 {tombstone field value3 1 100001 {"1:11;2:10"}}
+                    puts [[lindex $peers 0] crdt.datainfo tombstone]
+                    set argv3 {tombstone field value3 1 100001 {"1:12;2:11"}}
                     run [replace [replace_client $create {[lindex $peers 0]}] $argv3] 1
                     run [replace [replace_client $check {[lindex $peers 0]}] $argv3] 1
                 }
                 test [format "%s-tombstone-gid1" $type] {
-                    set result {tombstone field value2 1 99999 {"1:11;2:10"} }
-                    set argv2 {tombstone field value2 1 99999 {"1:11;2:10"}}
-                    run [replace [replace_client $create {[lindex $peers 0]}] $argv2] 1
+                    set del2 {tombstone field value3 1 100001 {"1:13;2:11"}}
+                    set result {tombstone field {} 1 100000 {"1:13;2:11"} }
+                    run [replace [replace_client $delete {[lindex $peers 0]}] $del2] 1
                     run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
-
-
-                    set argv3 {tombstone field value3 1 100001 {"1:11;2:10"}}
-                    run [replace [replace_client $create {[lindex $peers 0]}] $argv3] 1
-                    run [replace [replace_client $check {[lindex $peers 0]}] $argv3] 1
                     
+
+                    set argv4 {tombstone field value4 2 100001 {"1:11;2:13"}}
+                    run [replace [replace_client $create {[lindex $peers 1]}] $argv4] 1
+                    run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
+                    
+
 
                 }
                 test [format "%s-tombstone-gid2" $type] {            
-                    set argv5 {tombstone field value5 1 100001 {"1:13;2:13"}}
-                    set result {tombstone field {} 1 100000 {"1:13;2:14"} }
+                    set argv5 {tombstone field value5 1 100001 {"1:14;2:13"}}
+                    set result {tombstone field {} 1 100000 {"1:14;2:14"} }
                     run [replace [replace_client $create {[lindex $peers 0]}] $argv5] 1
                     run [replace [replace_client $check {[lindex $peers 0]}] $argv5] 1
                     
 
-                    set del3 {tombstone field value5 2 100001 {"1:13;2:14"}}
+                    set del3 {tombstone field value5 2 100001 {"1:14;2:14"}}
                     run [replace [replace_client $delete {[lindex $peers 0]}] $del3] 1
                     run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
                     
 
-                    set argv6 {tombstone field value6 1 100001 {"1:14;2:13"}}
+                    set argv6 {tombstone field value6 1 100001 {"1:15;2:14"}}
                     run [replace [replace_client $create {[lindex $peers 0]}] $argv6] 1
                     run [replace [replace_client $check {[lindex $peers 0]}] $argv6] 1
                     

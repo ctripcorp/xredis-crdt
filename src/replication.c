@@ -476,7 +476,7 @@ int masterTryPartialResynchronization(struct redisServer *srv, client *c) {
         psync_offset > (srv->repl_backlog_off + srv->repl_backlog_histlen))
     {
         serverLog(LL_NOTICE,
-            "Unable to partial resync with slave %s for lack of backlog (Slave request was: %lld).", replicationGetSlaveName(c), psync_offset);
+            "Unable to partial resync with slave %s for lack of backlog (Slave request was: %lld). [%lld,%lld] ", replicationGetSlaveName(c), psync_offset, srv->repl_backlog_off , srv->repl_backlog_off + srv->repl_backlog_histlen);
         if (psync_offset > srv->master_repl_offset) {
             serverLog(LL_WARNING,
                 "Warning: slave %s tried to PSYNC with an offset that is greater than the master replication offset(%lld).", replicationGetSlaveName(c), srv->master_repl_offset);

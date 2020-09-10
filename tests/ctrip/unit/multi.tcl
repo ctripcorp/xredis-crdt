@@ -582,63 +582,63 @@ slave-peer-offset "maste-slave" {
         assert_replication_stream $slave_repl {
             {crdt.select 1 *}
             {crdt.multi 1}
-            {crdt.set k v 1 * 1:1 -1}
-            {crdt.hset h 1 * 1:2 2 k v}
-            {crdt.del_reg k 1 * 1:3}
-            {crdt.rem_hash h 1 * 1:4 k}
-            {crdt.hset h1 1 * 1:5 2 k v}
-            {crdt.del_hash h1 1 * 1:6 1:6}
-            {crdt.set k1 v 1 * 1:7 -1}
+            {crdt.set k v 1 * {1:1;2:0} -1}
+            {crdt.hset h 1 * {1:2;2:0} 2 k v}
+            {crdt.del_reg k 1 * {1:3;2:0}}
+            {crdt.rem_hash h 1 * {1:4;2:0} k}
+            {crdt.hset h1 1 * {1:5;2:0} 2 k v}
+            {crdt.del_hash h1 1 * {1:6;2:0} {1:6;2:0}}
+            {crdt.set k1 v 1 * {1:7;2:0} -1}
             {crdt.expire k1 1 * * 0}
-            {crdt.set k2 v 1 * 1:8 *}
-            {crdt.mset 1 * k3 v1 1:9 k4 v2 1:9}
+            {crdt.set k2 v 1 * {1:8;2:0} *}
+            {crdt.mset 1 * k3 v1 {1:9;2:0} k4 v2 {1:9;2:0}}
             {crdt.exec 1}
         }
         assert_replication_stream $slave_slave_repl {
             {crdt.select 1 *}
             {crdt.multi 1}
-            {crdt.set k v 1 * 1:1 -1}
-            {crdt.hset h 1 * 1:2 2 k v}
-            {crdt.del_reg k 1 * 1:3}
-            {crdt.rem_hash h 1 * 1:4 k}
-            {crdt.hset h1 1 * 1:5 2 k v}
-            {crdt.del_hash h1 1 * 1:6 1:6}
-            {crdt.set k1 v 1 * 1:7 -1}
+            {crdt.set k v 1 * {1:1;2:0} -1}
+            {crdt.hset h 1 * {1:2;2:0} 2 k v}
+            {crdt.del_reg k 1 * {1:3;2:0}}
+            {crdt.rem_hash h 1 * {1:4;2:0} k}
+            {crdt.hset h1 1 * {1:5;2:0} 2 k v}
+            {crdt.del_hash h1 1 * {1:6;2:0} {1:6;2:0}}
+            {crdt.set k1 v 1 * {1:7;2:0} -1}
             {crdt.expire k1 1 * * 0}
-            {crdt.set k2 v 1 * 1:8 *}
-            {crdt.mset 1 * k3 v1 1:9 k4 v2 1:9}
+            {crdt.set k2 v 1 * {1:8;2:0} *}
+            {crdt.mset 1 * k3 v1 {1:9;2:0} k4 v2 {1:9;2:0}}
             {crdt.exec 1}
         }
         assert_replication_stream $peer_repl  {
             {select 0}
             {crdt.select 1 *}
             {crdt.multi 1}
-            {crdt.set k v 1 * 1:1 -1}
-            {crdt.hset h 1 * 1:2 2 k v}
-            {crdt.del_reg k 1 * 1:3}
-            {crdt.rem_hash h 1 * 1:4 k}
-            {crdt.hset h1 1 * 1:5 2 k v}
-            {crdt.del_hash h1 1 * 1:6 1:6}
-            {crdt.set k1 v 1 * 1:7 -1}
+            {crdt.set k v 1 * {1:1;2:0} -1}
+            {crdt.hset h 1 * {1:2;2:0} 2 k v}
+            {crdt.del_reg k 1 * {1:3;2:0}}
+            {crdt.rem_hash h 1 * {1:4;2:0} k}
+            {crdt.hset h1 1 * {1:5;2:0} 2 k v}
+            {crdt.del_hash h1 1 * {1:6;2:0} {1:6;2:0}}
+            {crdt.set k1 v 1 * {1:7;2:0} -1}
             {crdt.expire k1 1 * * 0}
-            {crdt.set k2 v 1 * 1:8 *}
-            {crdt.mset 1 * k3 v1 1:9 k4 v2 1:9}
+            {crdt.set k2 v 1 * {1:8;2:0} *}
+            {crdt.mset 1 * k3 v1 {1:9;2:0} k4 v2 {1:9;2:0}}
             {crdt.exec 1}
         }
         assert_replication_stream $peer_slave_repl  {
             {select 0}
             {crdt.select 1 *}
             {crdt.multi 1}
-            {crdt.set k v 1 * 1:1 -1}
-            {crdt.hset h 1 * 1:2 2 k v}
-            {crdt.del_reg k 1 * 1:3}
-            {crdt.rem_hash h 1 * 1:4 k}
-            {crdt.hset h1 1 * 1:5 2 k v}
-            {crdt.del_hash h1 1 * 1:6 1:6}
-            {crdt.set k1 v 1 * 1:7 -1}
+            {crdt.set k v 1 * {1:1;2:0} -1}
+            {crdt.hset h 1 * {1:2;2:0} 2 k v}
+            {crdt.del_reg k 1 * {1:3;2:0}}
+            {crdt.rem_hash h 1 * {1:4;2:0} k}
+            {crdt.hset h1 1 * {1:5;2:0} 2 k v}
+            {crdt.del_hash h1 1 * {1:6;2:0} {1:6;2:0}}
+            {crdt.set k1 v 1 * {1:7;2:0} -1}
             {crdt.expire k1 1 * * 0}
-            {crdt.set k2 v 1 * 1:8 *}
-            {crdt.mset 1 * k3 v1 1:9 k4 v2 1:9}
+            {crdt.set k2 v 1 * {1:8;2:0} *}
+            {crdt.mset 1 * k3 v1 {1:9;2:0} k4 v2 {1:9;2:0}}
             {crdt.exec 1}
         }
 
@@ -695,13 +695,13 @@ slave-peer-offset "maste-slave" {
             {select 9}
             {crdt.multi 2}
             {crdt.select 2 1}
-            {crdt.set k10 v2 2 * 2:1 -1}
-            {crdt.hset h10 2 * 2:2 2 k v2}
+            {crdt.set k10 v2 2 * {1:9;2:1} -1}
+            {crdt.hset h10 2 * {1:9;2:2} 2 k v2}
             {crdt.exec 2}
             {crdt.multi 1}
             {crdt.select 1 0}
-            {crdt.set k10 v1 1 * 1:10 -1}
-            {crdt.hset h10 1 * 1:11 2 k v1}
+            {crdt.set k10 v1 1 * {1:10;2:2} -1}
+            {crdt.hset h10 1 * {1:11;2:2} 2 k v1}
             {crdt.exec 1}
         }
 
@@ -709,39 +709,39 @@ slave-peer-offset "maste-slave" {
             {select 9}
             {crdt.multi 2}
             {crdt.select 2 1}
-            {crdt.set k10 v2 2 * 2:1 -1}
-            {crdt.hset h10 2 * 2:2 2 k v2}
+            {crdt.set k10 v2 2 * {1:9;2:1} -1}
+            {crdt.hset h10 2 * {1:9;2:2} 2 k v2}
             {crdt.exec 2}
             {crdt.multi 1}
             {crdt.select 1 0}
-            {crdt.set k10 v1 1 * 1:10 -1}
-            {crdt.hset h10 1 * 1:11 2 k v1}
+            {crdt.set k10 v1 1 * {1:10;2:2} -1}
+            {crdt.hset h10 1 * {1:11;2:2} 2 k v1}
             {crdt.exec 1}
         }
         assert_replication_stream $peer_repl  {
             {crdt.multi 2}
             {crdt.select 2 1}
-            {crdt.set k10 v2 2 * 2:1 -1}
-            {crdt.hset h10 2 * 2:2 2 k v2}
+            {crdt.set k10 v2 2 * {1:9;2:1} -1}
+            {crdt.hset h10 2 * {1:9;2:2} 2 k v2}
             {crdt.exec 2}
             {select 9}
             {crdt.multi 1}
             {crdt.select 1 0}
-            {crdt.set k10 v1 1 * 1:10 -1}
-            {crdt.hset h10 1 * 1:11 2 k v1}
+            {crdt.set k10 v1 1 * {1:10;2:2} -1}
+            {crdt.hset h10 1 * {1:11;2:2} 2 k v1}
             {crdt.exec 1}
         }
         assert_replication_stream $peer_slave_repl  {
             {crdt.multi 2}
             {crdt.select 2 1}
-            {crdt.set k10 v2 2 * 2:1 -1}
-            {crdt.hset h10 2 * 2:2 2 k v2}
+            {crdt.set k10 v2 2 * {1:9;2:1} -1}
+            {crdt.hset h10 2 * {1:9;2:2} 2 k v2}
             {crdt.exec 2}
             {select 9}
             {crdt.multi 1}
             {crdt.select 1 0}
-            {crdt.set k10 v1 1 * 1:10 -1}
-            {crdt.hset h10 1 * 1:11 2 k v1}
+            {crdt.set k10 v1 1 * {1:10;2:2} -1}
+            {crdt.hset h10 1 * {1:11;2:2} 2 k v1}
             {crdt.exec 1}
         }
         $master select 0

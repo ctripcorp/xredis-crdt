@@ -244,3 +244,48 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
         }
     }
 }
+proc log_file_matches {log} {
+    set fp [open $log r]
+    set content [read $fp]
+    close $fp
+    puts $content
+}
+
+start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {crdt.so}} {
+    set peers {}
+    set peer_hosts {}
+    set peer_ports {}
+    set peer_gids  {}
+    set peer_stdout {}
+    lappend peers [srv 0 client]
+    lappend peer_hosts [srv 0 host]
+    lappend peer_ports [srv 0 port]
+    lappend peer_stdout [srv 0 stdout]
+    lappend peer_gids  1
+
+    start_server {config {crdt.conf} overrides {crdt-gid 2} module {crdt.so}} {
+        lappend peers [srv 0 client]
+        lappend peer_hosts [srv 0 host]
+        lappend peer_ports [srv 0 port]
+        lappend peer_ports [srv 0 port]
+        lappend peer_stdout [srv 0 stdout]
+        lappend peer_gids  2
+        [lindex $peers 0] config crdt.set repl-diskless-sync-delay 1
+        [lindex $peers 1] config crdt.set repl-diskless-sync-delay 1
+        test "no gc when master-master full sync " {
+            [lindex $peers 0] set k v
+            [lindex $peers 1] peerof [lindex $peer_gids 0] [lindex $peer_hosts 0] [lindex $peer_ports 0]
+            after 1000
+            [lindex $peers 0] del k 
+            wait_for_peer_sync [lindex $peers 1]
+            log_file_matches [lindex $peer_stdout 0] 
+            assert_equal [[lindex $peers 0] tombstonesize] 1
+            after 2000
+            assert_equal [[lindex $peers 0] tombstonesize] 1
+            [lindex $peers 0] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
+            wait_for_peer_sync [lindex $peers 0]
+            after 1000
+            assert_equal [[lindex $peers 0] tombstonesize] 0
+        }
+    }
+}

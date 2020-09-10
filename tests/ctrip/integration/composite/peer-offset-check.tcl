@@ -379,7 +379,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                     puts [format "killed clients: %d" [[lindex $peers 0] client kill type crdt.master]]
                     puts [format "killed clients: %d" [[lindex $peers 1] client kill type crdt.master]]
 
-                    after 500
+                    after 200
                     # Stop the write load
                     stop_write_load $load_handle1
                     stop_write_load $load_handle2
@@ -424,7 +424,6 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                     # Send PEEROF commands to peers
                     set result_0 [[lindex $peers 0] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]]
                     set result_1 [[lindex $peers 1] peerof [lindex $peer_gids 0] [lindex $peer_hosts 0] [lindex $peer_ports 0]]
-
                     assert_equal [string match "*Already*" $result_0] 1
                     assert_equal [string match "*Already*" $result_1] 1
 
@@ -438,7 +437,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
 
                     set partil_incr_0 [expr $sync_partial_ok_now_0 - $sync_partial_ok_0]
                     set partil_incr_1 [expr $sync_partial_ok_now_1 - $sync_partial_ok_1]
-
+                    
                     assert_equal $partil_incr_0 1
                     assert_equal $partil_incr_1 1
 
