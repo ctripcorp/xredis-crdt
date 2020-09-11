@@ -10,6 +10,18 @@ HIGH:     There is a critical bug that may affect a subset of users. Upgrade!
 CRITICAL: There is a critical bug affecting MOST USERS. Upgrade ASAP.
 --------------------------------------------------------------------------------
 ================================================================================
+XRedis-CRDT 1.0.7 Released Fri Sep 11 19:29:37 CST 2020
+================================================================================
+Upgrade urgency LOW: Compared with the previous version, there are some improvements, mainly:
+Major things:
+* [feature] multi/exec supported for crdt circumstance.
+* [opt] rdb dump/load accelarate by optimizing vector-clock's serialize/deserialize function
+* [opt] rdb dump/load accelarate by optimizing CRC64 algorithm
+* [opt] value/tombstone is now a non co-exist peer
+* [bugfix] master-master full sync would lead to a data inconsis.(previous mechanism will ignore crdt objects with diff gid. however, same key merge during one full sync before the other, would cause a skipping crdt object due to the gid is not its own)
+* [bugfix] fix the issue when we're retriving data from normal(open-source) redis server master, that stream would be doubled by the origin op and crdt op.
+
+================================================================================
 XRedis-CRDT 1.0.6 Released Sat Aug 29 21:04:25 CST 2020
 ================================================================================
 Upgrade urgency LOW: Compared with the previous version, there are some improvements, mainly:
