@@ -227,6 +227,7 @@ int REDISMODULE_API_FUNC(RedisModule_CrdtMultiWrappedReplicate)(RedisModuleCtx *
 const char *REDISMODULE_API_FUNC(RedisModule_CallReplyStringPtr)(RedisModuleCallReply *reply, size_t *len);
 RedisModuleString *REDISMODULE_API_FUNC(RedisModule_CreateStringFromCallReply)(RedisModuleCallReply *reply);
 int REDISMODULE_API_FUNC(RedisModule_DeleteKey)(RedisModuleKey *key);
+int REDISMODULE_API_FUNC(RedisModule_DeleteTombstone)(RedisModuleKey *key);
 int REDISMODULE_API_FUNC(RedisModule_UnlinkKey)(RedisModuleKey *key);
 int REDISMODULE_API_FUNC(RedisModule_StringSet)(RedisModuleKey *key, RedisModuleString *str);
 char *REDISMODULE_API_FUNC(RedisModule_StringDMA)(RedisModuleKey *key, size_t *len, int mode);
@@ -403,6 +404,7 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(IncrCrdtConflict);
     REDISMODULE_GET_API(CrdtMultiWrappedReplicate);
     REDISMODULE_GET_API(DeleteKey);
+    REDISMODULE_GET_API(DeleteTombstone);
     REDISMODULE_GET_API(UnlinkKey);
     REDISMODULE_GET_API(StringSet);
     REDISMODULE_GET_API(StringDMA);

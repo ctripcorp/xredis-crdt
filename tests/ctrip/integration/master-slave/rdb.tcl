@@ -154,7 +154,7 @@ set checks(1) {
 }
 set adds(2) {
     $redis crdt.set kv value 1 1000000 "1:100"
-    $redis crdt.del_reg kv 2 1000000 "1:100;2:100"
+    $redis crdt.del_reg kv 2 1000000 "1:100;2:100;3:100"
 }
 set checks(2) {
     assert_equal [$redis tombstonesize] 1

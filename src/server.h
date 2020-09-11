@@ -1278,6 +1278,7 @@ struct redisServer {
     long long crdt_del_conflict;
     long long crdt_set_del_conflict;
     long long local_clock;
+    int peer_set;
 }redisServer;
 
 typedef struct pubsubPattern {
@@ -2206,5 +2207,5 @@ void xorDigest(unsigned char *digest, void *ptr, size_t len);
 
 void
 refreshGcVectorClock(VectorClock other);
-
+void addPeerSet(int gid);
 #endif

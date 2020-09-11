@@ -100,7 +100,7 @@ void freeDataFilter(CrdtObject** data, int length) {
     method->freefilter(data, length);
 }
 
-CrdtObject* tombstoneFilter(CrdtObject* tombstone, int gid, long long logic_time, long long maxsize, int* length) {
+CrdtObject** tombstoneFilter(CrdtObject* tombstone, int gid, long long logic_time, long long maxsize, int* length) {
     CrdtTombstoneMethod* method = getCrdtTombstoneMethod(tombstone);
     if(method == NULL) {
         serverLog(LL_WARNING, "[CRDT][crdtRdbSaveRio][tombstoneFilter] NOT FIND CRDT TOMBSTONE FILTER METHOD");
@@ -278,7 +278,7 @@ typedef int (*DictDeleteFunc)(redisDb* db, robj* key);
 typedef void (*DictAddFunc)(redisDb* db, robj* key, robj* value);
 typedef int (*CheckTypeFunc)(void* current, void* merge, robj* key);
 typedef int (*CheckTombstoneDataFunc)(void* tombstone, void* data, robj* key);
-int crdtMergeTomstoneCommand(client* c, DictFindFunc findtombstone, DictAddFunc addtombstone, DictFindFunc findval, DictDeleteFunc deleteval, CheckTypeFunc checktype, CheckTombstoneDataFunc checktdtype) {
+int crdtMergeTomstoneCommand(client* c, DictFindFunc findtombstone, DictAddFunc addtombstone, DictFindFunc findval, DictDeleteFunc deleteval, DictDeleteFunc deletetombstone, CheckTypeFunc checktype, CheckTombstoneDataFunc checktdtype) {
     rio payload;
     robj *obj;
     int type;
@@ -340,9 +340,12 @@ int crdtMergeTomstoneCommand(client* c, DictFindFunc findtombstone, DictAddFunc 
                 serverLog(LL_WARNING, "no purge method type:%d", tombstoneCrdtCommon->type);
                 return C_ERR;
             }
-            if(method->purge(tombstoneCrdtCommon, currentCrdtCommon)) {
+            int purge = method->purge(tombstoneCrdtCommon, currentCrdtCommon);
+            if(purge == PURGE_VAL) {
                 // dbDelete(c->db, key);
                 deleteval(c->db, key);
+            }  else if (purge == PURGE_TOMBSTONE) {
+                 deletetombstone(c->db, key);
             }
         } else {
             serverLog(LL_WARNING, "[crdtMergeTomstoneCommand] key:%s ,tombstone and value  purge error", (sds)key->ptr);
@@ -407,6 +410,9 @@ int checkTombstoneDataType(void* current, void* other, robj* key) {
     }
     return C_OK;
 }
+int dbTombstone(redisDb *db, robj* key) {
+    return dictDelete(db->deleted_keys, key->ptr);
+}
 void
 crdtMergeDelCommand(client *c) {
     crdtMergeTomstoneCommand(c, 
@@ -414,12 +420,13 @@ crdtMergeDelCommand(client *c) {
         addTombstone,
         lookupKeyWrite,
         dbDelete,
+        dbTombstone,
         checkTombstoneType,
         checkTombstoneDataType
     );
 }
 
-int mergeCrdtObjectCommand(client *c, DictFindFunc find, DictAddFunc add, DictDeleteFunc delete, DictFindFunc findtombstone, CheckTypeFunc checktype, CheckTombstoneDataFunc checktdtype) {
+int mergeCrdtObjectCommand(client *c, DictFindFunc find, DictAddFunc add, DictDeleteFunc delete, DictDeleteFunc deletetombstone, DictFindFunc findtombstone, CheckTypeFunc checktype, CheckTombstoneDataFunc checktdtype) {
     rio payload;
     robj *obj;
     int type;
@@ -483,6 +490,8 @@ int mergeCrdtObjectCommand(client *c, DictFindFunc find, DictAddFunc add, DictDe
             if(tombstone_method->purge(tom, mergedVal)) {
                 mt->free(mergedVal);
                 mergedVal = NULL;
+            } else {
+                deletetombstone(c->db, key);
             }
         } else {
             serverLog(LL_WARNING, "[mergeCrdtObjectCommand] key: %s, tombstone and value purge error", (sds)key->ptr);
@@ -541,6 +550,7 @@ void crdtMergeCommand(client *c) {
         lookupKeyWrite,
         dbAdd,
         dbDelete,
+        dbTombstone,
         findTombstone,
         checkDataType,
         checkTombstoneDataType

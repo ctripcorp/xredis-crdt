@@ -102,6 +102,12 @@ void refreshVectorClock(client *c, sds vcStr) {
         freeVectorClock(c->vectorClock);
         c->vectorClock = newVectorClock(0);
     }
+    int len = get_len(vclock);
+    for(int i = 0; i < len; i++) {
+        clk *c= get_clock_unit_by_index(&vclock, i);
+        int gid = get_gid(*c);
+        addPeerSet(gid);
+    }
     c->vectorClock = vclock;
 }
 
@@ -172,10 +178,12 @@ void peerofCommand(client *c) {
     }
 
 
+
     /* There was no previous master or the user specified a different one,
      * we can continue. */
     crdtReplicationSetMaster(gid, c->argv[2]->ptr, (int)port);
     peerMaster = getPeerMaster(gid);
+    addPeerSet(gid);
     if (iAmMaster() == C_OK) {
         sds client = catClientInfoString(sdsempty(), c);
         serverLog(LL_NOTICE, "[CRDT]PEER OF %lld %s:%d enabled (user request from '%s')",

@@ -148,7 +148,10 @@ void expireSizeCommand(client *c) {
     addReplyLongLong(c,dictSize(c->db->expires));
 }
 
-
+void addPeerSet(int gid) {
+    if(gid == crdtServer.crdt_gid) return;
+    crdtServer.peer_set |= 1 << gid;
+}
 /*-----------------------------------------------------------------------------
  * Incremental collection of deleted keys.
  *
@@ -161,15 +164,19 @@ VectorClock getGcVectorClock() {
 
     int index = 0;
     for(; index < MAX_PEERS + 1; index ++) {
-
-        CRDT_Master_Instance *crdtMaster = crdtServer.crdtMasters[index];
-        if (crdtMaster == NULL) {
-            continue;
+        if(crdtServer.peer_set & (1 << index)) {
+            CRDT_Master_Instance *crdtMaster = crdtServer.crdtMasters[index];
+            VectorClock other;
+            if (crdtMaster == NULL) {
+                other = newVectorClock(0);
+            } else {
+                other = crdtMaster->vectorClock;
+            }
+            VectorClock old = gcVectorClock;
+            gcVectorClock = mergeMinVectorClock(old, other);
+            freeVectorClock(old);
         }
-        VectorClock other = crdtMaster->vectorClock;
-        VectorClock old = gcVectorClock;
-        gcVectorClock = mergeMinVectorClock(old, other);
-        freeVectorClock(old);
+        
     }
     return gcVectorClock;
 }
