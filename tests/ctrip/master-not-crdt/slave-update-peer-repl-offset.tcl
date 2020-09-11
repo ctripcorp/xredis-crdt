@@ -383,7 +383,6 @@ slave-peer-offset "1. master->slave partial sync 2. peer -> master (null) full s
     set load_handle0 [start_write_load $r_host $r_port 3]
     after 3000
     stop_write_load $load_handle0
-    
     $slave_slave slaveof $slave_host $slave_port
     wait_for_sync $slave_slave
 
@@ -392,7 +391,6 @@ slave-peer-offset "1. master->slave partial sync 2. peer -> master (null) full s
     set load_handle0 [start_write_load $r_host $r_port 3]
     after 3000
     stop_write_load $load_handle0
-    # print_file_matches $master_log
 
     $master peerof $peer_gid $peer_host $peer_port
     wait $peer 0 crdt.info $peer_log

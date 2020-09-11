@@ -92,7 +92,7 @@ start_server { tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskl
                 # now data should be val2, and its corresponding timestamp
                 # we need to mock a client input as well as node-C timestmap is much more smaller
                 [lindex $peers 2] set key val3
-
+                after 1000
                 assert_equal [[lindex $peers 0] get key ] [[lindex $peers 1] get key ]
                 assert_equal [[lindex $peers 0] get key ] [[lindex $peers 2] get key ]
 

@@ -737,6 +737,10 @@ void loadServerConfigFromString(char *config) {
                 if (err) goto loaderr;
             }
         } else if (!strcasecmp(argv[0],"crdt-gid")) {
+            if (argc != 3) {
+                err = "crdt-gid directive wrong number of arguments";
+                goto loaderr;
+            }
             // server.crdt_gid is used for crdt module
             if(crdtServer.crdt_namespace != NULL) zfree(crdtServer.crdt_namespace);
             crdtServer.crdt_namespace = zstrdup(argv[1]);

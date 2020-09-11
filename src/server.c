@@ -1968,7 +1968,7 @@ void initServer(struct redisServer *srv) {
     srv->get_ack_from_slaves = 0;
     srv->clients_paused = 0;
     srv->system_memory_size = zmalloc_get_memory_size();
-
+    srv->peer_set = 0;
     if(srv == &server) {
         createSharedObjects();
         adjustOpenFilesLimit();

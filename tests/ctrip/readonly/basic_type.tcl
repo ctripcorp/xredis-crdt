@@ -113,6 +113,13 @@ basic_test "kv" {
     $redis del $0
 } 
 
+basic_test "kv" {
+    $redis mset $0 $2
+} {
+    assert {[$redis get $0 ] eq {$2}}
+} {
+    $redis del $0
+} 
 
 basic_test "hash" {
     $redis hset $0 $1 $2

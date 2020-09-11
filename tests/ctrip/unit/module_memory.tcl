@@ -69,7 +69,10 @@ proc wait_flushall { client } {
         }
     }
     if {$retry == 0} {
-        error "wait expire free all momory fail"
+        puts [$client dbsize] 
+        puts [$client expiresize]
+        puts [$client tombstonesize]
+        error "wait free all module momory fail"
     }
 }
 set dl yes
@@ -96,10 +99,10 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
         puts  [expr [get_dataset [lindex $peers 0]] - $before_dataset]
         [lindex $peers 0] crdt.set k v1 2 [clock milliseconds] 2:1 
         set m2 [get_module_all_memory [lindex $peers 0]]
-        assert {$m2 > $m1}
+        assert {$m2 >= $m1}
         [lindex $peers 0] set k vvvvvvvvvvvvvvvvvvvvvvv
         set m3 [get_module_all_memory [lindex $peers 0]]
-        assert {$m3 > $m2}
+        assert {$m3 >= $m2}
         [lindex $peers 0] del k
         [lindex $peers 0] set k1 v1
         set time [clock milliseconds]
@@ -114,14 +117,14 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
         assert {$m1 > 0}
         [lindex $peers 0] crdt.hset h 2 [clock milliseconds] 2:1 2 k v1
         set m2 [get_module_all_memory [lindex $peers 0]]
-        assert {$m2 > $m1}
+        assert {$m2 >= $m1}
         [lindex $peers 0] del h
         [lindex $peers 0] hset h1 k v
         [lindex $peers 0] hdel h1 k 
         [lindex $peers 0] hset h2 k v
-        [lindex $peers 0] CRDT.REM_HASH h2 1 [clock milliseconds] "1:20" k
+        [lindex $peers 0] CRDT.REM_HASH h2 1 [clock milliseconds] "1:20;2:1" k
         [lindex $peers 0] hset h3 k v
-        [lindex $peers 0] CRDT.DEL_HASH h3 1 [clock milliseconds] "1:30" "1:30"
+        [lindex $peers 0] CRDT.DEL_HASH h3 1 [clock milliseconds] "1:30;2:1" "1:30;2:1"
         wait_flushall [lindex $peers 0]
         assert_equal [get_module_all_memory [lindex $peers 0]] $m
     }
@@ -133,6 +136,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
         [lindex $peers 0] crdt.expire h 2 [incr time 1] [incr time 1] 1
         after 5000
         wait_flushall [lindex $peers 0]
+        # puts [get_module_all_memory [lindex $peers 0]]
         assert_equal [get_module_all_memory [lindex $peers 0]] $m
     }
     test "flushall" {
