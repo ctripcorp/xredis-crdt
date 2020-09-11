@@ -1483,7 +1483,7 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
 
     sdsIncrLen(c->querybuf,nread);
     c->lastinteraction = server.unixtime;
-    if (c->flags & CLIENT_MASTER && iAmMaster() != C_OK) {
+    if (c->flags & CLIENT_MASTER) {
         c->read_reploff += nread;
     } else if (c->flags & CLIENT_CRDT_MASTER) {
         if (getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED)  {

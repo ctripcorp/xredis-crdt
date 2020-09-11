@@ -13,6 +13,7 @@ source tests/support/util.tcl
 source tests/support/aof.tcl
 
 set ::all_tests {
+    ctrip/master-not-crdt/master-offset
     ctrip/integration/bug/master_is_non_crdt_stream_copy_to_slave
     ctrip/integration/bug/peer-full-sync-losing-meta-data
     ctrip/integration/master-master/full_sync_memory_limit

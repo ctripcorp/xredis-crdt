@@ -196,7 +196,6 @@ slave-peer-offset "maste-slave" {
     $master set k v0
     $master slaveof no one
     wait_for_sync $slave
-    print_file_matches $master_log
     assert_equal [$slave get k] {}
 }
 

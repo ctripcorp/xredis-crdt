@@ -238,10 +238,7 @@ start_server {tags {"crdt-del"} overrides {crdt-gid 1} config {crdt.conf} module
     }
     test {crdt.rem_hash and crdt.rem_hash} {
         $redis_server CRDT.rem_hash key-15 3  [clock milliseconds] "1:10;2:103;3:105"   k
-        puts [$redis_server crdt.datainfo key-15]
         $redis_server CRDT.rem_hash key-15 2 [expr [clock milliseconds] - 10]   "1:10;2:105;3:103"  k
-        puts [$redis_server crdt.datainfo key-15]
-        puts [log_content [lindex $stdouts 0]]
         assert {[crdt_conflict $redis_server modify] == 15}
         assert {[crdt_conflict $redis_server del] == 3}
         wait_for_condition 50 1000 {

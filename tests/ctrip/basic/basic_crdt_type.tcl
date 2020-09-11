@@ -172,11 +172,9 @@ proc basic_test { type create check delete} {
 
             }
             test [format "%s-tombstone-time" $type] {
-                puts [[lindex $peers 0] crdt.datainfo tombstone]
-                puts [[lindex $peers 1] crdt.datainfo tombstone]
                 set result {tombstone field {} 2 100000 {"1:10;2:11"} }
                 set argv2 {tombstone field value2 1 99999 {"1:11;2:10"}}
-                run [replace [replace_client $create {[lindex $peers 0]}] $argv2] 1
+                run [replace [replace_client $create {[lindex $peers 1]}] $argv2] 1
                 run [replace [replace_client $check {[lindex $peers 1]}] $result] 1
                 run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
 
