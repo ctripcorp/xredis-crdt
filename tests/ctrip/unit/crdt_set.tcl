@@ -25,7 +25,6 @@ proc wait { client index type log}  {
         error "assertion: Master-Slave not correctly synchronized"
     }
 }
-
 start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
     set master [srv 0 client]
     set master_gid 1

@@ -111,7 +111,6 @@ set ::all_tests {
     ctrip/integration/master-slave/rdb2
     ctrip/integration/master-slave/psync2
     ctrip/integration/master-slave/replication-psync
-    
 }
 
 set ::temp_tests {  
