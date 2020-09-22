@@ -25,7 +25,7 @@ proc wait { client index type log}  {
         error "assertion: Master-Slave not correctly synchronized"
     }
 }
-start_server {tags {"crdt-register"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
+start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
     set master [srv 0 client]
     set master_gid 1
     set master_host [srv 0 host]
@@ -33,7 +33,7 @@ start_server {tags {"crdt-register"} overrides {crdt-gid 1} config {crdt.conf} m
     set master_log [srv 0 stdout]
     $master config set repl-diskless-sync-delay 1
     $master config crdt.set repl-diskless-sync-delay 1
-    start_server {tags {"crdt-register"} overrides {crdt-gid 3} config {crdt.conf} module {crdt.so} } {
+    start_server {tags {"crdt-set2"} overrides {crdt-gid 3} config {crdt.conf} module {crdt.so} } {
         set peer_bk [srv 0 client]
         set peer_bk_gid 3
         set peer_bk_host [srv 0 host]
@@ -49,6 +49,12 @@ start_server {tags {"crdt-register"} overrides {crdt-gid 1} config {crdt.conf} m
                 assert_equal 1 [$master sismember myset1 17]
                 assert_equal 1 [$master sismember myset1 18]
                 assert_equal 0 [$master sismember myset1 19]
+                assert_equal {16 17 18} [lsort [$master smembers myset1]]
+                assert_equal [$master crdt.sismember myset1 17] [$master crdt.sismember myset1 18]
+                assert_equal 3 [$master srem myset1 16 17 18]
+                assert_equal 3 [$master sadd myset1 16 17 18]
+                assert_equal [$master crdt.sismember myset1 16] [$master crdt.sismember myset1 17]
+                assert_equal [$master crdt.sismember myset1 16] [$master crdt.sismember myset1 18]
                 assert_equal {16 17 18} [lsort [$master smembers myset1]]
             }
             test {crdt.sadd1} {
@@ -96,8 +102,8 @@ start_server {tags {"crdt-register"} overrides {crdt-gid 1} config {crdt.conf} m
         }
         test "rem" {
             test {rem1} {
-                assert_equal 1 [$master sadd myset11 16]
-                assert_equal 1 [$master srem myset11 16]
+                assert_equal 2 [$master sadd myset11 16 17]
+                assert_equal 2 [$master srem myset11 16 17]
                 assert_equal 0 [$master sismember myset11 16]
                 puts [$master crdt.sismember myset11 16]
             }
@@ -108,8 +114,8 @@ start_server {tags {"crdt-register"} overrides {crdt-gid 1} config {crdt.conf} m
                 assert_equal 0 [$master sismember myset12 16]
             }
             test {rem - sadd} {
-                assert_equal 1 [$master sadd myset13 16]
-                puts [$master crdt.sismember myset13 16]
+                assert_equal 2 [$master sadd myset13 16 17]
+                puts [$master crdt.sismember myset13 16 ]
                 assert_equal OK [$master crdt.srem myset13 1 1000 {1:102} 16]
                 assert_equal 1 [$master sadd myset13 16]
                 assert_equal 1 [$master sismember myset13 16]
@@ -176,13 +182,36 @@ start_server {tags {"crdt-register"} overrides {crdt-gid 1} config {crdt.conf} m
                 # print_log_file $master_log
             }
         }
+        test "spop" {
+            test {spop} {
+                
+                # assert_equal 1 [$master sadd myset14 16]
+                assert_equal 3 [$master sadd myset25 16 17 18]
+                set k [$master spop myset25 ]
+                assert_equal 0 [$master sismember myset25 $k]
+                puts [$master crdt.datainfo myset25]
+                puts [$master crdt.sismember myset25 16]
+                # print_log_file $master_log
+            }
+            test {spop2} {
+                
+                # assert_equal 1 [$master sadd myset14 16]
+                assert_equal 3 [$master sadd myset26 16 17 18]
+                set k [$master spop myset26 10]
+                assert_equal 3 [llength $k]
+                assert_equal 0 [$master scard myset26]
+                puts [$master crdt.datainfo myset26]
+                puts [$master crdt.sismember myset26 16]
+                # print_log_file $master_log
+            }
+        }
         start_server {tags {"master-slave"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
             set slave [srv 0 client]
             set slave_log [srv 0 stdout]
             $slave slaveof $master_host $master_port
             
             wait $master 0 info $master_log
-            print_log_file $slave_log
+            # print_log_file $slave_log
             test "master-slave-sadd" {
                 assert_equal {16 17 18} [lsort [$slave smembers myset1]]
                 assert_equal {16 17} [lsort [$slave smembers myset2]]
@@ -194,14 +223,21 @@ start_server {tags {"crdt-register"} overrides {crdt-gid 1} config {crdt.conf} m
                 assert_equal [$master crdt.datainfo myset13] [$slave crdt.datainfo myset13]
                 assert_equal [$master crdt.datainfo myset14] [$slave crdt.datainfo myset14]
                 assert_equal [$master crdt.datainfo myset15] [$slave crdt.datainfo myset15]
-            
+                assert_equal [$master crdt.datainfo myset16] [$slave crdt.datainfo myset16]
+                assert_equal [$master crdt.datainfo myset17] [$slave crdt.datainfo myset17]
+                assert_equal [$master crdt.datainfo myset18] [$slave crdt.datainfo myset18]
+                assert_equal [$master crdt.datainfo myset19] [$slave crdt.datainfo myset19]
             }
             test "master-slave-del" {
                 assert_equal [$master crdt.datainfo myset21] [$slave crdt.datainfo myset21]
                 assert_equal [$master crdt.datainfo myset22] [$slave crdt.datainfo myset22]
             }
+            test "master-slave-spop" {
+                assert_equal [$master crdt.datainfo myset25] [$slave crdt.datainfo myset25]
+                assert_equal [$master crdt.datainfo myset26] [$slave crdt.datainfo myset26]
+            }
             
-            start_server {tags {"peer"} overrides {crdt-gid 2} config {crdt.conf} module {crdt.so} } {
+            start_server {tags {"set3"} overrides {crdt-gid 2} config {crdt.conf} module {crdt.so} } {
                 set peer [srv 0 client]
                 set peer_log [srv 0 stdout]
                 $peer peerof $peer_bk_gid $peer_bk_host $peer_bk_port
@@ -343,6 +379,59 @@ start_server {tags {"crdt-register"} overrides {crdt-gid 1} config {crdt.conf} m
                         assert_equal {} [lsort [$slave smembers myset51]] 
                         assert_equal [$master crdt.datainfo myset51] [$slave crdt.datainfo myset51]
                         assert_equal [$master crdt.datainfo myset51] [$peer crdt.datainfo myset51]
+                    }
+                    test "spop" {
+                        test "spop argc == 2" {
+                            $master sadd myset61 17 18 
+                            set k [$master spop myset61] 
+                            after 1000
+                            assert_equal 0 [$master sismember myset61 $k]
+                            assert_equal 0 [$peer sismember myset61 $k]
+                            assert_equal 0 [$slave sismember myset61 $k]
+                            assert_equal [$master crdt.datainfo myset61] [$slave crdt.datainfo myset61]
+                            assert_equal [$master crdt.datainfo myset61] [$peer crdt.datainfo myset61]
+                        }
+                        test "spop argc == 3 size = 2" {
+                            $master sadd myset62 17 18 
+                            set r [$master spop myset62 2] 
+                            puts [lindex $r 0]
+                            puts [lindex $r 1]
+                            assert_equal 2 [llength $r]
+                            after 1000
+                            for {set i 0} {$i < 2} {incr i} {
+                                assert_equal 0 [$master sismember myset62 [lindex $r $i]]
+                                assert_equal 0 [$peer sismember myset62 [lindex $r $i]]
+                                assert_equal 0 [$slave sismember myset62 [lindex $r $i]]
+                                assert_equal [$master crdt.sismember myset63 [lindex $r $i]] [$slave crdt.sismember  myset63 [lindex $r $i]]
+                                assert_equal [$master crdt.sismember myset63 [lindex $r $i]] [$peer crdt.sismember  myset63 [lindex $r $i]]
+                            }
+                            assert_equal [$master crdt.datainfo myset62] [$slave crdt.datainfo myset62]
+                            assert_equal [$master crdt.datainfo myset62] [$peer crdt.datainfo myset62]
+                        }
+                        test "spop argc == 3  size < 3" {
+                            $master sadd myset63 17 18 19
+                            set r [$master spop myset63 2] 
+                            assert_equal 2 [llength $r]
+                            after 1000
+                            for {set i 0} {$i < 2} {incr i} {
+                                assert_equal 0 [$master sismember myset63 [lindex $r $i]]
+                                assert_equal 0 [$peer sismember myset63 [lindex $r $i]]
+                                assert_equal 0 [$slave sismember myset63 [lindex $r $i]]
+                                assert_equal [$master crdt.sismember myset63 [lindex $r $i]] [$slave crdt.sismember  myset63 [lindex $r $i]]
+                                assert_equal [$master crdt.sismember myset63 [lindex $r $i]] [$peer crdt.sismember  myset63 [lindex $r $i]]
+                            }
+                            set r [$master smembers myset63] 
+                            for {set i 0} {$i < [llength $r]} {incr i} {
+                                assert_equal 1 [$master sismember myset63 [lindex $r $i]]
+                                assert_equal 1 [$peer sismember myset63 [lindex $r $i]]
+                                assert_equal 1 [$slave sismember myset63 [lindex $r $i]]
+                                assert_equal [$master crdt.sismember myset63 [lindex $r $i]] [$slave crdt.sismember  myset63 [lindex $r $i]]
+                                assert_equal [$master crdt.sismember myset63 [lindex $r $i]] [$peer crdt.sismember   myset63 [lindex $r $i]]
+                            }
+                            assert_equal [$master crdt.datainfo myset63] [$slave crdt.datainfo myset63]
+                            assert_equal [$master crdt.datainfo myset63] [$peer crdt.datainfo myset63]
+                        }
+
                     }
                 }
 

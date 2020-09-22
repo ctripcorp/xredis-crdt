@@ -1355,7 +1355,17 @@ int testPurgeVectorClock(void) {
     VectorClock iam = sdsToVectorClock(sdsnew("1:100;2:200;3:300"));
     VectorClock other = sdsToVectorClock(sdsnew("1:200;2:199;3:100"));
     VectorClock r = purgeVectorClock(iam, other);
-    printf("%s\n", vectorClockToSds(r));
+    test_cond("[testPurgeVectorClock][iam]", sdscmp(sdsnew("2:200;3:300"), vectorClockToSds(r)) == 0);
+    printf("========[testPurgeVectorClock-2]==========\r\n");
+    iam = sdsToVectorClock(sdsnew("1:100"));
+    other = sdsToVectorClock(sdsnew("1:200"));
+    r = purgeVectorClock(iam, other);
+    test_cond("[testPurgeVectorClock][iam]", sdscmp(sdsnew(""), vectorClockToSds(r)) == 0);
+    printf("========[testPurgeVectorClock-3]==========\r\n");
+    iam = sdsToVectorClock(sdsnew("1:200"));
+    other = sdsToVectorClock(sdsnew("1:100"));
+    r = purgeVectorClock(iam, other);
+    test_cond("[testPurgeVectorClock][iam]", sdscmp(sdsnew("1:200"), vectorClockToSds(r)) == 0);
 }
 int vectorClockTest(void) {
     int result = 0;
