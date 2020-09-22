@@ -31,8 +31,6 @@
 //
 
 #include "ctrip_vector_clock.h"
-#include "sds.h"
-#include "util.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -68,6 +66,7 @@ static inline clk *get_clock_unit(VectorClock *vc, char gid) {
     }
     void
     freeVectorClock(VectorClock vc) {
+        // printf("freeVectorClock %p \n", vc);
         vc_free(vc);
     }
     clk* clocks_address(VectorClock value) {
@@ -651,6 +650,38 @@ mergeMinVectorClock(VectorClock vclock1, VectorClock vclock2) {
     return target;
 }
 
+VectorClock
+purgeVectorClock(VectorClock targe, VectorClock src) {
+    if (isNullVectorClock(targe)) {
+        return targe;
+    }
+    if (isNullVectorClock(src)) {
+        return targe;
+    }
+    int len = get_len(targe);
+    clk c[len];
+    int index = 0;
+    for(int i = 0; i < len; i++) {
+        clk* vcu1 = get_clock_unit_by_index(&targe, i);
+        unsigned char gid = (unsigned char) get_gid(*get_clock_unit_by_index(&targe, i));
+        clk* vcu2 = get_clock_unit(&src, gid);
+        if (vcu2 == NULL && (get_logic_clock(*vcu1)) != 0) {
+            c[index] = *vcu1;
+            index++;
+        }
+        if (vcu2 != NULL && ((long long) (get_logic_clock(*vcu2))) < ((long long) (get_logic_clock(*vcu1)))) {
+            c[index] = *vcu1;
+            index ++;
+        }
+    }
+    VectorClock result = newVectorClock(index);
+    for(int i = 0; i < index; i++) {
+        set_clock_unit_by_index(&result, i, c[i]);
+    }
+    freeVectorClock(targe);
+    sortVectorClock(result);
+    return result;
+}
 
 #if defined(VECTOR_CLOCK_TEST_MAIN)
 
@@ -1319,7 +1350,13 @@ int testUpdateProcessVectorClock(void) {
     test_cond("[testvectorClockMerge][iam-update-myself]", sdscmp(sdsnew("1:200;2:200;3:300"), vectorClockToSds(iam)) == 0);
     return 0;
 }
-
+int testPurgeVectorClock(void) {
+    printf("========[testPurgeVectorClock]==========\r\n");
+    VectorClock iam = sdsToVectorClock(sdsnew("1:100;2:200;3:300"));
+    VectorClock other = sdsToVectorClock(sdsnew("1:200;2:199;3:100"));
+    VectorClock r = purgeVectorClock(iam, other);
+    printf("%s\n", vectorClockToSds(r));
+}
 int vectorClockTest(void) {
     int result = 0;
     {
@@ -1352,6 +1389,7 @@ int vectorClockTest(void) {
         result |= testIsVectorClockMonoIncr();
         result |= testVectorClockMerge();
         result |= testUpdateProcessVectorClock();
+        result |= testPurgeVectorClock();
     }
     test_report();
     return result;

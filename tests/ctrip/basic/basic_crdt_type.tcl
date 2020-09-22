@@ -1016,3 +1016,18 @@ basic_test "hash" {
 } {
     $redis crdt.rem_hash $0 $3 $4 $5 $1
 }
+
+# key field value gid timestamp vc
+# 0   1     2    3    4        5
+# basic_test "sadd" {
+#     $redis crdt.sadd $0 $3 $4 $5 $1
+# } {
+#     if { {$2} != {} } {
+#         assert {[$redis SISMEMBER $0 $1 ] eq 1 }
+#     } else {
+#         assert {[$redis SISMEMBER $0 $1 ] eq 0 }
+#     }
+    
+# } {
+#     $redis crdt.srem $0 $3 $4 $5 $1
+# }

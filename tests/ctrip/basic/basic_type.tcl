@@ -237,3 +237,16 @@ basic_test "hash" {
 } {
     $redis hdel $0 $1
 }
+
+basic_test "sadd" {
+    $redis sadd $0 $1 
+} {
+    if { {$2} != {} } {
+        assert {[$redis SISMEMBER $0 $1 ] eq 1 }
+    } else {
+        assert {[$redis SISMEMBER $0 $1 ] eq 0 }
+    }
+    
+} {
+    $redis srem $0 $1
+}
