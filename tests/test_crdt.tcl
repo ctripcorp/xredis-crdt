@@ -15,8 +15,6 @@ source tests/support/aof.tcl
 set ::all_tests {
     ctrip/basic/set
     ctrip/basic/scan
-}
-set ::all_tests2 {
     ctrip/master-not-crdt/master-offset
     ctrip/integration/bug/master_is_non_crdt_stream_copy_to_slave
     ctrip/integration/bug/peer-full-sync-losing-meta-data
