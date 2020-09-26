@@ -57,7 +57,7 @@ proc full-sync-error-data {server_path} {
         set master_port [srv 0 port]
         set master_stdout [srv 0 stdout]
         $master config set repl-diskless-sync-delay 1
-        $master sadd set redis
+        $master RPUSH set redis
         $master set key value
         start_server {config {crdt.conf} overrides {crdt-gid 1 repl-diskless-sync-delay 1} module {crdt.so}} {
             set slave [srv 0 client]
