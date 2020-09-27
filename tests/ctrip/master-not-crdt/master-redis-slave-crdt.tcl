@@ -177,24 +177,32 @@ set checks(2) {
 }
 set adds(3) {
     $redis set key3 v ex 10000000
+    $redis set key4 v ex 10000000
+    $redis del key4
+    $redis set key5 1
 }
 set checks(3) {
     assert_equal [$redis get key3]  v
     assert {[$redis ttl key3] <= 10000000}
     assert {[$redis ttl key3] > 0}
+    assert_equal [$redis get key4]  {}
+    assert_equal [$redis get key5]  1
 }
 set adds(4) {
-    $redis set key4 v ex 10000000
-    $redis del key4
+    $redis sadd key6 s1 
+    $redis sadd key7 s1 s2
+    $redis sadd key8 s1 s2
+    $redis srem key8 s1 
+    $redis sadd key9 s1 s2
+    $redis del key9
 }
 set checks(4) {
-    assert_equal [$redis get key4]  {}
-}
-set adds(5) {
-    $redis set key5 1
-}
-set checks(5) {
-    assert_equal [$redis get key5]  1
+    assert_equal [$redis SISMEMBER key6 s1] 1
+    assert_equal [$redis SISMEMBER key7 s1] 1
+    assert_equal [$redis SISMEMBER key7 s2] 1
+    assert_equal [$redis SISMEMBER key8 s1] 0
+    assert_equal [$redis SISMEMBER key8 s2] 1
+    assert_equal [$redis SISMEMBER key9 s1] 0
 }
 
 

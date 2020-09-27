@@ -3108,6 +3108,16 @@ robj **moduleCreateArgvFromUserFormat(const char *cmdname, const char *fmt, int 
                  incrRefCount(v[i]);
                  argv[argc++] = v[i];
              }
+        } else if (*p == 'a') {
+            char **v = va_arg(ap, char*);
+            size_t vlen = va_arg(ap, size_t);
+            argv_size += vlen-1;
+            argv = zrealloc(argv,sizeof(robj*)*argv_size);
+
+            size_t i = 0;
+            for (i = 0; i < vlen; i++) {
+                 argv[argc++] = createStringObject(v[i],strlen(v[i]));
+            }
         } else if (*p == '!') {
             if (flags) (*flags) |= REDISMODULE_ARGV_REPLICATE;
         } else {

@@ -1431,6 +1431,7 @@ void createSharedObjects(void) {
     shared.lpush = createStringObject("LPUSH",5);
     shared.set = createStringObject("SET", 3);
     shared.hset = createStringObject("HSET", 4);
+    shared.sadd = createStringObject("SADD", 4);
     shared.crdtexec = createStringObject("CRDT.EXEC", 9);
     shared.expireat = createStringObject("EXPIREAt", 8);
     for (j = 0; j < OBJ_SHARED_INTEGERS; j++) {
