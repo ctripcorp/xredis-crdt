@@ -1717,6 +1717,7 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                     masterInstance = createPeerMaster(NULL, gid);
                     crdtServer.crdtMasters[gid] = masterInstance;
                 }
+                addPeerSet(gid);
                 currentMasterInstance = masterInstance;
                 crdtReplicationCreateMasterClient(currentMasterInstance, createClient(-1), -1);
             } else if (!strcasecmp(auxkey->ptr,"peer-master-host")) {

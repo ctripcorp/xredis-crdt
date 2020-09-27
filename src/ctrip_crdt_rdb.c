@@ -755,7 +755,7 @@ int data2CrdtData(client* fakeClient,robj* key, robj* val) {
         // case OBJ_LIST: freeListObject(o); break;
         // case OBJ_SET: freeSetObject(o); break;
         // case OBJ_ZSET: freeZsetObject(o); break;
-        case OBJ_HASH: 
+        case OBJ_HASH: {
             len = hashTypeLength(val);
             int i = 0;
             hashTypeIterator* hi = hashTypeInitIterator(val);
@@ -774,7 +774,29 @@ int data2CrdtData(client* fakeClient,robj* key, robj* val) {
                 fakeClient->argc = i;
                 processInputRdb(fakeClient);
             } 
-            hashTypeReleaseIterator(hi);          
+            hashTypeReleaseIterator(hi);    
+        }      
+        break;
+        case OBJ_SET: {
+            len = hashTypeLength(val);
+            int i = 0;
+            setTypeIterator* si = setTypeInitIterator(val);
+            sds field = setTypeNextObject(si);
+            while(len > 0) {
+                fakeClient->argv[0] = shared.sadd;
+                incrRefCount(shared.sadd);
+                fakeClient->argv[1] = key;
+                incrRefCount(key);
+                i = 2;
+                do {
+                    fakeClient->argv[i++] = createRawStringObject(field, sdslen(field));
+                    len--;
+                } while ((field = setTypeNextObject(si)) != NULL && i < MAX_FAKECLIENT_ARGV);
+                fakeClient->argc = i;
+                processInputRdb(fakeClient);
+            } 
+            setTypeReleaseIterator(si);
+        }
         break;
         // case OBJ_MODULE: freeModuleObject(o); break;
         default:  {

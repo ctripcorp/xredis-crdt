@@ -284,4 +284,52 @@ start_server {tags {"crdt-command"} overrides {crdt-gid 1} config {crdt.conf} mo
             assert_equal $retval "ERR wrong number of arguments for 'setex' command"
         }
     }
+    test "sadd-command" {
+        test "sadd myset s1 s2" {
+            r sadd myset s1 s2
+        } {2}
+        test "sadd myset - repeat" {
+            r sadd myset s1 
+        } {0}
+        test "sadd" {
+            set _ [catch {
+                r sadd 
+            } retval]
+            assert_equal $retval "ERR wrong number of arguments for 'sadd' command"
+        }
+    }
+    test "srem-command" {
+        test "srem myset1 s1 s2" {
+            r srem myset1 s1 s2
+        } {0}
+        test "srem myset1 s1 s2" {
+            r sadd myset1 s1 s2
+            r srem myset1 s1 s2 s3
+        } {2}
+        test "srem myset1" {
+            set _ [catch {
+                r srem 
+            } retval]
+            assert_equal $retval "ERR wrong number of arguments for 'srem' command"
+        } 
+    }
+    test "spop-command" {
+        test "spop myset2 => nil" {
+            r spop myset2 
+        } {}
+        test "spop myset2 => s1" {
+            r sadd myset2 s1
+            r spop myset2 
+        } {s1}
+        test "spop myset2 2 => 1, 2" {
+            r sadd myset2 s1 s2
+            lsort [r spop myset2 2]
+        } [lsort {s1 s2}]
+        test "spop myset1" {
+            set _ [catch {
+                r spop 
+            } retval]
+            assert_equal $retval "ERR wrong number of arguments for 'spop' command"
+        } 
+    }
 }

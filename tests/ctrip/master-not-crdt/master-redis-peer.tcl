@@ -202,10 +202,26 @@ set checks(2) {
 }
 set adds(3) {
     $redis set key3 v
-    $redis del key3
+    $redis del key3 
 }
 set checks(3) {
     assert_equal [$redis get key3] {}
+}
+set adds(4) {
+    $redis sadd key4 s1 
+    $redis sadd key5 s1 s2
+    $redis sadd key6 s1 s2
+    $redis srem key6 s1 
+    $redis sadd key7 s1 s2
+    $redis del key7 
+}
+set checks(4) {
+    assert_equal [$redis SISMEMBER key4 s1] 1
+    assert_equal [$redis SISMEMBER key5 s1] 1
+    assert_equal [$redis SISMEMBER key5 s2] 1
+    assert_equal [$redis SISMEMBER key6 s1] 0
+    assert_equal [$redis SISMEMBER key6 s2] 1
+    assert_equal [$redis SISMEMBER key7 s1] 0
 }
 #full sync
 # set len [array size adds]

@@ -74,12 +74,12 @@ test "lpush" {
     } $server_path
 }
 
-test "sadd" {
-    set server_path [tmpdir "full-sync-error-datatype-sadd"]
-    full-sync-error-data {
-        $redis sadd runoob redis
-    } $server_path
-}
+# test "sadd" {
+#     set server_path [tmpdir "full-sync-error-datatype-sadd"]
+#     full-sync-error-data {
+#         $redis sadd runoob redis
+#     } $server_path
+# }
 
 
 # test "kv int" {
