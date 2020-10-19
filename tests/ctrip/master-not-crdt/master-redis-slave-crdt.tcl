@@ -139,9 +139,19 @@ proc run_foreach {fun_name num len} {
 array set adds ""
 set adds(0) {
     $redis set key value
+    $redis set rc1 10
+    $redis incrby rc2 1
+    $redis decrby rc2 1
+    $redis set rc3 5
+    $redis set rc4 1.1
+    $redis incrbyfloat rc4 1.2
+    $redis incrbyfloat rc4 -1.2
 }
 set checks(0) {
     assert_equal [$redis get key] value
+    assert_equal [$redis get rc1] 10
+    assert_equal [$redis get rc2] 0
+    assert_equal [$redis get rc3] 5
 }
 set adds(1) {
     $redis hset hash k1 v1 k2 v2

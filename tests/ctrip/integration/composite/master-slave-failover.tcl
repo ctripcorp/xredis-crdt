@@ -226,6 +226,10 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                     # Make sure that slaves and master have same
                     # number of keys
                     wait_for_condition 500 100 {
+                        [catch {[lindex $peers 0] ping} error] == 0 &&
+                        [catch {[lindex $peers 1] ping} error] == 0 &&
+                        [catch {[lindex $slaves 0] ping} error] == 0 &&
+                        [catch {[lindex $slaves 1] ping} error] == 0 &&
                         [[lindex $peers 0] dbsize] == [[lindex $slaves 1] dbsize] &&
                         [[lindex $peers 1] dbsize] == [[lindex $slaves 0] dbsize] &&
                         [[lindex $peers 0] dbsize] == [[lindex $slaves 0] dbsize] &&

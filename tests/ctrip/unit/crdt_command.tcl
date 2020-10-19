@@ -1,3 +1,9 @@
+proc print_log_file {log} {
+    set fp [open $log r]
+    set content [read $fp]
+    close $fp
+    puts $content
+}
 start_server {tags {"crdt-command"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
     test "set-command" {
         test "set k v" {
@@ -274,7 +280,7 @@ start_server {tags {"crdt-command"} overrides {crdt-gid 1} config {crdt.conf} mo
             r hset a b c
             set _ [catch {
                 r setex a 60 b
-            } retval]
+            } retval]        
             assert_equal $retval "WRONGTYPE Operation against a key holding the wrong kind of value"
         }
         test "setex " {
