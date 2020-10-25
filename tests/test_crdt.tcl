@@ -13,6 +13,9 @@ source tests/support/util.tcl
 source tests/support/aof.tcl
 
 set ::all_tests {
+
+    ctrip/unit/multi
+    ctrip/unit/crdt_counter
     ctrip/basic/set
     ctrip/basic/scan
     ctrip/unit/crdt_set

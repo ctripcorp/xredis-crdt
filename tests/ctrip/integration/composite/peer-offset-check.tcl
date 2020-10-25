@@ -373,8 +373,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
 
                     set load_handle1 [start_write_load_with_interval [lindex $peer_hosts 1] [lindex $peer_ports 1] 1 20]
                     set load_handle2 [start_write_load_with_interval [lindex $peer_hosts 0] [lindex $peer_ports 0] 1 20]
-                    after 40
-
+                    after 40              
                     # client kill crdt-master => disturb peer sync
                     puts [format "killed clients: %d" [[lindex $peers 0] client kill type crdt.master]]
                     puts [format "killed clients: %d" [[lindex $peers 1] client kill type crdt.master]]
