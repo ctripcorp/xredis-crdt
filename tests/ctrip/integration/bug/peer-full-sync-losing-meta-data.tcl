@@ -29,11 +29,12 @@ start_server { tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskl
     set peer_hosts {}
     set peer_ports {}
     set peer_gids  {}
-
+    set peer_logs {}
     lappend peers [srv 0 client]
     lappend peer_hosts [srv 0 host]
     lappend peer_ports [srv 0 port]
     lappend peer_gids 1
+    lappend peer_logs [srv 0 stdout]
     [lindex $peers 0] config crdt.set repl-diskless-sync-delay 1
     [lindex $peers 0] config set repl-diskless-sync-delay 1
 
@@ -45,6 +46,7 @@ start_server { tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskl
         lappend peer_hosts [srv 0 host]
         lappend peer_ports [srv 0 port]
         lappend peer_gids 2
+        lappend peer_logs [srv 0 stdout]
         [lindex $peers 1] config crdt.set repl-diskless-sync-delay 1
         [lindex $peers 1] config set repl-diskless-sync-delay 1
 
@@ -74,6 +76,7 @@ start_server { tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskl
             lappend peer_hosts [srv 0 host]
             lappend peer_ports [srv 0 port]
             lappend peer_gids 3
+            lappend peer_logs [srv 0 stdout]
             [lindex $peers 2] config crdt.set repl-diskless-sync-delay 1
             [lindex $peers 2] config set repl-diskless-sync-delay 1
             [lindex $peers 2] peerof [lindex $peer_gids 0] [lindex $peer_hosts 0] [lindex $peer_ports 0]
@@ -91,6 +94,7 @@ start_server { tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskl
             test "third node join, then data in-consist" {
                 # now data should be val2, and its corresponding timestamp
                 # we need to mock a client input as well as node-C timestmap is much more smaller
+                assert_equal [[lindex $peers 2] get key] val2
                 [lindex $peers 2] set key val3
                 after 1000
                 assert_equal [[lindex $peers 0] get key ] [[lindex $peers 1] get key ]

@@ -45,7 +45,7 @@ proc wait { client index type log}  {
     if {$retry == 0} {
         # error "assertion: Master-Slave not correctly synchronized"
         assert_equal [$client ping] PONG
-        log_file_matches $log
+        print_file $log
         error "assertion: Master-Slave not correctly synchronized"
     }
 }

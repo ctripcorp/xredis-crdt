@@ -1699,6 +1699,10 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                     freeVectorClock(crdtServer.vectorClock);
                 }
                 crdtServer.vectorClock = sdsToVectorClock(auxval->ptr);
+                VectorClockUnit unit = getVectorClockUnit(crdtServer.vectorClock, crdtServer.crdt_gid);
+                if(isNullVectorClockUnit(unit)) {
+                    crdtServer.vectorClock = addVectorClockUnit(crdtServer.vectorClock, crdtServer.crdt_gid, 0);
+                }
             } else if (!strcasecmp(auxkey->ptr,"crdt-repl-id")) {
                 if (sdslen(auxval->ptr) == CONFIG_RUN_ID_SIZE) {
                     memcpy(crdtServer.replid, auxval->ptr,CONFIG_RUN_ID_SIZE+1);

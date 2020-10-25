@@ -164,6 +164,7 @@ long long REDISMODULE_API_FUNC(RedisModule_GetOvc)(RedisModuleCtx *ctx);
 int REDISMODULE_API_FUNC(RedisModule_IsModuleNameBusy)(const char *name);
 int REDISMODULE_API_FUNC(RedisModule_WrongArity)(RedisModuleCtx *ctx);
 int REDISMODULE_API_FUNC(RedisModule_ReplyWithLongLong)(RedisModuleCtx *ctx, long long ll);
+int REDISMODULE_API_FUNC(RedisModule_ReplyWithLongDouble)(RedisModuleCtx *ctx, long double ld);
 int REDISMODULE_API_FUNC(RedisModule_GetSelectedDb)(RedisModuleCtx *ctx);
 int REDISMODULE_API_FUNC(RedisModule_SelectDb)(RedisModuleCtx *ctx, int newid);
 int REDISMODULE_API_FUNC(RedisModule_CrdtSelectDb)(RedisModuleCtx *ctx, int gid,int newid);
@@ -211,6 +212,7 @@ int REDISMODULE_API_FUNC(RedisModule_ReplyWithDouble)(RedisModuleCtx *ctx, doubl
 int REDISMODULE_API_FUNC(RedisModule_ReplyWithCallReply)(RedisModuleCtx *ctx, RedisModuleCallReply *reply);
 int REDISMODULE_API_FUNC(RedisModule_StringToLongLong)(const RedisModuleString *str, long long *ll);
 int REDISMODULE_API_FUNC(RedisModule_StringToDouble)(const RedisModuleString *str, double *d);
+int REDISMODULE_API_FUNC(RedisModule_StringToLongDouble)(const RedisModuleString *str, long double *d);
 void *REDISMODULE_API_FUNC(RedisModule_GetSds)(const RedisModuleString *str);
 void REDISMODULE_API_FUNC(RedisModule_AutoMemory)(RedisModuleCtx *ctx);
 int REDISMODULE_API_FUNC(RedisModule_Replicate)(RedisModuleCtx *ctx, const char *cmdname, const char *fmt, ...);
@@ -340,6 +342,7 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(IsModuleNameBusy);
     REDISMODULE_GET_API(WrongArity);
     REDISMODULE_GET_API(ReplyWithLongLong);
+    REDISMODULE_GET_API(ReplyWithLongDouble);
     REDISMODULE_GET_API(ReplyWithError);
     REDISMODULE_GET_API(ReplyWithSimpleString);
     REDISMODULE_GET_API(ReplyWithArray);
@@ -375,6 +378,7 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(ListPop);
     REDISMODULE_GET_API(StringToLongLong);
     REDISMODULE_GET_API(StringToDouble);
+    REDISMODULE_GET_API(StringToLongDouble);
     REDISMODULE_GET_API(GetSds);
     REDISMODULE_GET_API(Call);
     REDISMODULE_GET_API(CallReplyProto);

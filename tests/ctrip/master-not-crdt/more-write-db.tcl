@@ -20,9 +20,10 @@ proc wait { client index type log}  {
         if {[string match $match_str $info]} {
             break
         } else {
-            assert_equal [$client ping] PONG
-            incr retry -1
-            after 100
+            if { [catch {$client ping} e] == 0 } {
+                incr retry -1
+                after 100
+            }            
         }
     }
     if {$retry == 0} {

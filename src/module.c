@@ -997,6 +997,14 @@ int RM_StringToDouble(const RedisModuleString *str, double *d) {
     int retval = getDoubleFromObject(str,d);
     return (retval == C_OK) ? REDISMODULE_OK : REDISMODULE_ERR;
 }
+
+/* Convert the string into a double, storing it at `*d`.
+ * Returns REDISMODULE_OK on success or REDISMODULE_ERR if the string is
+ * not a valid string representation of a double value. */
+int RM_StringToLongDouble(RedisModuleString *str,long double *d) {
+    int retval = getLongDoubleFromObject(str, d);
+    return (retval == C_OK) ? REDISMODULE_OK : REDISMODULE_ERR;
+}
 /* Convert the string into a sds, return it
  * if the type is not OBJ_String  return NULL 
  * be used for read only accesses and never modified.*/
@@ -1099,6 +1107,13 @@ int RM_ReplyWithLongLong(RedisModuleCtx *ctx, long long ll) {
     client *c = moduleGetReplyClient(ctx);
     if (c == NULL) return REDISMODULE_OK;
     addReplyLongLong(c,ll);
+    return REDISMODULE_OK;
+}
+
+int RM_ReplyWithLongDouble(RedisModuleCtx *ctx, long double ld) {
+    client *c = moduleGetReplyClient(ctx);
+    if (c == NULL) return REDISMODULE_OK;
+    addReplyHumanLongDouble(c,ld);
     return REDISMODULE_OK;
 }
 
@@ -3092,6 +3107,10 @@ robj **moduleCreateArgvFromUserFormat(const char *cmdname, const char *fmt, int 
         } else if (*p == 'l') {
             long ll = va_arg(ap,long long);
             argv[argc++] = createObject(OBJ_STRING,sdsfromlonglong(ll));
+        } else if (*p == 'f') {
+            long double ld = va_arg(ap,long double);
+            sds r = sdsempty();
+            argv[argc++] = createObject(OBJ_STRING,sdscatprintf(r, "%Lf", ld));
         } else if (*p == 'v') {
              /* A vector of strings */
              robj **v = va_arg(ap, void*);
@@ -3109,7 +3128,7 @@ robj **moduleCreateArgvFromUserFormat(const char *cmdname, const char *fmt, int 
                  argv[argc++] = v[i];
              }
         } else if (*p == 'a') {
-            char **v = va_arg(ap, char*);
+            char **v = va_arg(ap, void*);
             size_t vlen = va_arg(ap, size_t);
             argv_size += vlen-1;
             argv = zrealloc(argv,sizeof(robj*)*argv_size);
@@ -4602,6 +4621,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(WrongArity);
     REGISTER_API(ReplyWithOk);
     REGISTER_API(ReplyWithLongLong);
+    REGISTER_API(ReplyWithLongDouble);
     REGISTER_API(ReplyWithError);
     REGISTER_API(ReplyWithSimpleString);
     REGISTER_API(ReplyWithArray);
@@ -4635,6 +4655,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(ListPop);
     REGISTER_API(StringToLongLong);
     REGISTER_API(StringToDouble);
+    REGISTER_API(StringToLongDouble);
     REGISTER_API(GetSds);
     REGISTER_API(Call);
     REGISTER_API(CallReplyProto);

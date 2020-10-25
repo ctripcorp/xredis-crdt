@@ -56,9 +56,9 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so}} {
             r config set min-slaves-max-lag 10
             r -1 config set min-slaves-to-write 1
             r -1 config set min-slaves-max-lag 10
-            r set foo aaabbb
+            r set foo1 aaabbb
             wait_for_condition 50 100 {
-                [r -1 get foo] eq {aaabbb}
+                [r -1 get foo1] eq {aaabbb}
             } else {
                 fail "Write did not reached slave"
             }
