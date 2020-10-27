@@ -3110,7 +3110,7 @@ robj **moduleCreateArgvFromUserFormat(const char *cmdname, const char *fmt, int 
         } else if (*p == 'f') {
             long double ld = va_arg(ap,long double);
             sds r = sdsempty();
-            argv[argc++] = createObject(OBJ_STRING,sdscatprintf(r, "%Lf", ld));
+            argv[argc++] = createObject(OBJ_STRING,sdscatprintf(r, "%.17Lf", ld));
         } else if (*p == 'v') {
              /* A vector of strings */
              robj **v = va_arg(ap, void*);
@@ -3825,6 +3825,8 @@ loaderr:
     moduleRDBLoadError(io);
     return 0; /* Never reached. */
 }
+
+
 
 /* --------------------------------------------------------------------------
  * Key digest API (DEBUG DIGEST interface for modules types)
