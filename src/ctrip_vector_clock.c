@@ -35,6 +35,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h>
+#include "./util.h"
 /**------------------------Vector Clock Inner Functions--------------------------------------*/
 
 static inline clk *get_clock_unit(VectorClock *vc, char gid) {
