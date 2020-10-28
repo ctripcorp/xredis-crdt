@@ -31,6 +31,7 @@
 //
 
 #include "ctrip_vector_clock.h"
+#include "util.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
