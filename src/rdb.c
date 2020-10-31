@@ -468,7 +468,6 @@ void *rdbGenericLoadStringObject(rio *rdb, int flags, size_t *lenptr) {
             rdbExitReportCorruptRDB("Unknown RDB string encoding type %d",len);
         }
     }
-
     if (len == RDB_LENERR) return NULL;
     if (plain || sds) {
         void *buf = plain ? zmalloc(len) : sdsnewlen(NULL,len);
