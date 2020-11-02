@@ -487,10 +487,11 @@ int mergeCrdtObjectCommand(client *c, DictFindFunc find, DictAddFunc add, DictDe
         if(checktdtype(tom, mergedVal, key) == C_OK) {
             CrdtTombstoneMethod* tombstone_method = getCrdtTombstoneMethod(tom);
             if(tombstone_method == NULL) return C_ERR;
-            if(tombstone_method->purge(tom, mergedVal)) {
+            int result = tombstone_method->purge(tom, mergedVal);
+            if(result == PURGE_VAL) {
                 mt->free(mergedVal);
                 mergedVal = NULL;
-            } else {
+            } else if(result == PURGE_TOMBSTONE) {
                 deletetombstone(c->db, key);
             }
         } else {

@@ -171,9 +171,19 @@ proc run_foreach {num len} {
 array set adds ""
 set adds(0) {
     $redis set key value
+    for {set i 0} {$i < 256} {incr i} {
+        set a [i2b $i] 
+        $redis set a a 
+        $redis hset hashb a a
+    }
 }
 set checks(0) {
     assert_equal [$redis get key] value
+    for {set i 0} {$i < 256} {incr i} {
+        set a [i2b $i] 
+        $redis set a a 
+        $redis hset hashb a a
+    }
 }
 set adds(1) {
     $redis hset hash k1 v1 k2 v2
