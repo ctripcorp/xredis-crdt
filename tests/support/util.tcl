@@ -554,3 +554,17 @@ proc check_peer_info {peerMaster  peerSlave masteindex} {
     }
     $peerMaster debug set-crdt-ovc 1
 }
+
+
+proc d2b {d} {
+    set b ""
+    while {$d!=0} {
+        set b "[expr $d%2]$b"
+        set d [expr $d/2]
+    }
+    return $b
+}
+
+proc i2b {i} {
+    return [binary format B* [d2b $i]]
+}

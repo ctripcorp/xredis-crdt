@@ -125,6 +125,11 @@ set adds(0) {
     $redis incrby rc3 1
     $redis set rc4 1.1
     $redis incrbyfloat rc4 1.2
+    for {set i 0} {$i < 256} {incr i} {
+        set a [i2b $i] 
+        $redis set a a 
+        $redis hset hashb a a
+    }
 }
 set checks(0) {
     assert_equal [$redis get key] value
@@ -132,6 +137,11 @@ set checks(0) {
     assert_equal [$redis get rc2] 1
     assert_equal [$redis get rc3] 6
     assert_equal [$redis get rc4] 2.30000000000000000
+    for {set i 0} {$i < 256} {incr i} {
+        set a [i2b $i] 
+        assert_equal [$redis get a] a 
+        assert_equal [$redis hget hashb a] a
+    }
 }
 set adds(1) {
     $redis hset hash k1 v1 k2 v2
