@@ -94,7 +94,7 @@ proc basic_test { type create check delete} {
                 puts [[lindex $peers 0] crdt.datainfo key ]
                 run [replace [replace_client $create {[lindex $peers 0]}] $add1] 1
                 
-                print_log_file [lindex $peer_stdouts 0]
+                # print_log_file [lindex $peer_stdouts 0]
                 run [replace [replace_client $check {[lindex $peers 0]}] $add1] 1
                 
                 set delete1 {key field {} 1 100000 {"1:12;2:11"} }
@@ -113,7 +113,7 @@ proc basic_test { type create check delete} {
                 # print_log_file [lindex $peer_stdouts 0]
                 run [replace [replace_client $check {[lindex $peers 1]}] $delete1] 1
                 run [replace [replace_client $create {[lindex $peers 0]}] $add2] 1
-                print_log_file [lindex $peer_stdouts 0]
+                # print_log_file [lindex $peer_stdouts 0]
                 run [replace [replace_client $check {[lindex $peers 0]}] $delete1] 1
                 
             }  

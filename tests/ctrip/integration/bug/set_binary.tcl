@@ -40,6 +40,15 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
             $master hset h k [binary format B* 01000000000000000000000]
             $master hset [binary format B* 01000000000000000000001] [binary format B* 01000000000000000000011] [binary format B* 01000000000000000000111]
             # puts [$master get {YWG|BJS|RT}]
+            set argvs {}
+            for {set i 0} {$i < 100} {incr i} {
+                 set argv {}
+                 lappend argv [randomKey]
+                 lappend argv [randomValue]
+                 lappend argvs $argv
+                 $master set  [lindex $argv 0] [lindex $argv 1]
+                 $master hset hash_random [lindex $argv 0] [lindex $argv 1]
+            }
             after 2000
             # read_file $slave_log
             assert_equal  [$slave get [binary format B* 01000000000000000000000]] v
@@ -55,6 +64,15 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
             assert_equal [$peer hget h k] [binary format B* 01000000000000000000000]
             assert_equal [$peer hget [binary format B* 01000000000000000000001] [binary format B* 01000000000000000000011]] [binary format B* 01000000000000000000111]
             assert_equal [$peer mget x y z ] [list 10 {foo bar} "x x x x x x x\n\n\r\n"]
+
+            for {set i 0} {$i < 100} {incr i} {
+                 set  argv [lindex argvs $i]
+                 assert_equal [$slave get  [lindex $argv 0]] [lindex $argv 1]
+                 assert_equal [$slave hget hash_random [lindex $argv 0]] [lindex $argv 1]
+                 assert_equal [$slave get  [lindex $argv 0]] [lindex $argv 1]
+                 assert_equal [$slave hget hash_random [lindex $argv 0]] [lindex $argv 1]
+            }
+
         }
     }
 }
