@@ -1280,6 +1280,11 @@ int processMultibulkBuffer(client *c) {
                     "Protocol error: expected '$', got '%c'",
                     c->querybuf[pos]);
                 setProtocolError("expected $ but got something else",c,pos);
+                serverLog(LL_WARNING, "Protocol error: expected '$',  buf: %s",
+                    c->querybuf);
+                if(c->argc > 0) {
+                    serverLog(LL_WARNING, "Protocol error: expected '$' ,command %s", c->argv[0]->ptr);
+                }
                 return C_ERR;
             }
 
@@ -1287,6 +1292,11 @@ int processMultibulkBuffer(client *c) {
             if (!ok || ll < 0 || ll > server.proto_max_bulk_len) {
                 addReplyError(c,"Protocol error: invalid bulk length");
                 setProtocolError("invalid bulk length",c,pos);
+                serverLog(LL_WARNING, "Protocol error: invalid bulk length,  buf: %s",
+                    c->querybuf);
+                if(c->argc > 0) {
+                    serverLog(LL_WARNING, "Protocol error: invalid bulk length, command %s", c->argv[0]->ptr);
+                }
                 return C_ERR;
             }
 
@@ -1465,6 +1475,10 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
         }
     } else if (nread == 0) {
         serverLog(LL_VERBOSE, "Client closed connection");
+        if(c->querybuf && sdslen(c->querybuf) > 0) {
+            serverLog(LL_WARNING, "Client closed connection, read stream error, querybuf: %s", c->querybuf);
+        }
+        
         if (c->flags & CLIENT_CRDT_SLAVE) {
             serverLog(LL_NOTICE, "[CRDT]slave disconnect: %s:%d", c->slave_ip, c->slave_listening_port);
         } else if (c->flags & CLIENT_CRDT_MASTER) {

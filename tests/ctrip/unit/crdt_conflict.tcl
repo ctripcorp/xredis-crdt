@@ -281,3 +281,106 @@ start_server {tags {"crdt-del"} overrides {crdt-gid 1} config {crdt.conf} module
         }
     }
 }
+
+
+
+
+proc read_file {log} {
+    set fp [open $log r]
+    set content [read $fp]
+    close $fp
+    return $content
+}
+
+proc read_from_all_stream {s} {
+    fconfigure $s -blocking 0
+    set attempt 0
+    while {[gets $s count] == -1} {
+        if {[incr attempt] == 10} return ""
+        after 100
+    }
+    fconfigure $s -blocking 1
+    set count [string range $count 1 end]
+
+    # Return a list of arguments for the command.
+    set res {}
+    for {set j 0} {$j < $count} {incr j} {
+        read $s 1
+        set arg [::redis::redis_bulk_read $s]
+        if {$j == 0} {set arg [string tolower $arg]}
+        puts $arg
+        lappend res $arg
+    }
+    return $res
+}
+proc attach_to_replication_stream {host port} {
+    set s [socket $host $port]
+    fconfigure $s -translation binary
+    puts -nonewline $s "SYNC\r\n"
+    flush $s
+
+    # Get the count
+    while 1 {
+        set count [gets $s]
+        set prefix [string range $count 0 0]
+        if {$prefix ne {}} break; # Newlines are allowed as PINGs.
+    }
+    if {$prefix ne {$}} {
+        error "attach_to_replication_stream error. Received '$count' as count."
+    }
+    set count [string range $count 1 end]
+
+    # Consume the bulk payload
+    while {$count} {
+        set buf [read $s $count]
+        set count [expr {$count-[string length $buf]}]
+    }
+    return $s
+}
+start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
+    set master [srv 0 client]
+    set master_gid 1
+    set master_host [srv 0 host]
+    set master_port [srv 0 port]
+    set master_log [srv 0 stdout]
+    $master config crdt.set repl-diskless-sync-delay 1
+    
+    start_server {tags {"crdt-set"} overrides {crdt-gid 2} config {crdt.conf} module {crdt.so} } {
+        set peer [srv 0 client]
+        set peer_gid 2
+        set peer_host [srv 0 host]
+        set peer_port [srv 0 port]
+        set peer_log [srv 0 stdout]
+        $peer config crdt.set repl-diskless-sync-delay 1
+
+        $master peerof $peer_gid $peer_host $peer_port
+        $peer peerof $master_gid $master_host $master_port
+        wait_for_peer_sync $master
+        wait_for_peer_sync $peer
+        test "conflict" {
+            set load_handle0 [start_write_script $master_host $master_port 5000  { 
+                $r set k v
+                $r hset h k v k1 v1
+                $r hdel h k 
+                $r del h
+                $r del k 
+            } ]
+            set load_handle1 [start_write_script $peer_host $peer_port 5000  { 
+                $r set k v
+                $r hset h k v k1 v1
+                $r hdel h k 
+                $r del h
+                $r del k 
+            } ]
+            
+            after 5000
+            stop_write_load $load_handle0
+            stop_write_load $load_handle1
+            after 10000
+            assert_equal [$master get k] [$peer get k]
+            assert_equal [$master hget h k] [$peer hget h k]
+            assert_equal [$master hget h k1] [$peer hget h k1]
+        }
+        
+    }
+}
