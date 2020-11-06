@@ -1,5 +1,5 @@
 source tests/support/redis.tcl
-
+source tests/support/util.tcl
 proc run {script level} {
     catch [uplevel $level $script ] result opts
 }
