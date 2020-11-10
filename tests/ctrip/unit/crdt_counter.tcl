@@ -30,26 +30,26 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt.conf} module {
         $master set k2 1
         assert_equal [$master get k2] 1
         $master set k2 1.1
-        assert_equal [$master get k2] 1.100000
+        assert_equal [$master get k2] 1.10000000000000000
         $master incrbyfloat k2 1
-        assert_equal [$master get k2] 2.100000
+        assert_equal [$master get k2] 2.10000000000000000
         $master set k2 1
-        assert_equal [$master get k2] 1.000000
+        assert_equal [$master get k2] 1.00000000000000000
     }
 
     test "base int -> incrbyfloat" {
         $master set k3 1
         assert_equal [$master get k3] 1
         $master incrbyfloat k3 1
-        assert_equal [$master get k3] 2.000000
+        assert_equal [$master get k3] 2.00000000000000000
         
     }
     test "only incrby" {
         $master incrby k4 1
         $master incrbyfloat k4 1
-        assert_equal [$master get k4] 2.000000
+        assert_equal [$master get k4] 2.00000000000000000
         $master incrbyfloat k5 1
-        assert_equal [$master get k5] 1.000000
+        assert_equal [$master get k5] 1.00000000000000000
     }
     
     start_server {tags {"Simulation peer"} overrides {crdt-gid 2} config {crdt.conf} module {crdt.so} } {
@@ -64,10 +64,10 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt.conf} module {
                 $client CRDT.Rc $key 10 3 1602828439439 {2:1;3:10001} -1
             }
             proc incrby { client key } {
-                $client CRDT.COUNTER $key 3 1602828447252 {2:1;3:10002} 10002 10002 20
+                $client CRDT.COUNTER $key 3 1602828447252 {2:1;3:10002} 10002 10002 0 20
             }
             proc del { client key } {
-                $client  CRDT.DEL_Rc $key 3 1602828460001 {2:1;3:10003} {3:10002:10002:20}
+                $client  CRDT.DEL_Rc $key 3 1602828460001 {2:1;3:10003} {3:10002:10002:0} 20
             }
             
             
@@ -198,6 +198,7 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt.conf} module {
             }
             test "set + del" {
                 assert {[$master tombstonesize] != 0}
+                assert {[$slave tombstonesize] != 0}
                 assert_equal [$master crdt.datainfo test6] [$slave crdt.datainfo test6] 
             }
             test "incryby + del" {
@@ -252,35 +253,35 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt.conf} module {
             }
             test "set + tombstone" {
                 $master set test205 10
-                $peer2 CRDT.DEL_Rc test205 4 1602828460001 {2:1;4:10003} {4:10002:10002:20}
+                $peer2 CRDT.DEL_Rc test205 4 1602828460001 {2:1;4:10003} {4:10002:10002:0} 20
             }
             test "set (incrby) + tombstone" {
                 $master set test206 10
                 $master incrby test206 3
-                $peer2 CRDT.DEL_Rc test206 4 1602828460001 {2:1;4:10003} {4:10002:10002:20}
+                $peer2 CRDT.DEL_Rc test206 4 1602828460001 {2:1;4:10003} {4:10002:10002:0} 20
             }
             test "tombstone (set) + null" {
-                $master CRDT.DEL_Rc test207 1 1602828460001 {1:3;2:1;3:10003} {3:10002:10002:20}
+                $master CRDT.DEL_Rc test207 1 1602828460001 {1:3;2:1;3:10003} {3:10002:10002:0} 20
             }
             test "tombstone + set" {
-                $master CRDT.DEL_Rc test208 1 1602828460001 {1:3;2:1;3:10003} {3:10002:10002:20}
+                $master CRDT.DEL_Rc test208 1 1602828460001 {1:3;2:1;3:10003} {3:10002:10002:0} 20
                 $peer2 set test208 3
             }
             test "tombstone + set(incrby)" {
-                $master CRDT.DEL_Rc test209 1 1602828460001 {1:3;2:1;3:10003} {3:10002:10002:20}
+                $master CRDT.DEL_Rc test209 1 1602828460001 {1:3;2:1;3:10003} {3:10002:10002:0} 20
                 $peer2 set test209 3
                 $peer2 incrby test209 7
             }
             test "tombstone + tombstone" {
-                $master CRDT.DEL_Rc test210 1 1602828460003 {1:4;2:1;3:10003} {3:10002:10002:20}
-                $master CRDT.DEL_Rc test210 3 1602828460002 {1:3;2:2;3:10005} {3:10004:10004:30}
+                $master CRDT.DEL_Rc test210 1 1602828460003 {1:4;2:1;3:10003} {3:10002:10002:0} 20
+                $master CRDT.DEL_Rc test210 3 1602828460002 {1:3;2:2;3:10005} {3:10004:10004:0} 30
             }
         }
         $peer2 peerof $master_gid $master_host $master_port
         $master peerof $peer2_gid $peer2_host $peer2_port
-        # wait_for_peer_sync $master 
-        # wait_for_peer_sync $peer2
-        after 5000
+        wait_for_peer_sync $master 
+        wait_for_peer_sync $peer2
+        # after 5000
         # print_log_file $peer2_log
         # print_log_file $master_log
         test "peer  over" {
@@ -322,17 +323,17 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt.conf} module {
             }
             test "crdt.rc + crdt.incrby" {
                 $peer2 crdt.rc test224 2 4 10000 {4:1} -1
-                $master crdt.counter test224 3 10000 {4:1;3:2} 2 2 10
+                $master crdt.counter test224 3 10000 {4:1;3:2} 2 2 0 10
                 $master crdt.rc test224 2 4 10000 {4:1} -1
-                $peer2 crdt.counter test224 3 10000 {4:1;3:2} 2 2 10
+                $peer2 crdt.counter test224 3 10000 {4:1;3:2} 2 2 0 10
                 assert_equal [$master crdt.datainfo test224] [$peer2 crdt.datainfo test224]
                 assert_equal [$master get test224 ] 12
             }
             test "crdt.incrby + crdt.incrby" {
-                $peer2 crdt.counter test225 2  10000 {2:3} 3 3 4
-                $master crdt.counter test225 3 10000 {3:2} 2 2 10
-                $master crdt.counter test225 2  10000 {2:3} 3 3 4
-                $peer2 crdt.counter test225 3 10000 {3:2} 2 2 10
+                $peer2 crdt.counter test225 2  10000 {2:3} 3 3 0 4
+                $master crdt.counter test225 3 10000 {3:2} 2 2 0 10
+                $master crdt.counter test225 2  10000 {2:3} 3 3 0 4
+                $peer2 crdt.counter test225 3 10000 {3:2} 2 2 0 10
                 assert_equal [$master crdt.datainfo test225] [$peer2 crdt.datainfo test225]
                 assert_equal [$master get test225 ] 14
             }
@@ -352,11 +353,14 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt.conf} module {
                 $peer2 crdt.rc test227 2 2 10000 {2:1} -1
                 $master crdt.rc test227 2 2 10000 {2:1} -1
 
-                $peer2 crdt.counter test227 4 10000 {2:2} 2 2 10
+                $peer2 crdt.counter test227 4 10000 {2:2} 2 2 0 10
                 $master crdt.del_rc test227 3 10000 {3:1;2:1}
-                $master crdt.counter test227 4 10000 {2:2} 2 2 10
+                $master crdt.counter test227 4 10000 {2:2} 2 2 0 10
                 $peer2 crdt.del_rc test227 3 10000 {3:1;2:1}
                 assert_equal [$master crdt.datainfo test227] [$peer2 crdt.datainfo test227]
+                # print_log_file $master_log
+                # puts [$master crdt.datainfo test227]
+                # puts [$peer2 crdt.datainfo test227]
                 assert_equal [$master get test227 ] 10
             }
         }
@@ -384,10 +388,12 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt.conf} module {
             $master set p1 10
             assert_equal [$master get p1 ] 10
             after 500
+            # puts [$peer2 crdt.datainfo p1]
             assert_equal [$peer2 get p1 ] 10
             $master incrby p1 1
             assert_equal [$master get p1] 11
             after 500
+            # print_log_file $peer2_log
             assert_equal [$peer2 get p1 ] 11
             $master del p1
             assert_equal [$master get p1] {}
@@ -396,22 +402,29 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt.conf} module {
             $master set p1 1
             after 500
             assert_equal [$peer2 get p1] 1
-            # print_log_file $master_log
+            
         }
         
         test "base float 2" {
             $master set p2 1.1
-            assert_equal [$master get p2] 1.100000
+            assert_equal [$master get p2] 1.10000000000000000
             after 500
-            assert_equal [$peer2 get p2 ] 1.100000
+            assert_equal [$peer2 get p2 ] 1.10000000000000000
             $master incrbyfloat p2 1
-            assert_equal [$master get p2] 2.100000
+            # puts [$master crdt.datainfo p2]
+            assert_equal [$master get p2] 2.10000000000000000
             after 500
-            assert_equal [$peer2 get p2 ] 2.100000
+            
+            # puts [$master crdt.datainfo p2]
+            
+            assert_equal [$peer2 get p2 ] 2.10000000000000000
             $master set p2 1
-            assert_equal [$master get p2] 1.000000
-            after 500
-            assert_equal [$peer2 get p2] 1.000000
+            assert_equal [$master get p2] 1.00000000000000000
+            after 1000
+            # puts [$peer2 crdt.datainfo p2]
+            # print_log_file $master_log
+            # print_log_file $peer2_log
+            assert_equal [$peer2 get p2] 1.00000000000000000
             $master incrbyfloat p2 1.1
             $master del p2 
             assert_equal [$master get p2] {}
@@ -427,21 +440,21 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt.conf} module {
             after 500
             assert_equal [$peer2 get p3 ] 1
             $master incrbyfloat p3 1
-            assert_equal [$master get p3] 2.000000
+            assert_equal [$master get p3] 2.00000000000000000
             after 500
-            assert_equal [$peer2 get p3 ] 2.000000
+            assert_equal [$peer2 get p3 ] 2.00000000000000000
         }
         test "only incrby2" {
             $master incrby p4 1
             $master incrbyfloat p4 1
-            assert_equal [$master get p4] 2.000000
+            assert_equal [$master get p4] 2.00000000000000000
             after 500
-            assert_equal [$peer2 get p4 ] 2.000000
+            assert_equal [$peer2 get p4 ] 2.00000000000000000
             $master incrbyfloat p5 1
-            assert_equal [$master get p5] 1.000000
+            assert_equal [$master get p5] 1.00000000000000000
             after 500
             # print_log_file $peer2_log
-            assert_equal [$peer2 get p5 ] 1.000000
+            assert_equal [$peer2 get p5 ] 1.00000000000000000
         }
         test "expire" {
             $master set p6 100
@@ -465,8 +478,8 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt.conf} module {
                 $master decr m1 
                 $master incrbyfloat m1 3.0
                 $master exec
-                assert_equal [$master get m1] 15.000000
-                assert_equal [$peer2 get m1] 15.000000
+                assert_equal [$master get m1] 15.00000000000000000
+                assert_equal [$peer2 get m1] 15.00000000000000000
             } 
             test {"watch"} {
                 $master set m2 1
@@ -487,6 +500,7 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt.conf} module {
                 $master incrby m3 10
                 after 500
                 $peer2 exec
+                # print_log_file $peer2_log
                 assert_equal [$peer2 get m3] 11
             } 
         }
@@ -522,6 +536,196 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt.conf} module {
                 assert_equal $retval "ERR value is not an integer or out of range"
             }
         }
+
+    }
+}
+
+
+start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
+    set master [srv 0 client]
+    set master_gid 1
+    set master_host [srv 0 host]
+    set master_port [srv 0 port]
+    set master_log [srv 0 stdout]
+    
+    start_server {tags {"crdt-set"} overrides {crdt-gid 2} config {crdt.conf} module {crdt.so} } {
+        set peer [srv 0 client]
+        set peer_gid 2
+        set peer_host [srv 0 host]
+        set peer_port [srv 0 port]
+        set peer_log [srv 0 stdout]
+        $peer set k 1
+        $peer incrbyfloat k  22.58557912305010400
+        $peer del k
+        $peer incrbyfloat k 108.17082785838199400
+        $peer incrbyfloat k 98.2752012353454575468
+
+        $master set k 5
+        $master incrby k -1
+        $peer peerof $master_gid $master_host $master_port
+        $master peerof $peer_gid $peer_host $peer_port
+        
+        wait_for_peer_sync $peer 
+        wait_for_peer_sync $master 
+        # print_log_file $master_log
+        # print_log_file $peer_log
+        assert_equal [$master crdt.datainfo k] [$peer crdt.datainfo k]
+
+        $peer set k 1
+        $master set k 5
+        
+
+        $peer incrbyfloat k 98.2752012353454575468
+        # print_log_file $master_log
+        $master incrbyfloat k -1.1231231
+        after 2000
+        # puts [$master crdt.datainfo k]
+        
+        # [$peer crdt.datainfo k]
+        # print_log_file $peer_log
+        # puts [$master get k]
+        # puts [$peer get k]
+        start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
+            set slave [srv 0 client]
+            set slave_gid 1
+            set slave_host [srv 0 host]
+            set slave_port [srv 0 port]
+            $slave slaveof $master_host $master_port
+            wait_for_sync $slave
+            # puts [$slave crdt.datainfo k]
+            # puts [$slave get k]
+        }
+    }
+}
+
+
+start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
+    set master [srv 0 client]
+    set master_gid 1
+    set master_host [srv 0 host]
+    set master_port [srv 0 port]
+    set master_log [srv 0 stdout]
+    $master config crdt.set repl-diskless-sync-delay 1
+    start_server {tags {"crdt-set"} overrides {crdt-gid 2} config {crdt.conf} module {crdt.so} } {
+        set peer [srv 0 client]
+        set peer_gid 2
+        set peer_host [srv 0 host]
+        set peer_port [srv 0 port]
+        set peer_log [srv 0 stdout]
+        $peer config crdt.set repl-diskless-sync-delay 1
+        start_server {tags {"crdt-set"} overrides {crdt-gid 3} config {crdt.conf} module {crdt.so} } {
+            set peer2 [srv 0 client]
+            set peer2_gid 3
+            set peer2_host [srv 0 host]
+            set peer2_port [srv 0 port]
+            set peer2_log  [srv 0 stdout]
+            $peer2 config crdt.set repl-diskless-sync-delay 1
+
+            test " set" {
+                $master set k  1234
+                $master incrby k 1
+
+                $peer set k 13456.1234
+                $peer incrbyfloat k 12345.1231254634
+
+                $peer2 set k 12345.1235667
+                $peer2 incrbyfloat k 3.89045062298537000
+
+            }
+            test "peer " {
+                $peer peerof $master_gid $master_host $master_port
+                $peer peerof $peer2_gid $peer2_host $peer2_port
+
+                $master peerof $peer_gid $peer_host $peer_port
+                $master peerof $peer2_gid $peer2_host $peer2_port
+
+                $peer2 peerof $master_gid $master_host $master_port
+                $peer2 peerof $peer_gid $peer_host $peer_port
+                wait_for_peer_sync $peer 
+                wait_for_peer_sync $master
+                wait_for_peer_sync $peer2 
+                after 2000
+                # print_log_file $peer_log
+                # print_log_file $master_log
+                assert_equal [$peer crdt.datainfo k]  [$master crdt.datainfo k]
+                assert_equal [$peer2 crdt.datainfo k]  [$master crdt.datainfo k]
+               
+            }
+
+            test "peerof no one" {
+                $peer peerof $master_gid no one
+                $peer peerof $peer2_gid no one
+
+                $master peerof $peer_gid no one
+                $master peerof $peer2_gid no one
+
+                $peer2 peerof $master_gid no one
+                $peer2 peerof $peer_gid no one
+            }
+
+            test " set2" {
+                $master set k  98763
+                $master incrbyfloat k 3
+
+                $peer set k 983247890354.1234
+                $peer incrbyfloat k 87902347.1231254634
+
+                $peer2 set k 98034579812.138534537
+                $peer2 incrbyfloat k -3.89045062298537000
+            } 
+            test "peer2 " {
+                $peer peerof $master_gid $master_host $master_port
+                $peer peerof $peer2_gid $peer2_host $peer2_port
+
+                $master peerof $peer_gid $peer_host $peer_port
+                $master peerof $peer2_gid $peer2_host $peer2_port
+
+                $peer2 peerof $master_gid $master_host $master_port
+                $peer2 peerof $peer_gid $peer_host $peer_port
+
+                # wait_for_peer_sync $peer 
+                # wait_for_peer_sync $master
+                # wait_for_peer_sync $peer2 
+
+
+                after 10000
+                # print_log_file $peer_log
+                # print_log_file $peer2_log
+                # print_log_file $master_log
+                assert_equal [$peer crdt.datainfo k] [$master crdt.datainfo k]
+                assert_equal [$peer crdt.datainfo k] [$peer2 crdt.datainfo k]
+
+                assert_equal [$peer get k] [$master get k]
+                assert_equal [$peer get k] [$peer2 get k]
+                # puts [$peer2 crdt.datainfo k]
+                # puts [$master crdt.datainfo k]
+            }
+        }
+    }
+}
+
+start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
+    set master [srv 0 client]
+    set master_gid 1
+    set master_host [srv 0 host]
+    set master_port [srv 0 port]
+    set master_log [srv 0 stdout]
+    $master config set repl-diskless-sync-delay 1
+    start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
+        set slave [srv 0 client]
+        set slave_gid 1
+        set slave_host [srv 0 host]
+        set slave_port [srv 0 port]
+        set slave_log [srv 0 stdout]
+        $slave slaveof $master_host $master_port
+        wait_for_sync $slave
+        after 3000
+        $master incrby k 60
+        $master set k 6
+        $master incrbyfloat k 95.7366046160811
+        after 1000
+        # print_log_file $slave_log
+        assert_equal [$master crdt.datainfo k]  [$slave crdt.datainfo k]
 
     }
 }

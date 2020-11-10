@@ -3110,7 +3110,7 @@ robj **moduleCreateArgvFromUserFormat(const char *cmdname, const char *fmt, int 
         } else if (*p == 'f') {
             long double ld = va_arg(ap,long double);
             sds r = sdsempty();
-            argv[argc++] = createObject(OBJ_STRING,sdscatprintf(r, "%Lf", ld));
+            argv[argc++] = createObject(OBJ_STRING,sdscatprintf(r, "%.17Lf", ld));
         } else if (*p == 'v') {
              /* A vector of strings */
              robj **v = va_arg(ap, void*);
@@ -3135,7 +3135,7 @@ robj **moduleCreateArgvFromUserFormat(const char *cmdname, const char *fmt, int 
 
             size_t i = 0;
             for (i = 0; i < vlen; i++) {
-                 argv[argc++] = createStringObject(v[i],strlen(v[i]));
+                 argv[argc++] = createStringObject(v[i],sdslen(v[i]));
             }
         } else if (*p == '!') {
             if (flags) (*flags) |= REDISMODULE_ARGV_REPLICATE;
@@ -3728,16 +3728,15 @@ RedisModuleString *RM_LoadString(RedisModuleIO *io) {
     return moduleLoadString(io,0,NULL);
 }
 
-void *RM_LoadSds(RedisModuleIO *io, size_t *lenptr) {
+void *RM_LoadSds(RedisModuleIO *io) {
     if (io->ver == 2) {
         uint64_t opcode = rdbLoadLen(io->rio,NULL);
         if (opcode != RDB_MODULE_OPCODE_STRING) goto loaderr;
     }
     void *s = rdbGenericLoadStringObject(io->rio,
-               RDB_LOAD_SDS, lenptr);
+               RDB_LOAD_SDS, NULL);
     add_module_memory_stat_alloc(sds_memory(s));
     if (s == NULL) goto loaderr;
-
     return s;
 loaderr:
     moduleRDBLoadError(io);
@@ -3825,6 +3824,8 @@ loaderr:
     moduleRDBLoadError(io);
     return 0; /* Never reached. */
 }
+
+
 
 /* --------------------------------------------------------------------------
  * Key digest API (DEBUG DIGEST interface for modules types)
