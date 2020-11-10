@@ -536,8 +536,8 @@ int checkDataType(void* current, void* other, robj* key) {
         return C_ERR;
     }
     if (c->type != o->type) {
-        serverLog(LL_WARNING, "[INCONSIS][MERGE DATA] key: %s, local type: %d, merge type %d",
-                key->ptr, getDataType(c), getDataType(o));
+        serverLog(LL_WARNING, "[INCONSIS][MERGE DATA] key: %s, local type: %d, merge type %d, type: %d != %d",
+                key->ptr, getDataType(c), getDataType(o), c->type, o->type);
         incrCrdtConflict(MERGECONFLICT | TYPECONFLICT);
         return C_ERR;
     }
