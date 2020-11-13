@@ -10,6 +10,14 @@ HIGH:     There is a critical bug that may affect a subset of users. Upgrade!
 CRITICAL: There is a critical bug affecting MOST USERS. Upgrade ASAP.
 --------------------------------------------------------------------------------
 ================================================================================
+XRedis-CRDT 1.0.8 Released Mon Nov  9 17:40:18 CST 2020
+================================================================================
+Upgrade urgency HIGH: Compared with the previous version, there are some improvements, mainly:
+Major things: 
+* [bugfix] master and slave or master and master synchronization fail When copying binary data memory, copy to \0 even if there is more data
+* [bugfix] redis-server crash when use the wrong gid after del and hset conflict is resolved
+
+================================================================================
 XRedis-CRDT 1.0.7 Released Fri Sep 11 19:29:37 CST 2020
 ================================================================================
 Upgrade urgency LOW: Compared with the previous version, there are some improvements, mainly:

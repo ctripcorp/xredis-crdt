@@ -1382,9 +1382,14 @@ int Verbatim(RedisModuleCtx *ctx, int flags) {
 int RM_ReplicateVerbatim(RedisModuleCtx *ctx) {
     return Verbatim(ctx, PROPAGATE_AOF|PROPAGATE_REPL);
 }
+
 int RM_CrdtReplicateVerbatim(int gid, RedisModuleCtx *ctx) {
-    ctx->client->gid = gid;
+    if(ctx->client->gid == -1) {
+        //add peer buffer offset 
+        ctx->client->gid = gid;
+    }
     if(crdtServer.crdt_gid == gid) {
+        assert(!(iAmMaster() && ctx->client->flags & CLIENT_CRDT_MASTER));
         return Verbatim(ctx, PROPAGATE_AOF|PROPAGATE_CRDT_REPL);
     } else {
         return RM_ReplicateVerbatim(ctx);
