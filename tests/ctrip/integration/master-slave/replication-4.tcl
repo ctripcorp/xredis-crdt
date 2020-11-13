@@ -133,25 +133,25 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so}} {
         }
 
         #todo: make this available when implement mset
-        #test {Replication: commands with many arguments (issue #1221)} {
+        test {Replication: commands with many arguments (issue #1221)} {
             # We now issue large MSET commands, that may trigger a specific
             # class of bugs, see issue #1221.
-        #    for {set j 0} {$j < 100} {incr j} {
-        #        set cmd [list mset]
-        #        for {set x 0} {$x < 1000} {incr x} {
-        #            lappend cmd [randomKey] [randomValue]
-        #        }
-        #        $master {*}$cmd
-        #    }
+           for {set j 0} {$j < 100} {incr j} {
+               set cmd [list mset]
+               for {set x 0} {$x < 1000} {incr x} {
+                   lappend cmd [randomKey] [randomValue]
+               }
+               $master {*}$cmd
+           }
 
-        #    set retry 10
-        #    while {$retry && ([$master debug digest] ne [$slave debug digest])}\
-        #    {
-        #        after 1000
-        #        incr retry -1
-        #    }
-        #    assert {[$master dbsize] > 0}
-        #}
+           set retry 10
+           while {$retry && ([$master debug digest] ne [$slave debug digest])}\
+           {
+               after 1000
+               incr retry -1
+           }
+           assert {[$master dbsize] > 0}
+        }
 
     }
 }

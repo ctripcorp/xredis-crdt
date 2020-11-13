@@ -116,7 +116,7 @@ proc save {add check server_path dl} {
     }
 }
 array set adds ""
-
+set set_argvs {}
 set adds(0) {
     $redis set key value
     $redis set rc1 10
@@ -125,6 +125,19 @@ set adds(0) {
     $redis incrby rc3 1
     $redis set rc4 1.1
     $redis incrbyfloat rc4 1.2
+    for {set i 0} {$i < 256} {incr i} {
+        set a [i2b $i] 
+        $redis set $a $a 
+        $redis hset hash_binary $a $a
+    }
+    for {set i 0} {$i < 256} {incr i} {
+        set argv {}
+        lappend argv [randomKey] 
+        lappend argv [randomValue] 
+        lappend set_argvs $argv
+        $redis set [lindex $argv 0] [lindex $argv 1]
+        $redis hset hash_random [lindex $argv 0] [lindex $argv 1]
+    }
 }
 set checks(0) {
     assert_equal [$redis get key] value
@@ -132,6 +145,16 @@ set checks(0) {
     assert_equal [$redis get rc2] 1
     assert_equal [$redis get rc3] 6
     assert_equal [$redis get rc4] 2.30000000000000000
+    for {set i 0} {$i < 256} {incr i} {
+        set a [i2b $i] 
+        assert_equal [$redis get $a] $a 
+        assert_equal [$redis hget hash_binary $a] $a
+    }
+    for {set i 0} {$i < 256} {incr i} {
+        set argv  [lindex set_argvs $i]
+        assert_equal [$redis get [lindex $argv 0]] [lindex $argv 1]
+        assert_equal [$redis hget hash_random [lindex $argv 0]] [lindex $argv 1]
+    }
 }
 set adds(1) {
     $redis hset hash k1 v1 k2 v2

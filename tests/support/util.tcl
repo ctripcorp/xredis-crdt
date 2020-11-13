@@ -480,6 +480,11 @@ proc start_write_db_load {host port seconds db} {
     exec $tclsh tests/helpers/gen_write_db_load.tcl $host $port $seconds $db &
 }
 
+proc start_write_script {host port seconds script} {
+    set tclsh [info nameofexecutable]
+    exec $tclsh tests/helpers/gen_write_load_script.tcl $host $port $seconds $script &
+}
+
 # Stop a process generating write load executed with start_write_load.
 proc stop_write_load {handle} {
     catch {exec /bin/kill -9 $handle}
@@ -553,4 +558,18 @@ proc check_peer_info {peerMaster  peerSlave masteindex} {
         fail "check_peer_info replid diff"
     }
     $peerMaster debug set-crdt-ovc 1
+}
+
+
+proc d2b {d} {
+    set b ""
+    while {$d!=0} {
+        set b "[expr $d%2]$b"
+        set d [expr $d/2]
+    }
+    return $b
+}
+
+proc i2b {i} {
+    return [binary format B* [d2b $i]]
 }
