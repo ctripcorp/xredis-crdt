@@ -35,6 +35,7 @@
 #include "redismodule.h"
 #include "ctrip_crdt_common.h"
 #include "atomicvar.h"
+#include <math.h>
 
 #ifdef HAVE_MALLOC_SIZE
 #define PREFIX_SIZE (0)
@@ -989,6 +990,62 @@ int RM_StringToLongLong(const RedisModuleString *str, long long *ll) {
     return string2ll(str->ptr,sdslen(str->ptr),ll) ? REDISMODULE_OK :
                                                      REDISMODULE_ERR;
 }
+
+int tryInt(char* numstr) {
+	if (NULL == strchr(numstr, '.'))
+		return 1;
+ 
+	int length = strlen(numstr);
+	for (int i = length - 1; i > 0; --i) {
+		if ('\0' == numstr[i])
+		{
+			continue;
+		}
+		else if ('0' == numstr[i])
+		{
+			continue;
+		}
+		else if ('.' == numstr[i])
+		{
+			return 1;
+		}
+		else
+		{
+			return 0;
+		}
+	}
+}
+int RM_String2LongLong(const RedisModuleString *o, long long *target) {
+    long double value;
+    char *eptr;
+
+    if (o == NULL) {
+        value = 0;
+    } else {
+        serverAssertWithInfo(NULL,o,o->type == OBJ_STRING);
+        if (sdsEncodedObject(o)) {
+            if(!tryInt(o->ptr)) {
+                return C_ERR;
+            }
+            errno = 0;
+            value = strtold(o->ptr, &eptr);
+            if (sdslen(o->ptr) == 0 ||
+                isspace(((const char*)o->ptr)[0]) ||
+                (size_t)(eptr-(char*)o->ptr) != sdslen(o->ptr) ||
+                (errno == ERANGE &&
+                    (value == HUGE_VAL || value == -HUGE_VAL || value == 0)) ||
+                isnan(value))
+                return C_ERR;
+        } else if (o->encoding == OBJ_ENCODING_INT) {
+            value = (long)o->ptr;
+        } else {
+            serverPanic("Unknown string encoding");
+        }
+    }
+    *target = value;
+    return C_OK;
+}
+
 
 /* Convert the string into a double, storing it at `*d`.
  * Returns REDISMODULE_OK on success or REDISMODULE_ERR if the string is
@@ -4660,6 +4717,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(ListPush);
     REGISTER_API(ListPop);
     REGISTER_API(StringToLongLong);
+    REGISTER_API(String2LongLong);
     REGISTER_API(StringToDouble);
     REGISTER_API(StringToLongDouble);
     REGISTER_API(GetSds);

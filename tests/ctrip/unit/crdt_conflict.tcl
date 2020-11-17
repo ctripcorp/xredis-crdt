@@ -377,50 +377,119 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 wait_for_peer_sync $peer
                 wait_for_sync $slave 
                 wait_for_sync $peer_slave
+                
                 test "run two process create conflict" {
                     set load_handle0 [start_write_script $master_host $master_port 1000  { 
                         $r set k [randomValue]
                         $r mset k1 [randomValue] k2 [randomValue]
                         $r hset h k [randomValue] k1 [randomValue]
+                        $r incrby c1 [randomSignedInt 9223372036854775807]
+                        $r set c1 [randomSignedInt 9223372036854775807]
+                        $r set c1 0
+                        $r incrbyfloat c1 [randomSignedInt 9223372036854775807]
+                        $r sadd s1 a b c  
+                        $r srem s1 a 
+                        $r spop s1 
                         $r hdel h k 
                         $r del h
                         $r del k 
+                        $r del k2
+                        $r del s1
+                        $r del c1
                     } ]
                     set load_handle1 [start_write_script $peer_host $peer_port 1000  { 
                         $r set k [randomValue]
                         $r mset k1 [randomValue] k2 [randomValue]
-                        $r hset h k v k1 [randomValue]
+                        $r hset h k [randomValue] k1 [randomValue]
+                        $r incrby c1 [randomSignedInt 9223372036854775807]
+                        $r set c1 [randomSignedInt 9223372036854775807]
+                        $r set c1 0
+                        $r sadd s1 a b c  
+                        $r srem s1 a 
+                        $r spop s1 
                         $r hdel h k 
                         $r del h
                         $r del k 
+                        $r del k2
+                        $r del s1
                     } ]
                     after 1000
                     stop_write_load $load_handle0
                     stop_write_load $load_handle1
-                    after 2000
-                    assert_equal [$master get k] [$peer get k]
-                    assert_equal [$slave get k] [$peer_slave get k]
-                    assert_equal [$master get k] [$slave get k]
+                    after 5000
+                    # puts [read_file $master_log]
+                    # puts [read_file $peer_log]
+                    exec cp $master_log ./t.log
+                    exec cp $peer_log ./t2.log
+                    # assert_equal [$master get k] [$peer get k]
+                    # assert_equal [$slave get k] [$peer_slave get k]
+                    # assert_equal [$master get k] [$slave get k]
+                    puts [$master crdt.info replication]
+                    puts [$peer crdt.info replication]
+                    test "hget" {
+                        if { [$master hget h k] != [$peer hget h k] } {
+                            puts "hget master peer diff"
+                            puts [$master crdt.hget h k]
+                            puts [$peer crdt.hget h k]
+                            puts [$master crdt.datainfo h ]
+                            puts [$peer crdt.datainfo h ]
+                        }
+                        if { [$slave hget h k] != [$peer_slave hget h k] } {
+                            puts "hget slave peer_slave diff"
+                        }
+                        if { [$master hget h k] != [$slave hget h k] } {
+                            puts "hget master slave diff"
+                        }
 
-                    assert_equal [$master hget h k] [$peer hget h k]
-                    assert_equal [$slave hget h k] [$peer_slave hget h k]
-                    assert_equal [$master hget h k] [$slave hget h k]
+                        if { [$master hget h k1] != [$peer hget h k1] } {
+                            puts "hget master peer diff2"
+                        }
+                        if { [$slave hget h k1] != [$peer_slave hget h k1] } {
+                            puts "hget slave peer_slave diff2"
+                        }
+                        if { [$master hget h k1] != [$slave hget h k1] } {
+                            puts "hget master slave diff2"
+                        }
+                    }
+                    
+                    test "mget" {
+                        if {[$master crdt.datainfo k1] != [$peer crdt.datainfo k1]} {
+                            puts "mget master and peer k1 diff "
+                            puts [$master crdt.datainfo k1]
+                            puts [$peer crdt.datainfo k1]
+                        }
+                        if {[$master crdt.datainfo k2] != [$peer crdt.datainfo k2]} {
+                            puts "mget master and peer k2 diff "
+                            puts [$master crdt.datainfo k2]
+                            puts [$peer crdt.datainfo k2]
+                        }
+                        
+                    }
+                    
 
-                    assert_equal [$master hget h k1] [$peer hget h k1]
-                    assert_equal [$slave hget h k1] [$peer_slave hget h k1]
-                    assert_equal [$master hget h k1] [$slave hget h k1]
+                    test "zset" {
+                        if {[$master crdt.datainfo s1] != [$peer crdt.datainfo s1]} {
+                            puts "zset master and peer diff"
+                            puts [$master crdt.datainfo s1] 
+                            puts [$peer crdt.datainfo s1]
+                        }
+                        # assert_equal [$master crdt.datainfo s1] [$peer crdt.datainfo s1]
+                        # assert_equal [$slave crdt.datainfo s1] [$peer_slave crdt.datainfo s1]
+                        # assert_equal [$master crdt.datainfo s1] [$slave crdt.datainfo s1]
+                    }
 
-                    assert_equal [$master get k1]  [$peer get k1] 
-                    assert_equal [$slave get k1] [$peer_slave get k1]
-                    assert_equal [$master get k1]  [$slave get k1] 
-
-                    assert_equal [$master get k2] [$peer get k2]
-                    assert_equal [$slave get k2] [$peer_slave get k2]
-                    assert_equal [$master get k2] [$slave get k2]
-
-                    assert_equal [$master mget k1 k2] [$peer mget k1 k2]
-                    assert_equal [$slave mget k1 k2] [$peer_slave mget k1 k2]
-                    assert_equal [$master mget k1 k2] [$slave mget k1 k2]
+                    test "counter" {
+                        if {[$master crdt.datainfo c1] != [$peer crdt.datainfo c1]} {
+                            puts "counter master peer diff"
+                        }
+                        if {[$slave crdt.datainfo c1] !=  [$peer_slave crdt.datainfo c1]} {
+                            puts "counter slave peer_slave diff"
+                        }
+                        if {[$master crdt.datainfo c1] != [$slave crdt.datainfo c1]} {
+                            puts "counter master slave diff"
+                        }
+                    }
+                    
                 }
             }
         }

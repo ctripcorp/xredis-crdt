@@ -211,6 +211,7 @@ int REDISMODULE_API_FUNC(RedisModule_ReplyWithOk)(RedisModuleCtx *ctx);
 int REDISMODULE_API_FUNC(RedisModule_ReplyWithDouble)(RedisModuleCtx *ctx, double d);
 int REDISMODULE_API_FUNC(RedisModule_ReplyWithCallReply)(RedisModuleCtx *ctx, RedisModuleCallReply *reply);
 int REDISMODULE_API_FUNC(RedisModule_StringToLongLong)(const RedisModuleString *str, long long *ll);
+int REDISMODULE_API_FUNC(RedisModule_String2LongLong)(const RedisModuleString *str, long long *ll);
 int REDISMODULE_API_FUNC(RedisModule_StringToDouble)(const RedisModuleString *str, double *d);
 int REDISMODULE_API_FUNC(RedisModule_StringToLongDouble)(const RedisModuleString *str, long double *d);
 void *REDISMODULE_API_FUNC(RedisModule_GetSds)(const RedisModuleString *str);
@@ -377,6 +378,7 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(ListPush);
     REDISMODULE_GET_API(ListPop);
     REDISMODULE_GET_API(StringToLongLong);
+    REDISMODULE_GET_API(String2LongLong);
     REDISMODULE_GET_API(StringToDouble);
     REDISMODULE_GET_API(StringToLongDouble);
     REDISMODULE_GET_API(GetSds);

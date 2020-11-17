@@ -1013,6 +1013,8 @@ int writeToClient(int fd, client *c, int handler_installed) {
             nwritten = 0;
         } else {
             serverLog(LL_VERBOSE,
+                "write buff:%d  %s", objlen - c->sentlen , o + c->sentlen);
+            serverLog(LL_VERBOSE,
                 "Error writing to client: %s", strerror(errno));
             freeClient(c);
             return C_ERR;
@@ -1402,6 +1404,10 @@ void processInputBuffer(client *c) {
             if (c->flags & CLIENT_MASTER && iAmMaster() != C_OK) {
                 c->gid = -1;
             }
+            if(c->argc >= 3) {
+                serverLog(LL_WARNING, "cmd : %s %s %s", c->argv[0]->ptr, c->argv[1]->ptr,c->argv[2]->ptr);
+            }
+            
             /* Only reset the client when the command was executed. */
             if (processCommand(c) == C_OK) {
                 if (c->flags & CLIENT_MASTER && iAmMaster() != C_OK) {

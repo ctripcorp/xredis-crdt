@@ -41,15 +41,19 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt.conf} module {
         $master set k3 1
         assert_equal [$master get k3] 1
         $master incrbyfloat k3 1
-        assert_equal [$master get k3] 2.00000000000000000
+        assert_equal [$master get k3] 2
+        $master incrbyfloat k3 1.1
+        assert_equal [$master get k3] 3.10000000000000000
         
     }
     test "only incrby" {
         $master incrby k4 1
         $master incrbyfloat k4 1
-        assert_equal [$master get k4] 2.00000000000000000
+        assert_equal [$master get k4] 2
         $master incrbyfloat k5 1
-        assert_equal [$master get k5] 1.00000000000000000
+        assert_equal [$master get k5] 1
+        $master incrbyfloat k5 1.1
+        assert_equal [$master get k5] 2.10000000000000000
     }
     
     start_server {tags {"Simulation peer"} overrides {crdt-gid 2} config {crdt.conf} module {crdt.so} } {
@@ -440,22 +444,42 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt.conf} module {
             after 500
             assert_equal [$peer2 get p3 ] 1
             $master incrbyfloat p3 1
-            assert_equal [$master get p3] 2.00000000000000000
+            assert_equal [$master get p3] 2
             after 500
-            assert_equal [$peer2 get p3 ] 2.00000000000000000
+            assert_equal [$peer2 get p3 ] 2
         }
         test "only incrby2" {
             $master incrby p4 1
             $master incrbyfloat p4 1
-            assert_equal [$master get p4] 2.00000000000000000
+            assert_equal [$master get p4] 2
+            $master incrbyfloat p4 1.000000000000000000
+            assert_equal [$master get p4] 3
             after 500
-            assert_equal [$peer2 get p4 ] 2.00000000000000000
+            assert_equal [$peer2 get p4 ] 3
             $master incrbyfloat p5 1
-            assert_equal [$master get p5] 1.00000000000000000
+            assert_equal [$master get p5] 1
             after 500
             # print_log_file $peer2_log
-            assert_equal [$peer2 get p5 ] 1.00000000000000000
+            assert_equal [$peer2 get p5 ] 1
+            $master incrbyfloat p5 1.0000000000000000
+            assert_equal [$master get p5] 2
+            after 500
+            assert_equal [$peer2 get p5] 2
         }
+
+        test "incrbyfloat int  + incrby" {
+            $master incrbyfloat p7 1.0
+            $master incr p7
+            assert_equal [$master get p7] 2
+            $master incrbyfloat p7 1.1
+            assert_equal [$master get p7] 3.10000000000000000
+            set _ [catch {
+                $master incr p7
+            } retval]
+            puts $retval
+            # assert_equal $retval "ERR value is not an integer or out of range"
+        } 
+
         test "expire" {
             $master set p6 100
             $master expire p6 100
@@ -476,10 +500,10 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt.conf} module {
                 $master incrby m1 2
                 $master incr m1  
                 $master decr m1 
-                $master incrbyfloat m1 3.0
+                $master incrbyfloat m1 3.2
                 $master exec
-                assert_equal [$master get m1] 15.00000000000000000
-                assert_equal [$peer2 get m1] 15.00000000000000000
+                assert_equal [$master get m1] 15.20000000000000000
+                assert_equal [$peer2 get m1] 15.20000000000000000
             } 
             test {"watch"} {
                 $master set m2 1
