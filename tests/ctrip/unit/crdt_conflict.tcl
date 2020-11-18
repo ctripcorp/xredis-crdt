@@ -413,7 +413,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $r del k2
                         $r del s1
                     } ]
-                    after 1000
+                    after 3000
                     stop_write_load $load_handle0
                     stop_write_load $load_handle1
                     after 5000

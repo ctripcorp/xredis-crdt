@@ -13,6 +13,7 @@ source tests/support/util.tcl
 source tests/support/aof.tcl
 
 set ::all_tests {
+    ctrip/unit/incr
     ctrip/unit/multi
     ctrip/unit/crdt_counter
     ctrip/basic/set
@@ -115,6 +116,8 @@ set ::all_tests {
     ctrip/integration/master-slave/rdb2
     ctrip/integration/master-slave/psync2
     ctrip/integration/master-slave/replication-psync
+
+    
 }
 
 set ::temp_tests {  

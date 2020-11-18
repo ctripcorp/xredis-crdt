@@ -36,6 +36,7 @@
 #include "ctrip_crdt_common.h"
 #include "atomicvar.h"
 #include <math.h>
+#include <ctype.h>
 
 #ifdef HAVE_MALLOC_SIZE
 #define PREFIX_SIZE (0)
@@ -905,6 +906,10 @@ RedisModuleString *RM_CreateStringFromLongLong(RedisModuleCtx *ctx, long long ll
     return RM_CreateString(ctx,buf,len);
 }
 
+RedisModuleString *RM_CreateStringFromLongDouble(long double ld) {
+    return createStringObjectFromLongDouble(ld, 1);
+}
+
 /* Like RedisModule_CreatString(), but creates a string starting from another
  * RedisModuleString.
  *
@@ -1014,6 +1019,7 @@ int tryInt(char* numstr) {
 			return 0;
 		}
 	}
+    return 0;
 }
 int RM_String2LongLong(const RedisModuleString *o, long long *target) {
     long double value;
@@ -2431,6 +2437,7 @@ void RM_ZsetRangeStop(RedisModuleKey *key) {
 int RM_ZsetRangeEndReached(RedisModuleKey *key) {
     return key->zer;
 }
+
 
 /* Helper function for RM_ZsetFirstInScoreRange() and RM_ZsetLastInScoreRange().
  * Setup the sorted set iteration according to the specified score range
@@ -4732,6 +4739,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(CreateStringFromCallReply);
     REGISTER_API(CreateString);
     REGISTER_API(CreateStringFromLongLong);
+    REGISTER_API(CreateStringFromLongDouble);
     REGISTER_API(CreateStringFromString);
     REGISTER_API(CreateStringPrintf);
     REGISTER_API(FreeString);
