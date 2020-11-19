@@ -30,26 +30,26 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt.conf} module {
         $master set k2 1
         assert_equal [$master get k2] 1
         $master set k2 1.1
-        assert_equal [$master get k2] 1.10000000000000000
+        assert_equal [$master get k2] 1.1
         $master incrbyfloat k2 1
-        assert_equal [$master get k2] 2.10000000000000000
+        assert_equal [$master get k2] 2.1
         $master set k2 1
-        assert_equal [$master get k2] 1.00000000000000000
+        assert_equal [$master get k2] 1
     }
 
     test "base int -> incrbyfloat" {
         $master set k3 1
         assert_equal [$master get k3] 1
         $master incrbyfloat k3 1
-        assert_equal [$master get k3] 2.00000000000000000
+        assert_equal [$master get k3] 2
         
     }
     test "only incrby" {
         $master incrby k4 1
         $master incrbyfloat k4 1
-        assert_equal [$master get k4] 2.00000000000000000
+        assert_equal [$master get k4] 2
         $master incrbyfloat k5 1
-        assert_equal [$master get k5] 1.00000000000000000
+        assert_equal [$master get k5] 1
     }
     
     start_server {tags {"Simulation peer"} overrides {crdt-gid 2} config {crdt.conf} module {crdt.so} } {
@@ -407,24 +407,24 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt.conf} module {
         
         test "base float 2" {
             $master set p2 1.1
-            assert_equal [$master get p2] 1.10000000000000000
+            assert_equal [$master get p2] 1.1
             after 500
-            assert_equal [$peer2 get p2 ] 1.10000000000000000
+            assert_equal [$peer2 get p2 ] 1.1
             $master incrbyfloat p2 1
             # puts [$master crdt.datainfo p2]
-            assert_equal [$master get p2] 2.10000000000000000
+            assert_equal [$master get p2] 2.1
             after 500
             
             # puts [$master crdt.datainfo p2]
             
-            assert_equal [$peer2 get p2 ] 2.10000000000000000
+            assert_equal [$peer2 get p2 ] 2.1
             $master set p2 1
-            assert_equal [$master get p2] 1.00000000000000000
+            assert_equal [$master get p2] 1
             after 1000
             # puts [$peer2 crdt.datainfo p2]
             # print_log_file $master_log
             # print_log_file $peer2_log
-            assert_equal [$peer2 get p2] 1.00000000000000000
+            assert_equal [$peer2 get p2] 1
             $master incrbyfloat p2 1.1
             $master del p2 
             assert_equal [$master get p2] {}
@@ -440,21 +440,21 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt.conf} module {
             after 500
             assert_equal [$peer2 get p3 ] 1
             $master incrbyfloat p3 1
-            assert_equal [$master get p3] 2.00000000000000000
+            assert_equal [$master get p3] 2
             after 500
-            assert_equal [$peer2 get p3 ] 2.00000000000000000
+            assert_equal [$peer2 get p3 ] 2
         }
         test "only incrby2" {
             $master incrby p4 1
             $master incrbyfloat p4 1
-            assert_equal [$master get p4] 2.00000000000000000
+            assert_equal [$master get p4] 2
             after 500
-            assert_equal [$peer2 get p4 ] 2.00000000000000000
+            assert_equal [$peer2 get p4 ] 2
             $master incrbyfloat p5 1
-            assert_equal [$master get p5] 1.00000000000000000
+            assert_equal [$master get p5] 1
             after 500
             # print_log_file $peer2_log
-            assert_equal [$peer2 get p5 ] 1.00000000000000000
+            assert_equal [$peer2 get p5 ] 1
         }
         test "expire" {
             $master set p6 100
@@ -478,8 +478,8 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt.conf} module {
                 $master decr m1 
                 $master incrbyfloat m1 3.0
                 $master exec
-                assert_equal [$master get m1] 15.00000000000000000
-                assert_equal [$peer2 get m1] 15.00000000000000000
+                assert_equal [$master get m1] 15
+                assert_equal [$peer2 get m1] 15
             } 
             test {"watch"} {
                 $master set m2 1
