@@ -1358,6 +1358,22 @@ int processMultibulkBuffer(client *c) {
     return C_ERR;
 }
 
+void printCommand(client *c) {
+    size_t max_buf = 1024;
+    char buf[max_buf];
+    int len = sprintf(buf, "cmd: ");
+    for(int i = 0; i < c->argc; i++) {
+        if((len + sdslen(c->argv[i]->ptr) + 10) > max_buf) {
+            goto end;
+        } else {
+            len += sprintf(buf + len, " %s", c->argv[i]->ptr);
+        }
+    }
+end:
+    buf[len++] = '\0';
+    serverLog(LL_WARNING, "%s", buf);
+}
+
 /* This function is called every time, in the client structure 'c', there is
  * more query buffer to process, because we read more data from the socket
  * or because a client was blocked and later reactivated, so there could be
@@ -1402,6 +1418,7 @@ void processInputBuffer(client *c) {
             if (c->flags & CLIENT_MASTER && iAmMaster() != C_OK) {
                 c->gid = -1;
             }
+            printCommand(c);
             /* Only reset the client when the command was executed. */
             if (processCommand(c) == C_OK) {
                 if (c->flags & CLIENT_MASTER && iAmMaster() != C_OK) {

@@ -382,7 +382,6 @@ void serverLogRaw(int level, const char *msg) {
             (int)getpid(),role_char, buf,c[level],msg);
     }
     fflush(fp);
-
     if (!log_to_stdout) fclose(fp);
     if (server.syslog_enabled) syslog(syslogLevelMap[level], "%s", msg);
 }
@@ -1432,6 +1431,7 @@ void createSharedObjects(void) {
     shared.set = createStringObject("SET", 3);
     shared.hset = createStringObject("HSET", 4);
     shared.sadd = createStringObject("SADD", 4);
+    shared.zadd = createStringObject("ZADD", 4);
     shared.crdtexec = createStringObject("CRDT.EXEC", 9);
     shared.expireat = createStringObject("EXPIREAt", 8);
     for (j = 0; j < OBJ_SHARED_INTEGERS; j++) {
