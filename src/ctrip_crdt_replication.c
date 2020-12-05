@@ -1438,6 +1438,7 @@ void replicationFeedStringToAllSlaves(int dictid, void* cmdbuf, size_t cmdlen) {
     }
     server.slaveseldb = dictid;
     crdtServer.slaveseldb = dictid;
+    
     replicationFeedString(cmdbuf, cmdlen);
 }
 /* Propagate write commands to slaves, and populate the replication backlog

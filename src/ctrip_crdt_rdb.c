@@ -799,6 +799,69 @@ int data2CrdtData(client* fakeClient,robj* key, robj* val) {
             setTypeReleaseIterator(si);
         }
         break;
+        case OBJ_ZSET: {
+            int len = zsetLength(val);
+            if (val->encoding == OBJ_ENCODING_ZIPLIST) {
+                unsigned char *zl = val->ptr;
+                unsigned char *eptr, *sptr;
+                unsigned char *vstr;
+                unsigned int vlen;
+                long long vlong;
+                eptr = ziplistIndex(zl,0);
+                sptr = ziplistNext(zl,eptr);
+                while (len > 0) {
+                    fakeClient->argv[0] = shared.zadd;
+                    incrRefCount(shared.zadd);
+                    fakeClient->argv[1] = key;
+                    incrRefCount(key);
+                    int i = 2;
+                    do {
+                        ziplistGet(eptr,&vstr,&vlen,&vlong);
+                        assert(vstr != NULL);   
+                        printf("field [key] %s %s\r\n", key->ptr, vstr);                 
+                        double score = zzlGetScore(sptr);
+                        fakeClient->argv[i++] = createStringObjectFromLongDouble((long double)score, 1);
+                        zzlNext(zl,&eptr,&sptr);
+                        fakeClient->argv[i++] = createRawStringObject(vstr, vlen);
+                        len--;
+                    } while (eptr != NULL && i < MAX_FAKECLIENT_ARGV);
+                    fakeClient->argc = i;
+                    processInputRdb(fakeClient);
+                }
+
+            } else if (val->encoding == OBJ_ENCODING_SKIPLIST) {
+                zset *zs = val->ptr;
+                zskiplist *zsl = zs->zsl;
+                zskiplistNode *ln;
+                sds ele;
+                /* Check if starting point is trivial, before doing log(N) lookup. */  
+                ln = zsl->header->level[0].forward;
+                while(len > 0) {
+                    fakeClient->argv[0] = shared.zadd;
+                    incrRefCount(shared.zadd);
+                    fakeClient->argv[1] = key;
+                    incrRefCount(key);
+                    int i = 2;
+                    do {
+                        ele = ln->ele;
+                        // addReplyBulkCBuffer(c,ele,sdslen(ele));
+                        long double score = (long double)ln->score;
+                        printf("zadd %s %.17Lf %s", key->ptr, score, ele);
+                        fakeClient->argv[i++] =  createStringObjectFromLongDouble(score, 1);
+                        fakeClient->argv[i++] = createRawStringObject(ele, sdslen(ele));
+                        
+                        ln = ln->level[0].forward;
+                        len--;
+                    } while(ln != NULL && i < MAX_FAKECLIENT_ARGV);
+                    fakeClient->argc = i;
+                    processInputRdb(fakeClient);
+                }
+            } else {
+                serverPanic("Unknown sorted set encoding");
+            }
+            
+        }
+        break;
         // case OBJ_MODULE: freeModuleObject(o); break;
         default:  {
             serverLog(LL_WARNING, "load data fail key: %s, type: %d", (sds)key->ptr, val->type);

@@ -160,6 +160,7 @@ int REDISMODULE_API_FUNC(RedisModule_GetApi)(const char *, void *);
 int REDISMODULE_API_FUNC(RedisModule_CreateCommand)(RedisModuleCtx *ctx, const char *name, RedisModuleCmdFunc cmdfunc, const char *strflags, int firstkey, int lastkey, int keystep);
 void REDISMODULE_API_FUNC(RedisModule_SetModuleAttribs)(RedisModuleCtx *ctx, const char *name, int ver, int apiver);
 void REDISMODULE_API_FUNC(RedisModule_SetOvc)(RedisModuleCtx *ctx, long long vc);
+void REDISMODULE_API_FUNC(RedisModule_UpdateOvc)(RedisModuleCtx *ctx, long long vc);
 long long REDISMODULE_API_FUNC(RedisModule_GetOvc)(RedisModuleCtx *ctx);
 int REDISMODULE_API_FUNC(RedisModule_IsModuleNameBusy)(const char *name);
 int REDISMODULE_API_FUNC(RedisModule_WrongArity)(RedisModuleCtx *ctx);
@@ -275,6 +276,8 @@ char *REDISMODULE_API_FUNC(RedisModule_LoadStringBuffer)(RedisModuleIO *io, size
 void *REDISMODULE_API_FUNC(RedisModule_LoadSds)(RedisModuleIO *io);
 void REDISMODULE_API_FUNC(RedisModule_SaveDouble)(RedisModuleIO *io, double value);
 double REDISMODULE_API_FUNC(RedisModule_LoadDouble)(RedisModuleIO *io);
+void REDISMODULE_API_FUNC(RedisModule_SaveLongDouble)(RedisModuleIO *io, long double value);
+long double REDISMODULE_API_FUNC(RedisModule_LoadLongDouble)(RedisModuleIO *io);
 void REDISMODULE_API_FUNC(RedisModule_SaveFloat)(RedisModuleIO *io, float value);
 float REDISMODULE_API_FUNC(RedisModule_LoadFloat)(RedisModuleIO *io);
 void REDISMODULE_API_FUNC(RedisModule_Log)(RedisModuleCtx *ctx, const char *level, const char *fmt, ...);
@@ -338,6 +341,7 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(CreateCommand);
     REDISMODULE_GET_API(SetModuleAttribs);
     REDISMODULE_GET_API(SetOvc);
+    REDISMODULE_GET_API(UpdateOvc);
     REDISMODULE_GET_API(GetOvc);
     REDISMODULE_GET_API(IsModuleNameBusy);
     REDISMODULE_GET_API(WrongArity);
@@ -454,6 +458,8 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(LoadStringBuffer);
     REDISMODULE_GET_API(SaveDouble);
     REDISMODULE_GET_API(LoadDouble);
+    REDISMODULE_GET_API(SaveLongDouble);
+    REDISMODULE_GET_API(LoadLongDouble);
     REDISMODULE_GET_API(SaveFloat);
     REDISMODULE_GET_API(LoadFloat);
     REDISMODULE_GET_API(EmitAOF);
