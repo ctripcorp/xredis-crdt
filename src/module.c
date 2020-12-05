@@ -341,7 +341,8 @@ void* RM_Realloc(void *ptr, size_t bytes) {
 void RM_Free(void *ptr) {
     size_t old_size = zmalloc_used_memory();
     zfree(ptr);
-    add_module_memory_stat_alloc(zmalloc_used_memory() - old_size);
+    size_t free_size = zmalloc_used_memory() - old_size;
+    add_module_memory_stat_alloc(free_size);
 }
 void RM_ZFree(void *ptr) {
     zfree(ptr);
@@ -739,6 +740,19 @@ int RM_CreateCommand(RedisModuleCtx *ctx, const char *name, RedisModuleCmdFunc c
 
 void RM_SetOvc(RedisModuleCtx *ctx, VectorClock vc) {
     getPeerMaster(ctx->client->gid)->vectorClock = vc;
+}
+
+void RM_UpdateOvc(RedisModuleCtx *ctx, VectorClock vc) {
+    CRDT_Master_Instance* instance = getPeerMaster(ctx->client->gid);
+    if(instance != NULL) {
+        VectorClock old_vc = instance->vectorClock;
+        VectorClock new_vc = vectorClockMerge(old_vc, vc);
+        instance->vectorClock = new_vc;
+        if(!isNullVectorClock(old_vc)) {
+            freeVectorClock(old_vc);
+        }
+    }
+    
 }
 VectorClock RM_GetOvc(RedisModuleCtx *ctx) {
     return getPeerMaster(ctx->client->gid)->vectorClock;
@@ -3133,11 +3147,11 @@ robj **moduleCreateArgvFromUserFormat(const char *cmdname, const char *fmt, int 
                  argv[argc++] = v[i];
              }
         } else if (*p == 'a') {
-            char **v = va_arg(ap, void*);
+            sds *v = va_arg(ap, void*);
             size_t vlen = va_arg(ap, size_t);
             argv_size += vlen-1;
             argv = zrealloc(argv,sizeof(robj*)*argv_size);
-
+            
             size_t i = 0;
             for (i = 0; i < vlen; i++) {
                  argv[argc++] = createStringObject(v[i],sdslen(v[i]));
@@ -3830,6 +3844,18 @@ loaderr:
     return 0; /* Never reached. */
 }
 
+void RM_SaveLongDouble(RedisModuleIO *io, long double value) {
+    sds str = sdsnewlen((char*)&value, sizeof(long double));
+    RM_SaveStringBuffer(io, str, sdslen(str));
+    sdsfree(str);
+}
+long double RM_LoadLongDouble(RedisModuleIO *io) {
+    sds str = RM_LoadSds(io);
+    long double value = *(long double*)str;
+    assert(sdslen(str) == sizeof(long double));
+    sdsfree(str);
+    return value;
+}
 
 
 /* --------------------------------------------------------------------------
@@ -4622,6 +4648,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(CreateCommand);
     REGISTER_API(SetModuleAttribs);
     REGISTER_API(SetOvc);
+    REGISTER_API(UpdateOvc);
     REGISTER_API(GetOvc);
     REGISTER_API(IsModuleNameBusy);
     REGISTER_API(WrongArity);
@@ -4729,6 +4756,8 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(LoadStringBuffer);
     REGISTER_API(SaveDouble);
     REGISTER_API(LoadDouble);
+    REGISTER_API(SaveLongDouble);
+    REGISTER_API(LoadLongDouble);
     REGISTER_API(SaveFloat);
     REGISTER_API(LoadFloat);
     REGISTER_API(EmitAOF);
