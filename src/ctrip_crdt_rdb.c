@@ -242,6 +242,7 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
         dictReleaseIterator(di);
 
         d = db->deleted_keys;
+       
         di = dictGetSafeIterator(d);
         if (!di) return C_ERR;
         if (dictSize(d) != 0) {
@@ -791,6 +792,7 @@ int data2CrdtData(client* fakeClient,robj* key, robj* val) {
                 i = 2;
                 do {
                     fakeClient->argv[i++] = createRawStringObject(field, sdslen(field));
+                    sdsfree(field);
                     len--;
                 } while ((field = setTypeNextObject(si)) != NULL && i < MAX_FAKECLIENT_ARGV);
                 fakeClient->argc = i;
@@ -817,8 +819,7 @@ int data2CrdtData(client* fakeClient,robj* key, robj* val) {
                     int i = 2;
                     do {
                         ziplistGet(eptr,&vstr,&vlen,&vlong);
-                        assert(vstr != NULL);   
-                        printf("field [key] %s %s\r\n", key->ptr, vstr);                 
+                        assert(vstr != NULL);                   
                         double score = zzlGetScore(sptr);
                         fakeClient->argv[i++] = createStringObjectFromLongDouble((long double)score, 1);
                         zzlNext(zl,&eptr,&sptr);
@@ -846,7 +847,6 @@ int data2CrdtData(client* fakeClient,robj* key, robj* val) {
                         ele = ln->ele;
                         // addReplyBulkCBuffer(c,ele,sdslen(ele));
                         long double score = (long double)ln->score;
-                        printf("zadd %s %.17Lf %s", key->ptr, score, ele);
                         fakeClient->argv[i++] =  createStringObjectFromLongDouble(score, 1);
                         fakeClient->argv[i++] = createRawStringObject(ele, sdslen(ele));
                         

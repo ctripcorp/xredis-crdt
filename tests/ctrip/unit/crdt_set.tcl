@@ -39,10 +39,10 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
         set peer_bk_gid 3
         set peer_bk_host [srv 0 host]
         set peer_bk_port [srv 0 port]
+        set peer_bk_log [srv 0 stdout]
         $peer_bk config crdt.set repl-diskless-sync-delay 1
         $master peerof $peer_bk_gid $peer_bk_host $peer_bk_port
         wait_for_peer_sync $master
-        puts [$peer_bk crdt.info  replication]
         test "sadd" {
             test {SADD, SCARD, SISMEMBER, SMEMBERS basics - intset} {
                 assert_equal 1 [$master sadd myset1 16]
@@ -208,6 +208,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 puts [$master crdt.sismember myset25 16]
                 # print_log_file $master_log
             }
+            
             test {spop2} {
                 
                 # assert_equal 1 [$master sadd myset14 16]
@@ -220,6 +221,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 # print_log_file $master_log
             }
         }
+       
         start_server {tags {"master-slave"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
             set slave [srv 0 client]
             set slave_log [srv 0 stdout]
@@ -446,6 +448,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                             }
                             assert_equal [$master crdt.datainfo myset63] [$slave crdt.datainfo myset63]
                             assert_equal [$master crdt.datainfo myset63] [$peer crdt.datainfo myset63]
+                            puts "abc"
                         }
 
                     }
@@ -456,3 +459,4 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
         }
     }
 }
+
