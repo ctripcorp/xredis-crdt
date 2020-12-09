@@ -12,8 +12,9 @@ start_server {tags {"crdt-register"} overrides {crdt-gid 1} config {crdt.conf} m
 
     test {"[crdt_register.tcl]SET and GET"} {
         r set x foobar
-        set info [r crdt.dataInfo x]
-        assert_equal [string match  "type: lww_register, gid: 1, timestamp: *, vector-clock: 1:1, val: foobar" [lindex $info 0]] 1
+        set info [r crdt.datainfo x]
+        puts $info
+        assert_equal [string match  "type: lww_register, gid: 1, timestamp: *, vector-clock: 1:1, val: foobar\n" [lindex $info 0]] 1
         r get x
     } {foobar}
 
@@ -42,7 +43,7 @@ start_server {tags {"crdt-register"} overrides {crdt-gid 1} config {crdt.conf} m
         after 1
         r CRDT.SET key val2 1 [clock milliseconds] "1:101" 
         set info [r crdt.dataInfo key]
-        assert_equal [string match  "type: lww_register, gid: 1, timestamp: *, vector-clock: 1:101;2:100, val: val2" [lindex $info 0]] 1
+        assert_equal [string match  "type: lww_register, gid: 1, timestamp: *, vector-clock: 1:101;2:100, val: val2\n" [lindex $info 0]] 1
         r get key
     } {val2}
 
@@ -106,7 +107,7 @@ start_server {tags {"crdt-register"} overrides {crdt-gid 1} config {crdt.conf} m
     test {"info tombstone"} {
         r "CRDT.DEL_REG" k13 "2" [clock milliseconds] "2:101;3:100" "2:101;3:100"
         set info [r crdt.dataInfo k13]
-        assert_equal [string match  "type: lww_reigster_tomsbtone, gid: 2, timestamp: *, vector-clock: 2:101;3:100" [lindex $info 0]] 1
+        assert_equal [string match  "type: lww_reigster_tomsbtone, gid: 2, timestamp: *, vector-clock: 2:101;3:100\n" [lindex $info 0]] 1
         puts $info
     }
 }

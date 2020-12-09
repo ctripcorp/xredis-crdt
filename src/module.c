@@ -245,6 +245,22 @@ static void zsetKeyReset(RedisModuleKey *key);
  * Heap allocation raw functions
  * -------------------------------------------------------------------------- */
 
+#include <stdio.h>
+#include <execinfo.h>
+#define STACK_SIZE 1000
+static void debug_memory(size_t memory, size_t num)
+{
+    void *trace[STACK_SIZE];
+    size_t size = backtrace(trace, STACK_SIZE);
+    num = min(num, size - 1);
+    char **symbols = (char **)backtrace_symbols(trace,size);
+    for (size_t i = 0; i<num; i++) {
+        printf("%d--->%s\n", i, symbols[i+1]);
+    }
+    printf("use memory:[%zu]\n", memory);
+    free(symbols);
+    return;
+}
 /* Use like malloc(). Memory allocated with this function is reported in
  * Redis INFO memory, used for keys eviction according to maxmemory settings
  * and in general is taken into account as memory allocated by Redis.
@@ -262,7 +278,13 @@ static size_t module_memory = 0;
 void *RM_Alloc(size_t bytes) {
     size_t old_size = zmalloc_used_memory();
     void* r = zmalloc(bytes);
-    add_module_memory_stat_alloc(zmalloc_used_memory() - old_size);
+    size_t memory = zmalloc_used_memory() - old_size;
+
+    // #if defined (TCL_TEST)
+    //     debug_memory(memory, 3);
+    // #endif
+
+    add_module_memory_stat_alloc(memory);
     return r;
 }
 size_t RM_ModuleMemory() {
@@ -277,11 +299,6 @@ size_t sds_memory(const sds ptr) {
     #ifdef HAVE_MALLOC_SIZE
          return zmalloc_size(sdsAllocPtr(ptr));
     #else
-        // size_t old_size = zmalloc_used_memory();
-        // void* d = sdsdup(ptr);
-        // size_t used = zmalloc_used_memory() - old_size;
-        // sdsfree(d);
-        // return used;
         void *realptr = (char*)(sdsAllocPtr(ptr))-PREFIX_SIZE;
         size_t oldsize = *((size_t*)realptr);
         return oldsize + PREFIX_SIZE;
@@ -342,6 +359,9 @@ void RM_Free(void *ptr) {
     size_t old_size = zmalloc_used_memory();
     zfree(ptr);
     size_t free_size = zmalloc_used_memory() - old_size;
+    // #if defined (TCL_TEST)
+    //     debug_memory(free_size, 3);
+    // #endif
     add_module_memory_stat_alloc(free_size);
 }
 void RM_ZFree(void *ptr) {
@@ -3853,6 +3873,7 @@ long double RM_LoadLongDouble(RedisModuleIO *io) {
     sds str = RM_LoadSds(io);
     long double value = *(long double*)str;
     assert(sdslen(str) == sizeof(long double));
+    add_module_memory_stat_alloc(-sds_memory(str));
     sdsfree(str);
     return value;
 }
