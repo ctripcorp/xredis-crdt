@@ -1954,6 +1954,7 @@ int RM_SaveModuleValue(rio* rio, moduleType *t, void* value) {
     t->rdb_save(&io, value);
     return io.error? C_ERR: C_OK;
 }
+
 void closeModuleKey(void* k) {
     RedisModuleKey *key = k;
     if (key == NULL) return;
@@ -2026,6 +2027,11 @@ int RM_DeleteTombstone(RedisModuleKey *key) {
         dictDelete(key->db->deleted_keys,key->key->ptr);
         key->tombstone = NULL;
     }
+    return REDISMODULE_OK;
+}
+
+int RM_DeleteTombstoneByKey(RedisModuleCtx* ctx, RedisModuleString* key) {
+    dictDelete(ctx->client->db->deleted_keys, key->ptr);
     return REDISMODULE_OK;
 }
 
@@ -3615,6 +3621,19 @@ void *RM_ModuleTypeGetTombstone(RedisModuleKey *key) {
     return mv->value;
 }
 
+void* RM_ModuleGetValue(RedisModuleCtx* ctx,RedisModuleString* keyname) {
+    robj* value = lookupKeyWrite(ctx->client->db, keyname);
+    if(value == NULL) return NULL;
+    moduleValue* mv = value->ptr;
+    return mv->value;
+}
+
+void* RM_ModuleGetTombstone(RedisModuleCtx* ctx, RedisModuleString* keyname) {
+    robj* value = lookupTombstoneKey(ctx->client->db, keyname);
+    if(value == NULL) return NULL;
+    moduleValue* mv = value->ptr;
+    return mv->value;
+}
 
 /* The API provided to the rest of the Redis core is a simple function:
  *
@@ -4735,6 +4754,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(ReplicationFeedRobjToAllSlaves);
     REGISTER_API(DeleteKey);
     REGISTER_API(DeleteTombstone);
+    REGISTER_API(DeleteTombstoneByKey);
     REGISTER_API(UnlinkKey);
     REGISTER_API(StringSet);
     REGISTER_API(StringDMA);
@@ -4766,6 +4786,8 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(ModuleTypeLoadRdbAddValue);
     REGISTER_API(ModuleTypeGetType);
     REGISTER_API(ModuleTypeGetValue);
+    REGISTER_API(ModuleGetValue);
+    REGISTER_API(ModuleGetTombstone);
     REGISTER_API(SaveUnsigned);
     REGISTER_API(LoadUnsigned);
     REGISTER_API(SaveSigned);

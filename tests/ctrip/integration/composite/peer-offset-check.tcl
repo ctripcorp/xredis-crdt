@@ -221,6 +221,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                     [lindex $peers 1] config crdt.set repl-timeout 600
                     [lindex $peers 0] debug set-crdt-ovc 0
                     [lindex $peers 1] debug set-crdt-ovc 0
+                    after 1000
                     [lindex $slaves 0] debug set-crdt-ovc 0
                     [lindex $slaves 1] debug set-crdt-ovc 0
 
@@ -249,6 +250,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                     [lindex $peers 1] config crdt.set repl-timeout 600
                     [lindex $peers 0] debug set-crdt-ovc 0
                     [lindex $peers 1] debug set-crdt-ovc 0
+                    after 1000
                     [lindex $slaves 0] debug set-crdt-ovc 0
                     [lindex $slaves 1] debug set-crdt-ovc 0
 
@@ -388,6 +390,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                     [lindex $peers 1] config crdt.set repl-timeout 600
                     [lindex $peers 0] debug set-crdt-ovc 0
                     [lindex $peers 1] debug set-crdt-ovc 0
+                    after 1000
                     [lindex $slaves 0] debug set-crdt-ovc 0
                     [lindex $slaves 1] debug set-crdt-ovc 0
 
@@ -600,6 +603,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
 
                         [lindex $peers 0] debug set-crdt-ovc 0
                         [lindex $peers 1] debug set-crdt-ovc 0
+                        after 1000
                         [lindex $slaves 0] debug set-crdt-ovc 0
                         [lindex $slaves 1] debug set-crdt-ovc 0
                         after 300
@@ -735,6 +739,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                     [lindex $peers 1] config crdt.set repl-timeout 600
                     [lindex $peers 0] debug set-crdt-ovc 0
                     [lindex $peers 1] debug set-crdt-ovc 0
+                    after 1000
                     [lindex $slaves 0] debug set-crdt-ovc 0
                     [lindex $slaves 1] debug set-crdt-ovc 0
 
@@ -872,6 +877,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                     [lindex $peers 1] config crdt.set repl-timeout 600
                     [lindex $peers 0] debug set-crdt-ovc 0
                     [lindex $peers 1] debug set-crdt-ovc 0
+                    after 1000
                     [lindex $slaves 0] debug set-crdt-ovc 0
                     [lindex $slaves 1] debug set-crdt-ovc 0
                 }

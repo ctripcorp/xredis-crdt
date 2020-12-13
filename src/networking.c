@@ -1419,7 +1419,9 @@ void processInputBuffer(client *c) {
             if (c->flags & CLIENT_MASTER && iAmMaster() != C_OK) {
                 c->gid = -1;
             }
-            printCommand(c);
+            #if defined(DEBUG) 
+                printCommand(c);
+            #endif
             /* Only reset the client when the command was executed. */
             if (processCommand(c) == C_OK) {
                 if (c->flags & CLIENT_MASTER && iAmMaster() != C_OK) {

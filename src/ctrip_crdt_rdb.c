@@ -780,7 +780,7 @@ int data2CrdtData(client* fakeClient,robj* key, robj* val) {
         }      
         break;
         case OBJ_SET: {
-            len = hashTypeLength(val);
+            len = setTypeSize(val);
             int i = 0;
             setTypeIterator* si = setTypeInitIterator(val);
             sds field = setTypeNextObject(si);
