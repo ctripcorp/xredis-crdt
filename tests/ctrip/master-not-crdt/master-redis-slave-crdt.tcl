@@ -238,6 +238,31 @@ set checks(4) {
     assert_equal [$redis SISMEMBER key9 s1] 0
 }
 
+set adds(5) {
+    $redis zadd myzset1 1 a 
+    $redis zadd myzset2 1 a 2 b
+    $redis zadd myzset3 1 a 2 b
+    $redis zrem myzset3 a 
+    $redis zadd myzset4 1 a 2 b
+    $redis del myzset4
+    $redis zadd myzset5 1 a 2 b
+    $redis zrem myzset5 a 
+    $redis zadd myzset5 3 a 
+    $redis zadd myzset6 1 a 2 b
+    $redis del myzset6 a 
+    $redis zadd myzset6 3 a 
+}
+set checks(5) {
+    assert_equal [$redis zscore myzset1 a] 1
+    assert_equal [$redis zscore myzset2 a] 1
+    assert_equal [$redis zscore myzset2 b] 2
+    assert_equal [$redis zscore myzset3 a] {}
+    assert_equal [$redis zscore myzset3 b] 2
+    assert_equal [$redis zscore myzset4 a] {}
+    assert_equal [$redis zscore myzset4 b] {}
+    assert_equal [$redis zscore myzset5 a] 3
+    assert_equal [$redis zscore myzset6 a] 3
+}
 
 ####### tests
 

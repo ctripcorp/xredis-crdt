@@ -598,4 +598,14 @@ start_server {
             }
         }
     }
+
+    test "del + set" {
+        r CRDT.Sadd k 2 1607495702765 2:703 a b c
+        r CRDT.Sadd k 1 1607495702765 1:648 a b c
+        r CRDT.Srem k 1 1607495702766 1:649 a
+        r CRDT.Srem k 2 1607495702766 2:704 b
+        r CRDT.DEL_Set k 2 1607495702766 2:705 2:705
+        r sadd k a 
+        assert_equal [r sismember k a] 1
+    }
 }

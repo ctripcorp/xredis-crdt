@@ -31,17 +31,17 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
     set master_host [srv 0 host]
     set master_port [srv 0 port]
     set master_log [srv 0 stdout]
+    # set master [redis "127.0.0.1" 6379]
+    # $master select 9
+    # set master_gid 1
+    # set master_host "127.0.0.1"
+    # set master_port 6379
     $master config set repl-diskless-sync-delay 1
     $master config crdt.set repl-diskless-sync-delay 1
-    
-    start_server {tags {"crdt-set2"} overrides {crdt-gid 3} config {crdt.conf} module {crdt.so} } {
-        set peer_bk [srv 0 client]
-        set peer_bk_gid 3
-        set peer_bk_host [srv 0 host]
-        set peer_bk_port [srv 0 port]
-        set peer_bk_log [srv 0 stdout]
-        $peer_bk config crdt.set repl-diskless-sync-delay 1
-        $master peerof $peer_bk_gid $peer_bk_host $peer_bk_port
+    $master crdt.debug_gc set 0
+
+
+        
         wait_for_peer_sync $master
         test "sadd" {
             test {SADD, SCARD, SISMEMBER, SMEMBERS basics - intset} {
@@ -61,7 +61,6 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 assert_equal [$master crdt.sismember myset1 16] [$master crdt.sismember myset1 18]
                 assert_equal {16 17 18} [lsort [$master smembers myset1]]
             }
-            puts [$peer_bk crdt.info  replication]
             test {crdt.sadd1} {
                 
                 $master crdt.sadd myset2 1 10 1:1 16 17
@@ -95,13 +94,24 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 assert_equal {16} [lsort [$master smembers myset5]]
             }
             
-            test {sadd - srem -sadd } {
+            test {sadd - srem -crdt.sadd } {
                 $master sadd myset6 16
                 $master srem myset6 16 
                 $master crdt.sadd myset6 1 1000 1:10 16
+                
                 assert_equal 1 [$master scard myset6]
                 assert_equal 1 [$master sismember myset6 16]
                 assert_equal {16} [lsort [$master smembers myset6]]
+
+            }
+            test {sadd - del - crdt.sadd } {
+                $master sadd myset7 16
+                $master del myset7  
+                $master crdt.sadd myset7 1 1000 1:14 16
+                puts [$master crdt.datainfo myset7]
+                assert_equal 1 [$master scard myset7]
+                assert_equal 1 [$master sismember myset7 16]
+                assert_equal {16} [lsort [$master smembers myset7]]
 
             }
             
@@ -193,7 +203,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
             test {crdt.sadd srem} {
                 $master crdt.sadd myset23 1 20 {1:2;3:1} 16
                 $master del myset23 
-                $master crdt.sadd myset23 1 20 3:1 16
+                $master crdt.sadd myset23 3 20 3:1 16
                 assert_equal 1 [$master sismember myset23 16]
             }
         }
@@ -225,8 +235,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
         start_server {tags {"master-slave"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
             set slave [srv 0 client]
             set slave_log [srv 0 stdout]
+            $slave crdt.debug_gc set 0
             $slave slaveof $master_host $master_port
-            # $slave peerof $peer_bk_gid $peer_bk_host $peer_bk_port
             wait $master 0 info $master_log
             # print_log_file $slave_log
             test "master-slave-sadd" {
@@ -235,29 +245,34 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 assert_equal {16} [lsort [$slave smembers myset3]]
             }
             test "master-slave-srem" {
-                assert_equal [$master crdt.datainfo myset11] [$slave crdt.datainfo myset11]
+                assert_equal [string length [$master crdt.datainfo myset11]] [string length [$slave crdt.datainfo myset11]]
                 assert_equal [$master crdt.datainfo myset12] [$slave crdt.datainfo myset12]
-                assert_equal [$master crdt.datainfo myset13] [$slave crdt.datainfo myset13]
+                assert_equal [string length [$master crdt.datainfo myset13]] [string length [$slave crdt.datainfo myset13]]
                 assert_equal [$master crdt.datainfo myset14] [$slave crdt.datainfo myset14]
                 assert_equal [$master crdt.datainfo myset15] [$slave crdt.datainfo myset15]
                 assert_equal [$master crdt.datainfo myset16] [$slave crdt.datainfo myset16]
                 assert_equal [$master crdt.datainfo myset17] [$slave crdt.datainfo myset17]
                 assert_equal [$master crdt.datainfo myset18] [$slave crdt.datainfo myset18]
-                assert_equal [$master crdt.datainfo myset19] [$slave crdt.datainfo myset19]
+                assert_equal [string length [$master crdt.datainfo myset19]] [string length [$slave crdt.datainfo myset19]]
             }
             test "master-slave-del" {
                 assert_equal [$master crdt.datainfo myset21] [$slave crdt.datainfo myset21]
                 assert_equal [$master crdt.datainfo myset22] [$slave crdt.datainfo myset22]
             }
             test "master-slave-spop" {
-                assert_equal [$master crdt.datainfo myset25] [$slave crdt.datainfo myset25]
-                assert_equal [$master crdt.datainfo myset26] [$slave crdt.datainfo myset26]
+                assert_equal [string length [$master crdt.datainfo myset25]] [string length [$slave crdt.datainfo myset25]]
+                assert_equal [string length [$master crdt.datainfo myset26]] [string length [$slave crdt.datainfo myset26]]
             }
             
             start_server {tags {"set3"} overrides {crdt-gid 2} config {crdt.conf} module {crdt.so} } {
                 set peer [srv 0 client]
+                # set peer [redis "127.0.0.1" 6379]
+                # $peer select 9
+                # set master_gid 1
+                # set master_host "127.0.0.1"
+                # set master_port 6379
                 set peer_log [srv 0 stdout]
-                $peer peerof $peer_bk_gid $peer_bk_host $peer_bk_port
+                $peer crdt.debug_gc set 0
                 test "before-master-master" {
                     test "add " {
                         test "will be merge add-add" {
@@ -271,6 +286,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                             $peer crdt.srem myset5 3 1000 {1:1;3:10} 16
                         }
                         test "will be merge add-add-tombstone => add wins" {
+                            $peer crdt.sadd myset6 2 1000 {2:2;3:11} 16
                             $peer crdt.sadd myset6 3 1000 {2:2;3:11} 16
                             $peer crdt.srem myset6 3 1000 {1:1;2:1;3:10} 16
                         }
@@ -344,7 +360,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                     
                     test "srem - add => add wins" {
                         assert_equal {16} [lsort [$peer smembers myset16]]
-                        assert_equal "{type: orset_set, vector-clock: 2:2} {type: orset_set_tombstone, vector-clock: 1:107}" [$peer crdt.sismember myset16 16]
+                        assert_equal "{type: orset_set, vector-clock: 2:3} {type: orset_set_tombstone, vector-clock: 1:107}" [$peer crdt.sismember myset16 16]
                     }
                     test "srem - add => srem wins" {
                         puts [$peer crdt.sismember myset17 16]
@@ -360,7 +376,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         puts [$peer crdt.sismember myset19 16]
                     }
                     # assert_equal [$master crdt.datainfo myset13] [$peer crdt.datainfo myset13]
-                    assert_equal [$master crdt.datainfo myset14] [$peer crdt.datainfo myset14]
+                    assert_equal [$master smembers myset14] [$peer smembers myset14]
                     assert_equal [$master crdt.datainfo myset15] [$peer crdt.datainfo myset15]
                 }
                 test "master-master-del" {
@@ -457,6 +473,6 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 
             }
         }
-    }
+    
 }
 

@@ -231,6 +231,7 @@ const char *REDISMODULE_API_FUNC(RedisModule_CallReplyStringPtr)(RedisModuleCall
 RedisModuleString *REDISMODULE_API_FUNC(RedisModule_CreateStringFromCallReply)(RedisModuleCallReply *reply);
 int REDISMODULE_API_FUNC(RedisModule_DeleteKey)(RedisModuleKey *key);
 int REDISMODULE_API_FUNC(RedisModule_DeleteTombstone)(RedisModuleKey *key);
+int REDISMODULE_API_FUNC(RedisModule_DeleteTombstoneByKey)(RedisModuleCtx *ctx, RedisModuleString* key);
 int REDISMODULE_API_FUNC(RedisModule_UnlinkKey)(RedisModuleKey *key);
 int REDISMODULE_API_FUNC(RedisModule_StringSet)(RedisModuleKey *key, RedisModuleString *str);
 char *REDISMODULE_API_FUNC(RedisModule_StringDMA)(RedisModuleKey *key, size_t *len, int mode);
@@ -264,6 +265,8 @@ int REDISMODULE_API_FUNC(RedisModule_ModuleTypeSetValue)(RedisModuleKey *key, Re
 int REDISMODULE_API_FUNC(RedisModule_ModuleTypeLoadRdbAddValue)(RedisModuleKey *key, RedisModuleType *mt, void *value);
 RedisModuleType *REDISMODULE_API_FUNC(RedisModule_ModuleTypeGetType)(RedisModuleKey *key);
 void *REDISMODULE_API_FUNC(RedisModule_ModuleTypeGetValue)(RedisModuleKey *key);
+void *REDISMODULE_API_FUNC(RedisModule_ModuleGetValue)(RedisModuleCtx *ctx, RedisModuleString* name);
+void *REDISMODULE_API_FUNC(RedisModule_ModuleGetTombstone)(RedisModuleCtx *ctx, RedisModuleString* name);
 void REDISMODULE_API_FUNC(RedisModule_SaveUnsigned)(RedisModuleIO *io, uint64_t value);
 uint64_t REDISMODULE_API_FUNC(RedisModule_LoadUnsigned)(RedisModuleIO *io);
 void REDISMODULE_API_FUNC(RedisModule_SaveSigned)(RedisModuleIO *io, int64_t value);
@@ -413,6 +416,7 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(CrdtMultiWrappedReplicate);
     REDISMODULE_GET_API(DeleteKey);
     REDISMODULE_GET_API(DeleteTombstone);
+    REDISMODULE_GET_API(DeleteTombstoneByKey);
     REDISMODULE_GET_API(UnlinkKey);
     REDISMODULE_GET_API(StringSet);
     REDISMODULE_GET_API(StringDMA);
@@ -447,6 +451,8 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(ModuleTypeLoadRdbAddValue);
     REDISMODULE_GET_API(ModuleTypeGetType);
     REDISMODULE_GET_API(ModuleTypeGetValue);
+    REDISMODULE_GET_API(ModuleGetValue);
+    REDISMODULE_GET_API(ModuleGetTombstone);
     REDISMODULE_GET_API(SaveUnsigned);
     REDISMODULE_GET_API(LoadUnsigned);
     REDISMODULE_GET_API(SaveSigned);
