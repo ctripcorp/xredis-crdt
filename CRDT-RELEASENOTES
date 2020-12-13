@@ -10,6 +10,15 @@ HIGH:     There is a critical bug that may affect a subset of users. Upgrade!
 CRITICAL: There is a critical bug affecting MOST USERS. Upgrade ASAP.
 --------------------------------------------------------------------------------
 ================================================================================
+XRedis-CRDT 1.0.9 Released Sun Dec 13 23:42:49 CST 2020
+================================================================================
+Upgrade urgency LOW: Compared with the previous version, there are some improvements, mainly:
+Major things: 
+* [feature] add kv object supports counter related commands
+* [feature] add data structure of sorted set scores 
+* [feature] add data structure of set
+
+================================================================================
 XRedis-CRDT 1.0.8 Released Mon Nov  9 17:40:18 CST 2020
 ================================================================================
 Upgrade urgency HIGH: Compared with the previous version, there are some improvements, mainly:
