@@ -109,6 +109,24 @@ start_server {tags {"multi"} overrides {crdt-gid 1} config {crdt.conf} module {c
         r exec
     } {}
 
+    test {EXEC fail on WATCHed key (mset) modified (1 key of 1 watched)} {
+        r set x 30
+        r watch x
+        r mset x 40
+        r multi
+        r ping
+        r exec
+    } {}
+
+    test {EXEC fail on WATCHed key (mset) modified (1 key of 1 watched)} {
+        r set x a30
+        r watch x
+        r mset x a40
+        r multi
+        r ping
+        r exec
+    } {}
+
     test {EXEC fail on WATCHed key modified (1 key of 5 watched)} {
         r set x 30
         r watch a b x k z

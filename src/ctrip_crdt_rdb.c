@@ -880,8 +880,8 @@ error:
 int expire2CrdtExpire(client* fakeClient, robj* key, long long expiretime) {
     fakeClient->argc = 3;
     // fakeClient->argv = zmalloc(sizeof(robj*)*3);
-    fakeClient->argv[0] = shared.expireat;
-    incrRefCount(shared.expireat); 
+    fakeClient->argv[0] = shared.pexpireat;
+    incrRefCount(shared.pexpireat); 
     fakeClient->argv[1] = key;
     incrRefCount(key);
     fakeClient->argv[2] = createStrRobjFromLongLong(expiretime);

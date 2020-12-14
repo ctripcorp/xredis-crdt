@@ -1892,11 +1892,18 @@ void* RM_DbEntryGetVal(RedisModuleCtx *ctx, dictEntry* de) {
 }
 int RM_DbEntrySetVal(RedisModuleCtx *ctx, RedisModuleString* keyname, dictEntry* de, moduleType* type, void* val) {
     robj *o = createModuleObject(type,val);
-    redisDb *db= ctx->client->db;
+    redisDb *db = ctx->client->db;
     dictSetVal(db->dict, de, o);
     signalModifiedKey(db, keyname);
     return 0;
 }
+
+int RM_SignalModifiedKey(RedisModuleCtx* ctx, RedisModuleString* keyname) {
+    redisDb *db = ctx->client->db;
+    signalModifiedKey(db, keyname);
+    return 1;
+}
+
 void * RM_DbGetValue(RedisModuleCtx *ctx, RedisModuleString *keyname, moduleType* type, int* error) {
     robj* value = lookupKeyWrite(ctx->client->db,keyname);
     if(value == NULL) {
@@ -4714,6 +4721,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(DbEntrySetVal);
     REGISTER_API(DbGetValue);
     REGISTER_API(DbSetValue);
+    REGISTER_API(SignalModifiedKey);
     REGISTER_API(GetKey);
     REGISTER_API(GetModuleTypeId);
     REGISTER_API(GetModuleTypeById);

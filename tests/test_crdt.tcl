@@ -13,9 +13,9 @@ source tests/support/util.tcl
 source tests/support/aof.tcl
 source tests/test_script/utils.tcl
 set ::all_tests {
+    ctrip/unit/expire
     ctrip/master-not-crdt/convert-set-on-load
     ctrip/master-not-crdt/convert-zset-on-load
-    ctrip/unit/multi
     ctrip/master-not-crdt/slave-update-peer-repl-offset
     ctrip/integration/master-slave/slave-update-peer-offset-when-master-slave-add-sync
     ctrip/integration/composite/peer-offset-check
@@ -32,16 +32,14 @@ set ::all_tests {
     ctrip/basic/set
     ctrip/unit/gc
     ctrip/integration/master-master/replication
-    ctrip/unit/multi
     ctrip/master-not-crdt/slave-update-peer-repl-offset
-
     ctrip/readonly/basic_crdt_type_del
     ctrip/basic/basic_crdt_type_del
     
     ctrip/basic/basic_type
     ctrip/master-not-crdt/slave-redis
     ctrip/unit/aof
-    ctrip/unit/expire
+    
     ctrip/unit/crdt_publish
     ctrip/integration/master-slave/rdb3
     ctrip/integration/bug/redis-unfree-client-when-master-to-slave
@@ -94,7 +92,7 @@ set ::all_tests {
     
     ctrip/master-not-crdt/crdt_replid_reuse
     ctrip/integration/bug/not_remember_slave_key_with_expire_when_master_is_non_crdt
-    
+
     ctrip/readonly/basic_crdt_type
     ctrip/readonly/basic_type
 
@@ -121,7 +119,6 @@ set ::all_tests {
     ctrip/integration/master-slave/psync2
     ctrip/integration/master-slave/replication-psync
     
- 
     ctrip/unit/crdt_del
     ctrip/unit/merge_different_type
     ctrip/unit/crdt_hdel_mem_leak
@@ -137,30 +134,10 @@ set ::all_tests {
     ctrip/integration/master-slave/psync2-reg
     
     ctrip/unit/zset
-    
-    
-    
-
-    
-    
 }   
 
 set ::temp_tests { 
     
-    #
-    
-
-    
-
-    
-
-    
-    
-
-    
-
-    
-
     #
     test_script/rc
     test_script/zadd

@@ -176,6 +176,7 @@ void *REDISMODULE_API_FUNC(RedisModule_DbEntryGetVal)(RedisModuleCtx *ctx, void*
 void *REDISMODULE_API_FUNC(RedisModule_DbEntrySetVal)(RedisModuleCtx *ctx, RedisModuleString* keyname, void* de, RedisModuleType* type, void* val);
 void *REDISMODULE_API_FUNC(RedisModule_DbAddOrFind)(RedisModuleCtx *ctx, RedisModuleString *keyname, RedisModuleType* type);
 int REDISMODULE_API_FUNC(RedisModule_DbSetValue)(RedisModuleCtx *ctx, RedisModuleString *keyname, RedisModuleType* type,void* val);
+int REDISMODULE_API_FUNC(RedisModule_SignalModifiedKey)(RedisModuleCtx *ctx, RedisModuleString *keyname);
 void *REDISMODULE_API_FUNC(RedisModule_GetKey)(void *db, RedisModuleString *keyname, int mode);
 uint64_t REDISMODULE_API_FUNC(RedisModule_GetModuleTypeId)(RedisModuleType* moduletype);
 int REDISMODULE_API_FUNC(RedisModule_SaveModuleValue)(void* rdb, RedisModuleType* moduletype, void* data);
@@ -371,6 +372,7 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(DbEntrySetVal);
     REDISMODULE_GET_API(DbGetValue);
     REDISMODULE_GET_API(DbSetValue);
+    REDISMODULE_GET_API(SignalModifiedKey);
     REDISMODULE_GET_API(SaveModuleValue);
     REDISMODULE_GET_API(GetModuleTypeId);
     REDISMODULE_GET_API(LoadLen);
