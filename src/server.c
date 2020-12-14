@@ -1433,7 +1433,7 @@ void createSharedObjects(void) {
     shared.sadd = createStringObject("SADD", 4);
     shared.zadd = createStringObject("ZADD", 4);
     shared.crdtexec = createStringObject("CRDT.EXEC", 9);
-    shared.expireat = createStringObject("EXPIREAt", 8);
+    shared.pexpireat = createStringObject("PEXPIREAt", 9);
     for (j = 0; j < OBJ_SHARED_INTEGERS; j++) {
         shared.integers[j] =
             makeObjectShared(createObject(OBJ_STRING,(void*)(long)j));

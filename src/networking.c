@@ -1429,8 +1429,12 @@ void processInputBuffer(client *c) {
                         feedReplicationBacklog(&crdtServer, c->pending_querybuf + c->pending_used_offset, c->read_reploff - c->reploff- sdslen(c->querybuf));
                     } else if(c->gid != -1) {
                         CRDT_Master_Instance* peer = getPeerMaster(c->gid);
-                        if(peer) { //
-                            peer->master->reploff += c->read_reploff - sdslen(c->querybuf) - c->reploff;
+                        if(peer) { 
+                            if(peer->master != NULL) {
+                                peer->master->reploff += c->read_reploff - sdslen(c->querybuf) - c->reploff;
+                            } else {
+                                serverLog(LL_WARNING, "peer client is null, gid:%d", c->gid);
+                            }
                         }
                     }
                 }

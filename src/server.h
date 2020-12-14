@@ -780,7 +780,7 @@ struct sharedObjectsStruct {
     *masterdownerr, *roslaveerr, *execaborterr, *noautherr, *noreplicaserr,
     *busykeyerr, *oomerr, *plus, *messagebulk, *pmessagebulk, *subscribebulk, *crdtsubscribebulk,
     *unsubscribebulk, *uncrdtsubscribebulk, *psubscribebulk, *crdtpsubscribebulk, *punsubscribebulk, *crdtpunsubscribebulk, *del, *unlink, *crdtdel,
-    *rpop, *lpop, *lpush,*set,*hset,*expireat, *emptyscan, *crdtexec, *sadd, *zadd,
+    *rpop, *lpop, *lpush,*set,*hset,*pexpireat, *emptyscan, *crdtexec, *sadd, *zadd,
     *crdtmergeerr,
     *select[PROTO_SHARED_SELECT_CMDS],
     *integers[OBJ_SHARED_INTEGERS],
