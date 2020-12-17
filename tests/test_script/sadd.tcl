@@ -1,12 +1,27 @@
-# $r sadd k [randomValue] [randomValue]
-# test_local_redis "sadd" {
 
-# proc cp {master_log peer_log peer2_log} {
-#     exec cp $master_log ./m.log
-#     exec cp $peer_log ./p.log
-#     exec cp $peer2_log ./p2.log
-# }
-# create_crdts "sadd" {
+proc check {current peer peer2 k} {
+    set m_info [$current crdt.datainfo $k]
+    set p_info [$peer crdt.datainfo $k]
+    set p2_info [$peer2 crdt.datainfo $k]
+    if { $m_info != $p_info }  {
+        puts "master and peer diff" 
+        puts $m_info
+        puts $p_info
+        if {[string length $m_info] != [string length $p_info]} {
+            set run 0
+        }
+    }
+    if { $m_info != $p2_info }  {
+        puts "master and peer2 diff" 
+        puts $m_info
+        puts $p2_info
+        if {[string length $m_info] != [string length $p2_info]} {
+            set run 0
+        }
+    }
+}
+
+
 test_local_redis "sadd" {
 
          

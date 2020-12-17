@@ -172,6 +172,12 @@ proc randomValue {} {
     }
 }
 
+proc randomString {} {
+    randpath {randstring 0 256 alpha} \
+                {randstring 0 256 compr} \
+                {randstring 0 256 binary}
+}
+
 proc randomKey {} {
     randpath {
         # Small enough to likely collide
