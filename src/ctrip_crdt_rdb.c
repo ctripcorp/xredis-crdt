@@ -641,7 +641,10 @@ int rdbSaveAuxFieldCrdt(rio *rdb) {
 int rdbSaveCrdtInfoAuxFields(rio* rdb) {
     sds vclockSds = vectorClockToSds(crdtServer.vectorClock);
     if (rdbSaveAuxFieldStrStr(rdb,"vclock",vclockSds)
-        == -1) return -1;
+        == -1) {
+        sdsfree(vclockSds);
+        return -1;
+    }
     sdsfree(vclockSds);
     if (rdbSaveAuxFieldStrStr(rdb,"crdt-repl-id",crdtServer.replid)
         == -1) return -1;

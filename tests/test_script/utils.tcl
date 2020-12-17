@@ -124,7 +124,7 @@ proc start_local {port dir gid} {
     if { [file exists $dir] != 1} {  
        puts [file mkdir $dir]
     }
-    exec "./src/redis-server" "--crdt-gid" "default" $gid "--loadmodule" "../../crdt-module/crdt.so" "--port" $port "--logfile" "redis.log" "--daemonize" "yes" "--dir" $dir 
+    exec "./src/redis-server" "--crdt-gid" "default" $gid "--loadmodule" "../../crdt-module/crdt.so" "--port" $port "--logfile" "redis.log" "--daemonize" "yes" "--dir" $dir "--protected-mode" "no" 
 }
 
 proc stop_local {host port} {

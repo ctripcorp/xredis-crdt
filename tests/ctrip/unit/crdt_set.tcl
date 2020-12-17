@@ -464,7 +464,6 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                             }
                             assert_equal [$master crdt.datainfo myset63] [$slave crdt.datainfo myset63]
                             assert_equal [$master crdt.datainfo myset63] [$peer crdt.datainfo myset63]
-                            puts "abc"
                         }
 
                     }
