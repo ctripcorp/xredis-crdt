@@ -5,7 +5,7 @@ proc print_log_file {log} {
     puts $content
 }
 
-proc wait { client index type log}  {
+proc wait_sync { client index type log}  {
     set retry 50
     set match_str ""
     append match_str "*slave" $index ":*state=online*"
@@ -22,7 +22,10 @@ proc wait { client index type log}  {
     if {$retry == 0} {
         # error "assertion: Master-Slave not correctly synchronized"
         assert_equal [$client ping] PONG
-        print_log_file $log
+        # if {$log != ""} {
+        #     print_log_file $log
+        # }
+        puts $log
         error "assertion: Master-Slave not correctly synchronized"
     }
 }
@@ -138,26 +141,27 @@ proc set_crdt_config {client} {
                         
 }
 
-proc test_local_redis {type arrange} {
+proc start_local_master_redis3 {type arrange close} {
+    set sport 7000
     set log_file "/redis.log"
     set local_host "127.0.0.1"
 
     set master_dir "./local_crdt/master"
-    set master_port 7000
+    set master_port [incr sport]
     set master_host "127.0.0.1"
     set master_gid 1
     set master_log "$master_dir/$log_file"
 
     set peer_dir "./local_crdt/peer"
     set peer_host "127.0.0.1"
-    set peer_port 7001 
+    set peer_port [incr sport]
     
     set peer_gid 2
     set peer_log "$peer_dir/$log_file"; 
 
     set peer2_dir "./local_crdt/peer2"
     set peer2_host "127.0.0.1"
-    set peer2_port 7002 
+    set peer2_port [incr sport]
     
     set peer2_gid 3
     set peer2_log "$peer2_dir/$log_file"
@@ -184,18 +188,154 @@ proc test_local_redis {type arrange} {
     $peer  peerof $master_gid $master_host $master_port
     $peer2 peerof $master_gid $master_host $master_port
     $peer2 peerof $peer_gid $peer_host $peer_port
-    wait $master 0 crdt.info $master_log
-    wait $master 1 crdt.info $master_log
-    wait $peer 0 crdt.info $peer_log
-    wait $peer 1 crdt.info $peer_log
-    wait $peer2 0 crdt.info $peer2_log
-    wait $peer2 1 crdt.info $peer2_log
+    wait_sync $master 0 crdt.info $master_log
+    wait_sync $master 1 crdt.info $master_log
+    wait_sync $peer 0 crdt.info $peer_log
+    wait_sync $peer 1 crdt.info $peer_log
+    wait_sync $peer2 0 crdt.info $peer2_log
+    wait_sync $peer2 1 crdt.info $peer2_log
     test $type {
         if {[catch [uplevel 0 $arrange ] result]} {
             puts $result
         }
-        stop_local $master_host $master_port
-        stop_local $peer_host $peer_port
-        stop_local $peer2_host $peer2_port
+        if {$close} {
+            stop_local $master_host $master_port
+            stop_local $peer_host $peer_port
+            stop_local $peer2_host $peer2_port
+        }
+        
     }
+}
+
+
+proc start_local_slave_redis3 {type arrange} {
+    set sport 8000
+    set log_file "/redis.log"
+    set local_host "127.0.0.1"
+
+    set slave_dir "./local_crdt/slave"
+    set slave_port [incr sport]
+    set slave_host "127.0.0.1"
+    set slave_gid 1
+    set slave_log "$slave_dir/$log_file"
+
+    set peer_slave_dir "./local_crdt/peer_slave"
+    set peer_slave_host "127.0.0.1"
+    set peer_slave_port [incr sport] 
+    
+    set peer_slave_gid 2
+    set peer_slave_log "$peer_slave_dir/$log_file"; 
+
+    set peer2_slave_dir "./local_crdt/peer2_slave"
+    set peer2_slave_host "127.0.0.1"
+    set peer2_slave_port [incr sport] 
+    
+    set peer2_slave_gid 3
+    set peer2_slave_log "$peer2_slave_dir/$log_file"
+
+    stop_local $slave_host $slave_port
+    stop_local $peer_slave_host $peer_slave_port
+    stop_local $peer2_slave_host $peer2_slave_port
+    start_local  $slave_port $slave_dir $slave_gid
+    start_local  $peer_slave_port $peer_slave_dir $peer_slave_gid 
+    start_local  $peer2_slave_port $peer2_slave_dir $peer2_slave_gid
+    after 1000
+
+    set slave [redis $slave_host $slave_port]
+    set peer_slave [redis $peer_slave_host $peer_slave_port]
+    set peer2_slave [redis $peer2_slave_host $peer2_slave_port]
+
+    set_crdt_config $slave 
+    set_crdt_config $peer_slave
+    set_crdt_config $peer2_slave
+   
+    test $type {
+        if {[catch [uplevel 0 $arrange ] result]} {
+            puts $result
+        }
+        # stop_local $slave_host $slave_port
+        # stop_local $peer_slave_host $peer_slave_port
+        # stop_local $peer2_slave_host $peer2_slave_port
+    }
+}
+
+# proc slaveof_master {slave master_host master_port master} {
+#     $slave slaveof $master_host $master_port 
+#     wait $master 0 info ""
+     
+# }
+
+
+proc check3 {name current peer peer2 k} {
+    set m_info [$current crdt.datainfo $k]
+    set p_info [$peer crdt.datainfo $k]
+    set p2_info [$peer2 crdt.datainfo $k]
+    if { $m_info != $p_info }  {
+        puts [format "%s master and peer diff" $name]
+        puts $k
+        puts $m_info
+        puts $p_info
+        if {[string length $m_info] != [string length $p_info]} {
+            set run 0
+        }
+    }
+    if { $m_info != $p2_info }  {
+        puts [format "%s master and peer2 diff" $name]
+        puts $k
+        puts $m_info
+        puts $p2_info
+        if {[string length $m_info] != [string length $p2_info]} {
+            set run 0
+        }
+    }
+}
+
+proc check_offset {name master slave} {
+    set num 10
+    while {$num} {
+        set master_offset [get_info_replication_attr_value $master info master_repl_offset]
+        set slave_offset [get_info_replication_attr_value $slave info master_repl_offset]
+        if { $master_offset == $slave_offset } {    
+            break;
+        } else {
+            after 200
+            incr num -1
+        }
+    }
+    if {$num == 0} {
+        puts [format "%s check_offset diff" $name]
+        puts [get_info_replication_attr_value $master info master_repl_offset]
+        puts [get_info_replication_attr_value $slave info master_repl_offset]
+    }
+    
+}
+
+proc check_peer_offset {name master peer index} {
+    # puts [$master info replication]
+    set attr [format "peer%d_repl_offset" $index]
+    set num 10
+    while {$num} {
+        set master_offset [get_info_replication_attr_value $master crdt.info master_repl_offset]
+        set peer_offset [get_info_replication_attr_value $peer crdt.info $attr]
+        if { $master_offset == $peer_offset } {
+            break;
+        } else {
+            after 200
+            incr num -1
+        }
+    }
+    if {$num == 0} {
+        puts [format "%s check_peer_offset diff" $name]
+        puts [get_info_replication_attr_value $master crdt.info master_repl_offset]
+        puts [get_info_replication_attr_value $peer crdt.info $attr]
+    }
+}
+
+proc stop_ovc {client} {
+    $client debug set-crdt-ovc 0
+
+}
+
+proc start_ovc {client} {
+    $client debug set-crdt-ovc 1
 }
