@@ -1197,6 +1197,13 @@ int RM_ReplyWithOk(RedisModuleCtx *ctx) {
     return REDISMODULE_OK;
 }
 
+int RM_ReplyWithEmptyScan(RedisModuleCtx *ctx) {
+    client *c = moduleGetReplyClient(ctx);
+    if (c == NULL) return REDISMODULE_OK;
+    addReply(c, shared.emptyscan);
+    return REDISMODULE_OK;
+}
+
 /* Reply with an array type of 'len' elements. However 'len' other calls
  * to `ReplyWith*` style functions must follow in order to emit the elements
  * of the array.
@@ -1666,6 +1673,7 @@ int RM_CheckGid(int gid) {
 }
 void jumpVectorClock() {
     long long qps = getQps();
+    // incrLocalVcUnit(100000);
     incrLocalVcUnit(max(qps * 60 * 24 , 10000));
 }
 void RM_IncrLocalVectorClock (long long delta) {
@@ -1792,7 +1800,7 @@ int RM_SelectDb(RedisModuleCtx *ctx, int newid) {
 int RM_CrdtSelectDb(RedisModuleCtx *ctx, int gid, int newid) {
     int retval = C_OK;
     CRDT_Master_Instance* peerMaster = getPeerMaster(gid);
-    if(peerMaster) {
+    if(peerMaster && peerMaster->master) {
         retval = selectDb(peerMaster->master, newid);
     }
     retval &= selectDb(ctx->client,newid);
@@ -3556,6 +3564,9 @@ int RM_ModuleTypeSetValue(RedisModuleKey *key, moduleType *mt, void *value) {
     if (!(key->mode & REDISMODULE_WRITE) || key->iter) return REDISMODULE_ERR;
     RM_DeleteKey(key);
     robj *o = createModuleObject(mt,value);
+    if(key->db->id == 0) {
+        serverLog(LL_WARNING, "fd %d, %p from gid(%d) add db 0 %s, %p",  key->ctx->client->fd, key->ctx->client, key->ctx->client->gid, (sds)key->key->ptr, key->ctx->client->db);
+    }
     setKey(key->db,key->key,o);
     decrRefCount(o);
     key->value = o;
@@ -4076,7 +4087,6 @@ void RM_LogRaw(RedisModule *module, const char *levelstr, const char *fmt, va_li
  */
 void RM_Log(RedisModuleCtx *ctx, const char *levelstr, const char *fmt, ...) {
     if (!ctx->module) return;   /* Can only log if module is initialized */
-
     va_list ap;
     va_start(ap, fmt);
     RM_LogRaw(ctx->module,levelstr,fmt,ap);
@@ -4700,6 +4710,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(IsModuleNameBusy);
     REGISTER_API(WrongArity);
     REGISTER_API(ReplyWithOk);
+    REGISTER_API(ReplyWithEmptyScan);
     REGISTER_API(ReplyWithLongLong);
     REGISTER_API(ReplyWithLongDouble);
     REGISTER_API(ReplyWithError);

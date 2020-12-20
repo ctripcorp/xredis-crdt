@@ -1,3 +1,24 @@
+proc wait { client index type log}  {
+    set retry 50
+    set match_str ""
+    append match_str "*slave" $index ":*state=online*"
+    while {$retry} {
+        set info [ $client $type replication ]
+        if {[string match $match_str $info]} {
+            break
+        } else {
+            assert_equal [$client ping] PONG
+            incr retry -1
+            after 100
+        }
+    }
+    if {$retry == 0} {
+        # error "assertion: Master-Slave not correctly synchronized"
+        assert_equal [$client ping] PONG
+        print_log_file $log
+        error "assertion: Master-Slave not correctly synchronized"
+    }
+}
 start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
     set master [srv 0 client]
     set master_gid 1
