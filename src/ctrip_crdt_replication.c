@@ -264,7 +264,7 @@ crdtMergeStartCommand(client *c) {
     if (isNullVectorClockUnit(getVectorClockUnit(crdtServer.vectorClock, sourceGid))) {
         crdtServer.vectorClock = addVectorClockUnit(crdtServer.vectorClock, sourceGid, 0);
     }
-    freeVectorClock(vclock);;
+    freeVectorClock(vclock);
     freeVectorClock(curGcVclock);
     server.dirty ++;
     serverLog(LL_NOTICE, "[CRDT][crdtMergeStartCommand][end] master gid: %lld", sourceGid);

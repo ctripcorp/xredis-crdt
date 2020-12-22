@@ -1359,7 +1359,6 @@ int processMultibulkBuffer(client *c) {
 }
 
 void printCommand(client *c) {
-    return;
     size_t max_buf = 1024;
     char buf[max_buf];
     int len = sprintf(buf, "cmd: ");
