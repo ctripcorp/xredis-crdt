@@ -75,7 +75,7 @@ lua: .make-prerequisites
 JEMALLOC_CFLAGS= -std=gnu99 -Wall -pipe -g3 -O3 -funroll-loops $(CFLAGS)
 JEMALLOC_LDFLAGS= $(LDFLAGS)
 
-JEMALLOC_DEBUG=yes
+JEMALLOC_DEBUG=no
 
 jemalloc: .make-prerequisites
 	@printf '%b %b\n' $(MAKECOLOR)MAKE$(ENDCOLOR) $(BINCOLOR)$@$(ENDCOLOR)
