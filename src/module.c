@@ -1802,6 +1802,7 @@ int RM_CrdtSelectDb(RedisModuleCtx *ctx, int gid, int newid) {
     CRDT_Master_Instance* peerMaster = getPeerMaster(gid);
     if(peerMaster && peerMaster->master) {
         retval = selectDb(peerMaster->master, newid);
+        peerMaster->dbid = newid;
     }
     retval &= selectDb(ctx->client,newid);
     return (retval == C_OK) ? REDISMODULE_OK : REDISMODULE_ERR;

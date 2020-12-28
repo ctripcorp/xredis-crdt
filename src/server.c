@@ -331,7 +331,8 @@ struct redisCommand redisCommandTable[] = {
     {"tombstoneSize",tombstoneSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
     {"expireSize",expireSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
     {"crdt.authGid", crdtAuthGidCommand,2,"rF", 0, NULL,0,0,0,0,0},
-    {"crdt.auth", crdtAuthCommand, 3, "rF", 0,NULL,0,0,0,0,0}
+    {"crdt.auth", crdtAuthCommand, 3, "rF", 0,NULL,0,0,0,0,0},
+    {"crdt.replication", crdtReplicationCommand, 4, "rF", 0, NULL, 0,0,0,0,0}
 };
 
 /*============================ CRDT functions ============================ */
@@ -3517,6 +3518,7 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                                 "peer%d_host:%s\r\n"
                                 "peer%d_port:%d\r\n"
                                 "peer%d_gid:%lld\r\n"
+                                "peer%d_dbid:%lld\r\n"
                                 "peer%d_link_status:%s\r\n"
                                 "peer%d_last_io_seconds_ago:%d\r\n"
                                 "peer%d_sync_in_progress:%d\r\n"
@@ -3526,6 +3528,7 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                                 masterid, masterInstance->masterhost,
                                 masterid, masterInstance->masterport,
                                 masterid, masterInstance->gid,
+                                masterid, masterInstance->dbid,
                                 masterid, (masterInstance->repl_state == REPL_STATE_CONNECTED) ?
                                 "up" : "down",
                                 masterid, masterInstance->master ?

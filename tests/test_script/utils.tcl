@@ -25,8 +25,7 @@ proc wait_sync { client index type log}  {
         # if {$log != ""} {
         #     print_log_file $log
         # }
-        puts $log
-        error "assertion: Master-Slave not correctly synchronized"
+        error $log
     }
 }
 
@@ -90,21 +89,24 @@ proc create_crdts {type arrange} {
                             $slave config crdt.set repl-diskless-sync-delay 1
                             
 
-                            # $peer_slave slaveof $peer_host $peer_port
-                            # $peer2_slave slaveof $peer_host $peer_port
-                            # $slave slaveof $master_host $master_port 
+                            $peer_slave slaveof $peer_host $peer_port
+                            $peer2_slave slaveof $peer2_host $peer2_port
+                            $slave slaveof $master_host $master_port 
                             $master peerof $peer_gid $peer_host $peer_port 
                             $master peerof $peer2_gid $peer2_host $peer2_port 
                             $peer  peerof $peer2_gid $peer2_host $peer2_port 
                             $peer  peerof $master_gid $master_host $master_port
                             $peer2 peerof $master_gid $master_host $master_port
                             $peer2 peerof $peer_gid $peer_host $peer_port
-                            wait $master 0 crdt.info $master_log
-                            wait $master 1 crdt.info $master_log
-                            wait $peer 0 crdt.info $peer_log
-                            wait $peer 1 crdt.info $peer_log
-                            wait $peer2 0 crdt.info $peer2_log
-                            wait $peer2 1 crdt.info $peer2_log
+                            wait_sync $master 0 crdt.info $master_log
+                            wait_sync $master 1 crdt.info $master_log
+                            wait_sync $peer 0 crdt.info $peer_log
+                            wait_sync $peer 1 crdt.info $peer_log
+                            wait_sync $peer2 0 crdt.info $peer2_log
+                            wait_sync $peer2 1 crdt.info $peer2_log
+                            wait_sync $master 0 info $slave_log
+                            wait_sync $peer 0 info $peer_slave_log
+                            wait_sync $peer2 0 info $peer2_slave_log
                             after 5000
                             test $type {
                                 if {[catch [uplevel 0 $arrange ] result]} {
@@ -209,6 +211,7 @@ proc start_local_master_redis3 {type arrange close} {
 
 
 proc start_local_slave_redis3 {type arrange} {
+    after 5000
     set sport 8000
     set log_file "/redis.log"
     set local_host "127.0.0.1"
@@ -338,4 +341,126 @@ proc stop_ovc {client} {
 
 proc start_ovc {client} {
     $client debug set-crdt-ovc 1
+}
+
+#about check
+
+
+proc check_set4 {key master peer peer2 slave} {
+    set size [$master scard $key]
+    proc check_scard {name key c1 size} {
+        test [format $name $key] {
+            assert_equal $size [$c1 scard $key]
+        }
+    }
+    check_scard "master-peer-scard key %s" $key $peer $size
+    check_scard "master-peer2-scard key %s" $key $peer2 $size
+    check_scard "master-slave-scard key %s" $key $slave $size
+    set cur 0
+    # set keys {}
+    while 1 {
+        set res [$master sscan $key $cur]
+        set cur [lindex $res 0]
+        set ks [lindex $res 1]
+        # lappend keys {*}$k
+        set len [llength $ks]
+        for {set kindex 0} {$kindex < $len} {incr kindex 1} {
+            set k [lindex $ks $kindex]
+            set master_set_field_value [$master crdt.sismember $key $k]
+            puts $master_set_field_value
+            test [format "master-peer-%s-%s" $key $k] {
+                assert_equal $master_set_field_value [$peer crdt.sismember $key $k]
+            }
+            test [format "master-peer2-%s-%s" $key $k] {
+                assert_equal $master_set_field_value [$peer2 crdt.sismember $key $k]
+            }
+            test [format "master-slave-%s-%s" $key $k] {
+                assert_equal $master_set_field_value [$slave crdt.sismember $key $k]
+            }
+        }
+        if {$cur == 0} break
+    }
+}
+
+proc check_hash4 {key master peer peer2 slave} {
+    set size [$master hlen $key]
+    proc check_hlen {name key c1 size} {
+        test [format $name $key] {
+            assert_equal $size [$c1 hlen $key]
+        }
+    }
+    check_hlen "master-peer-hlen key %s" $key $peer $size
+    check_hlen "master-peer-hlen key %s" $key $peer2 $size
+    check_hlen "master-peer-hlen key %s" $key $slave $size
+    set cur 0
+    # set keys {}
+    while 1 {
+        set res [$master hscan $key $cur]
+        set cur [lindex $res 0]
+        set kvs [lindex $res 1]
+        set len [llength $kvs]
+        for {set kindex 0} {$kindex < $len} {incr kindex 2} {
+            set k [lindex $kvs $kindex]
+            set v [$master crdt.hdatainfo $key $k]
+            puts $v
+            test [format "master-peer-%s-%s" $key $k] {
+                assert_equal $v [$peer crdt.hdatainfo $key $k]
+            }
+            test [format "master-peer2-%s-%s" $key $k] {
+                assert_equal $v [$peer2 crdt.hdatainfo $key $k]
+            }
+            test [format "master-slave-%s-%s" $key $k] {
+                assert_equal $v [$slave crdt.hdatainfo $key $k]
+            }
+        }
+        
+        if {$cur == 0} break
+    }
+}
+
+proc check_zset4 {key master peer peer2 slave} {
+    set size [$master zcard $key]
+    proc check_zcard {name key c1 size} {
+        test [format $name $key] {
+            assert_equal $size [$c1 zcard $key]
+        }
+    }
+    check_zcard "master-peer-zcard key %s" $key $peer $size
+    check_zcard "master-peer-zcard key %s" $key $peer2 $size
+    check_zcard "master-peer-zcard key %s" $key $slave $size
+    set cur 0
+    # set keys {}
+    while 1 {
+        set res [$master zscan $key $cur]
+        set cur [lindex $res 0]
+        set kvs [lindex $res 1]
+        set len [llength $kvs]
+        for {set kindex 0} {$kindex < $len} {incr kindex 2} {
+            set k [lindex $kvs $kindex]
+            set v [$master crdt.zscore $key $k]
+            test [format "master-peer-%s-%s" $key $k] {
+                assert_equal $v [$peer crdt.zscore $key $k]
+            }
+            test [format "master-peer2-%s-%s" $key $k] {
+                assert_equal $v [$peer2 crdt.zscore $key $k]
+            }
+            test [format "master-slave-%s-%s" $key $k] {
+                assert_equal $v [$slave crdt.zscore $key $k]
+            }
+        }
+        
+        if {$cur == 0} break
+    }
+}
+
+proc check_kv4 {key master peer peer2 slave} {
+    test [format "master-peer-%s" $key] {
+        assert_equal [$master crdt.datainfo $key] [$peer crdt.datainfo $key]
+    }
+    test [format "master-peer2-%s" $key] {
+        assert_equal [$master crdt.datainfo $key] [$peer2 crdt.datainfo $key]
+    }
+    test [format "master-slave-%s" $key] {
+        assert_equal [$master crdt.datainfo $key] [$slave crdt.datainfo $key]
+    }
 }

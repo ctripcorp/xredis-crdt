@@ -169,6 +169,14 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                             $master crdt.zincrby zset1401 1 1000 1:2 a 2:1.0 
                             $master crdt.zrem zset1401 1 1000 1:3 {3:1:a,1:2:2:1.0}  
                             $master crdt.zadd zset1401 1 1000 1:1 a 2:3.0
+                            $master crdt.zadd zset1401 1 1000 1:1 a 2:3.0
+                            $master zscore zset1401 a
+                        } {}
+                        test "ad + add" {
+                            $master crdt.zincrby zset1401 1 1000 1:2 a 2:1.0 
+                            $master crdt.del_ss zset1401 1 1000 1:3 {3:1:a,1:2:2:1.0}  
+                            $master crdt.zadd zset1401 1 1000 1:1 a 2:3.0
+                            $master crdt.zadd zset1401 1 1000 1:1 a 2:3.0
                             $master zscore zset1401 a
                         } {}
                     }
@@ -195,6 +203,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                             $master crdt.zincrby zset1512 1 1000 1:3 a 2:4.0
                             $master zscore zset1512 a
                         } {2}
+                         
                     }
                 }
                 

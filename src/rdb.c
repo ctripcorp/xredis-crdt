@@ -1725,6 +1725,7 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                 crdtReplicationCreateMasterClient(currentMasterInstance, createClient(-1), -1);
             } else if(!strcasecmp(auxkey->ptr,"peer-master-dbid")) {
                 selectDb(currentMasterInstance->master, atoi(auxval->ptr));
+                currentMasterInstance->dbid = atoi(auxval->ptr);
             } else if (!strcasecmp(auxkey->ptr,"peer-master-host")) {
                 sdsfree(currentMasterInstance->masterhost);
                 currentMasterInstance->masterhost = sdsdup(auxval->ptr);
