@@ -13,8 +13,12 @@ source tests/support/util.tcl
 source tests/support/aof.tcl
 source tests/test_script/utils.tcl
 set ::all_tests {
-    ctrip/unit/string
     ctrip/unit/expire
+    ctrip/unit/rc1 
+    ctrip/unit/rc2 
+    ctrip/unit/rc3 
+    ctrip/unit/rc4 
+    ctrip/unit/rc5
     ctrip/master-not-crdt/convert-set-on-load
     ctrip/master-not-crdt/convert-zset-on-load
     ctrip/master-not-crdt/slave-update-peer-repl-offset
@@ -99,7 +103,6 @@ set ::all_tests {
     ctrip/master-not-crdt/master-redis-slave-crdt
     ctrip/master-not-crdt/full-sync-stop
     
-    ctrip/master-not-crdt/update-peer-repl-offset
 
     ctrip/integration/master-master/replication
     ctrip/integration/master-master/full_sync
@@ -114,7 +117,7 @@ set ::all_tests {
     ctrip/integration/master-slave/rdb2
     ctrip/integration/master-slave/psync2
     ctrip/integration/master-slave/replication-psync
-    
+
     ctrip/unit/crdt_del
     ctrip/unit/merge_different_type
     ctrip/unit/crdt_hdel_mem_leak
@@ -130,41 +133,27 @@ set ::all_tests {
     ctrip/integration/master-slave/psync2-reg
     
     ctrip/unit/zset
+    ctrip/master-not-crdt/convert-data-on-load
 }   
 
 set ::temp_tests { 
-    
-    ctrip/unit/multi
-    
-    test_script/rc
+
+ctrip/unit/string
     
 
 
-    
     #
-
-    
-    
-
-    
-
-    
-
-    
-    
+    test_script/peer_master
+    test_script/change_master_slave
+    test_script/sync_master
+    test_script/sync_slave
+    test_script/check
+    test_script/peer_master
+    test_script/change_master_slave    
+#
 
     ctrip/master-not-crdt/update-peer-repl-offset
     ctrip/master-not-crdt/master-redis-slave-crdt
-    #
-    
-
-    
-
-    
-
-    
-
-    
     
     #
     test_script/rc
@@ -176,60 +165,19 @@ set ::temp_tests {
     ctrip/unit/crdt_set
     ctrip/unit/zset
     test_script/zadd
-    demo/set_slave_1
-    demo/set_slave_2
-    demo/set_slave_5
-    demo/set
-    demo/zset
-    demo/counter
     test_script/rc
-
-
-
     ctrip/unit/crdt_set
-
-    
-    
-    demo/test_local
-    demo/test_local_slave   
-    
-    
-    demo/zset 
-    demo/counter 
-    demo/test_local
-    
-    demo/test_local_slave
-    demo/counter
-
-    demo/zset
-    demo/counter
-    demo/set_slave
-    demo/zset_slave
-    demo/test_local
-    
-    demo/counter
-    demo/zset
-    demo/counter
     ctrip/unit/counter
     ctrip/basic/basic_type
     ctrip/master-not-crdt/convert-data-on-load
     ctrip/unit/crdt_zset
-    demo/set_slave
     
     ctrip/unit/module_memory
-    demo/test_local
-    
-    
-    
     ctrip/unit/counter
     ctrip/unit/crdt_zset
-    
-    demo/counter
-    
     ctrip/unit/zset
-    ctrip/unit/counter
     ctrip/basic/basic_type
-    ctrip/master-not-crdt/convert-data-on-load
+    
     
      
     #####

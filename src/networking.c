@@ -901,7 +901,10 @@ void freeClient(client *c) {
     /* Master/slave cleanup Case 2:
      * we lost the connection with the master. */
     if (c->flags & CLIENT_MASTER) replicationHandleMasterDisconnection();
-    if (c->flags & CLIENT_CRDT_MASTER) crdtReplicationHandleMasterDisconnection(c);
+    
+    if (c->flags & CLIENT_CRDT_MASTER) {
+        crdtReplicationHandleMasterDisconnection(c);
+    }
 
     /* If this client was scheduled for async freeing we need to remove it
      * from the queue. */
@@ -1359,6 +1362,7 @@ int processMultibulkBuffer(client *c) {
 }
 
 void printCommand(client *c) {
+    sds command = (sds)c->argv[0]->ptr;
     size_t max_buf = 1024;
     char buf[max_buf];
     int len = sprintf(buf, "cmd: ");

@@ -617,10 +617,14 @@ int rdbSaveAuxFieldCrdt(rio *rdb) {
             == -1)  return C_ERR;
         if (rdbSaveAuxFieldStrInt(rdb, "peer-master-port", masterInstance->masterport)
             == -1)  return C_ERR;
-        if(masterInstance->master && masterInstance->master->db) {
+        if(masterInstance->master) {
             if (rdbSaveAuxFieldStrInt(rdb, "peer-master-dbid", masterInstance->master->db->id) 
                 == -1) return C_ERR;
+        } else {
+            if (rdbSaveAuxFieldStrInt(rdb, "peer-master-dbid", masterInstance->dbid) 
+                == -1) return C_ERR;
         }
+        
         char* replid = NULL;
         long long replid_offset  = -1;
         if(masterInstance->master) {

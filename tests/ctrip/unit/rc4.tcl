@@ -379,9 +379,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                             test "tb + b fail " {
                                 $master crdt.rc rc9011 1 1000 1:3 3:3:1.0 -1
                                 $master crdt.del_rc rc9011 1 1000 1:4  
-
                                 $peer crdt.rc rc9011 1 1000 1:5 3:1:5 -1
-                                
                             } 
                             
                         }

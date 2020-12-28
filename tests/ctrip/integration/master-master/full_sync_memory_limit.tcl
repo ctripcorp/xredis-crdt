@@ -102,7 +102,6 @@ test "full_sync_max_limit" {
         assert_equal [$master hget h k3] vvvvvvvvvvvvvvvvvvvvvvvvvvvvv
         $peer peerof $master_gid $master_host $master_port
         wait_for_peer_sync $peer
-        print_log_file $master_log
         assert_equal [log_file_matches $master_log "*key:{h} 3 splitted*"] 1
         assert_equal [$peer hget h k1] vvvvvvvvvvvvvvvvvvvvvvvvvvvvv
         assert_equal [$peer hget h k2] vvvvvvvvvvvvvvvvvvvvvvvvvvvvv
@@ -121,7 +120,6 @@ test "full_sync_max_limit" {
         $master hdel h k5
         $master hdel h k6
         after 5000
-        print_log_file $master_log
         assert_equal [log_file_matches $master_log "*key:{h} 2 splitted*"] 1
         assert_equal [$peer hget h k7] g
     }
