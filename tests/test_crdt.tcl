@@ -13,6 +13,7 @@ source tests/support/util.tcl
 source tests/support/aof.tcl
 source tests/test_script/utils.tcl
 set ::all_tests {
+    ctrip/unit/string
     ctrip/unit/expire
     ctrip/unit/rc1 
     ctrip/unit/rc2 
@@ -38,7 +39,6 @@ set ::all_tests {
     ctrip/basic/set
     ctrip/unit/gc
     ctrip/integration/master-master/replication
-    ctrip/master-not-crdt/slave-update-peer-repl-offset
     ctrip/readonly/basic_crdt_type_del
     ctrip/basic/basic_crdt_type_del
     ctrip/basic/basic_type
@@ -138,7 +138,7 @@ set ::all_tests {
 
 set ::temp_tests { 
 
-ctrip/unit/string
+
     
 
 

@@ -652,9 +652,9 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         }
                         test "bad + bad(string + float)" {
                             test "bad(string + float) + bad(string + float)" {
+                                $peer incrbyfloat rc1322 1
                                 $master incrbyfloat rc1322 1
                                 $master set rc1322 a
-                                $peer incrbyfloat rc1322 1
                                 $peer set rc1322 b
                             }
                         }
@@ -683,8 +683,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         test "bad + tbad(int)" {
                             test "bad(string + int) + tbad(int)" {
                                 $master incrby rc1340 1
-                                $master set rc1340 a
                                 $peer incrby rc1340 1
+                                $master set rc1340 a
                                 $peer del rc1340 
                             }
                             test "bad(int + float) + tbad(int)" {
@@ -695,16 +695,17 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                             }
                             test "bad(string + float) + tbad(int)" {
                                 $master incrbyfloat rc1342 1
-                                $master set rc1342 a
                                 $peer incrby rc1342 1
+                                $master set rc1342 a
+                                
                                 $peer del rc1342 
                             }
                         }
                         test "bad + tbad(float)" {
                             test "bad(string + int) + tbad(float)" {
                                 $master incrby rc1350 1
-                                $master set rc1350 a
                                 $peer incrbyfloat rc1350 1
+                                $master set rc1350 a
                                 $peer del rc1350 
                             }
                             test "bad(int + float) + tbad(float)" {
@@ -715,8 +716,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                             }
                             test "bad(string + float) + tbad(float)" {
                                 $master incrbyfloat rc1352 1
-                                $master set rc1352 a
                                 $peer incrbyfloat rc1352 1
+                                $master set rc1352 a
                                 $peer del rc1352 
                             }
                         }
