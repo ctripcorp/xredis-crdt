@@ -245,6 +245,22 @@ static void zsetKeyReset(RedisModuleKey *key);
  * Heap allocation raw functions
  * -------------------------------------------------------------------------- */
 
+#include <stdio.h>
+#include <execinfo.h>
+#define STACK_SIZE 1000
+static void debug_memory(size_t memory, size_t num)
+{
+    void *trace[STACK_SIZE];
+    size_t size = backtrace(trace, STACK_SIZE);
+    num = min(num, size - 1);
+    char **symbols = (char **)backtrace_symbols(trace,size);
+    for (size_t i = 0; i<num; i++) {
+        printf("%d--->%s\n", i, symbols[i+1]);
+    }
+    printf("use memory:[%zu]\n", memory);
+    free(symbols);
+    return;
+}
 /* Use like malloc(). Memory allocated with this function is reported in
  * Redis INFO memory, used for keys eviction according to maxmemory settings
  * and in general is taken into account as memory allocated by Redis.
@@ -262,7 +278,13 @@ static size_t module_memory = 0;
 void *RM_Alloc(size_t bytes) {
     size_t old_size = zmalloc_used_memory();
     void* r = zmalloc(bytes);
-    add_module_memory_stat_alloc(zmalloc_used_memory() - old_size);
+    size_t memory = zmalloc_used_memory() - old_size;
+
+    // #if defined (TCL_TEST)
+    //     debug_memory(memory, 3);
+    // #endif
+
+    add_module_memory_stat_alloc(memory);
     return r;
 }
 size_t RM_ModuleMemory() {
@@ -277,11 +299,6 @@ size_t sds_memory(const sds ptr) {
     #ifdef HAVE_MALLOC_SIZE
          return zmalloc_size(sdsAllocPtr(ptr));
     #else
-        // size_t old_size = zmalloc_used_memory();
-        // void* d = sdsdup(ptr);
-        // size_t used = zmalloc_used_memory() - old_size;
-        // sdsfree(d);
-        // return used;
         void *realptr = (char*)(sdsAllocPtr(ptr))-PREFIX_SIZE;
         size_t oldsize = *((size_t*)realptr);
         return oldsize + PREFIX_SIZE;
@@ -341,7 +358,11 @@ void* RM_Realloc(void *ptr, size_t bytes) {
 void RM_Free(void *ptr) {
     size_t old_size = zmalloc_used_memory();
     zfree(ptr);
-    add_module_memory_stat_alloc(zmalloc_used_memory() - old_size);
+    size_t free_size = zmalloc_used_memory() - old_size;
+    // #if defined (TCL_TEST)
+    //     debug_memory(free_size, 3);
+    // #endif
+    add_module_memory_stat_alloc(free_size);
 }
 void RM_ZFree(void *ptr) {
     zfree(ptr);
@@ -739,6 +760,19 @@ int RM_CreateCommand(RedisModuleCtx *ctx, const char *name, RedisModuleCmdFunc c
 
 void RM_SetOvc(RedisModuleCtx *ctx, VectorClock vc) {
     getPeerMaster(ctx->client->gid)->vectorClock = vc;
+}
+
+void RM_UpdateOvc(RedisModuleCtx *ctx, VectorClock vc) {
+    CRDT_Master_Instance* instance = getPeerMaster(ctx->client->gid);
+    if(instance != NULL) {
+        VectorClock old_vc = instance->vectorClock;
+        VectorClock new_vc = vectorClockMerge(old_vc, vc);
+        instance->vectorClock = new_vc;
+        if(!isNullVectorClock(old_vc)) {
+            freeVectorClock(old_vc);
+        }
+    }
+    
 }
 VectorClock RM_GetOvc(RedisModuleCtx *ctx) {
     return getPeerMaster(ctx->client->gid)->vectorClock;
@@ -1160,6 +1194,13 @@ int RM_ReplyWithOk(RedisModuleCtx *ctx) {
     client *c = moduleGetReplyClient(ctx);
     if (c == NULL) return REDISMODULE_OK;
     addReply(c, shared.ok);
+    return REDISMODULE_OK;
+}
+
+int RM_ReplyWithEmptyScan(RedisModuleCtx *ctx) {
+    client *c = moduleGetReplyClient(ctx);
+    if (c == NULL) return REDISMODULE_OK;
+    addReply(c, shared.emptyscan);
     return REDISMODULE_OK;
 }
 
@@ -1632,6 +1673,7 @@ int RM_CheckGid(int gid) {
 }
 void jumpVectorClock() {
     long long qps = getQps();
+    // incrLocalVcUnit(100000);
     incrLocalVcUnit(max(qps * 60 * 24 , 10000));
 }
 void RM_IncrLocalVectorClock (long long delta) {
@@ -1758,8 +1800,9 @@ int RM_SelectDb(RedisModuleCtx *ctx, int newid) {
 int RM_CrdtSelectDb(RedisModuleCtx *ctx, int gid, int newid) {
     int retval = C_OK;
     CRDT_Master_Instance* peerMaster = getPeerMaster(gid);
-    if(peerMaster) {
+    if(peerMaster && peerMaster->master) {
         retval = selectDb(peerMaster->master, newid);
+        peerMaster->dbid = newid;
     }
     retval &= selectDb(ctx->client,newid);
     return (retval == C_OK) ? REDISMODULE_OK : REDISMODULE_ERR;
@@ -1858,11 +1901,18 @@ void* RM_DbEntryGetVal(RedisModuleCtx *ctx, dictEntry* de) {
 }
 int RM_DbEntrySetVal(RedisModuleCtx *ctx, RedisModuleString* keyname, dictEntry* de, moduleType* type, void* val) {
     robj *o = createModuleObject(type,val);
-    redisDb *db= ctx->client->db;
+    redisDb *db = ctx->client->db;
     dictSetVal(db->dict, de, o);
     signalModifiedKey(db, keyname);
     return 0;
 }
+
+int RM_SignalModifiedKey(RedisModuleCtx* ctx, RedisModuleString* keyname) {
+    redisDb *db = ctx->client->db;
+    signalModifiedKey(db, keyname);
+    return 1;
+}
+
 void * RM_DbGetValue(RedisModuleCtx *ctx, RedisModuleString *keyname, moduleType* type, int* error) {
     robj* value = lookupKeyWrite(ctx->client->db,keyname);
     if(value == NULL) {
@@ -1920,6 +1970,7 @@ int RM_SaveModuleValue(rio* rio, moduleType *t, void* value) {
     t->rdb_save(&io, value);
     return io.error? C_ERR: C_OK;
 }
+
 void closeModuleKey(void* k) {
     RedisModuleKey *key = k;
     if (key == NULL) return;
@@ -1992,6 +2043,11 @@ int RM_DeleteTombstone(RedisModuleKey *key) {
         dictDelete(key->db->deleted_keys,key->key->ptr);
         key->tombstone = NULL;
     }
+    return REDISMODULE_OK;
+}
+
+int RM_DeleteTombstoneByKey(RedisModuleCtx* ctx, RedisModuleString* key) {
+    dictDelete(ctx->client->db->deleted_keys, key->ptr);
     return REDISMODULE_OK;
 }
 
@@ -3133,11 +3189,11 @@ robj **moduleCreateArgvFromUserFormat(const char *cmdname, const char *fmt, int 
                  argv[argc++] = v[i];
              }
         } else if (*p == 'a') {
-            char **v = va_arg(ap, void*);
+            sds *v = va_arg(ap, void*);
             size_t vlen = va_arg(ap, size_t);
             argv_size += vlen-1;
             argv = zrealloc(argv,sizeof(robj*)*argv_size);
-
+            
             size_t i = 0;
             for (i = 0; i < vlen; i++) {
                  argv[argc++] = createStringObject(v[i],sdslen(v[i]));
@@ -3581,6 +3637,19 @@ void *RM_ModuleTypeGetTombstone(RedisModuleKey *key) {
     return mv->value;
 }
 
+void* RM_ModuleGetValue(RedisModuleCtx* ctx,RedisModuleString* keyname) {
+    robj* value = lookupKeyWrite(ctx->client->db, keyname);
+    if(value == NULL) return NULL;
+    moduleValue* mv = value->ptr;
+    return mv->value;
+}
+
+void* RM_ModuleGetTombstone(RedisModuleCtx* ctx, RedisModuleString* keyname) {
+    robj* value = lookupTombstoneKey(ctx->client->db, keyname);
+    if(value == NULL) return NULL;
+    moduleValue* mv = value->ptr;
+    return mv->value;
+}
 
 /* The API provided to the rest of the Redis core is a simple function:
  *
@@ -3830,6 +3899,19 @@ loaderr:
     return 0; /* Never reached. */
 }
 
+void RM_SaveLongDouble(RedisModuleIO *io, long double value) {
+    sds str = sdsnewlen((char*)&value, sizeof(long double));
+    RM_SaveStringBuffer(io, str, sdslen(str));
+    sdsfree(str);
+}
+long double RM_LoadLongDouble(RedisModuleIO *io) {
+    sds str = RM_LoadSds(io);
+    long double value = *(long double*)str;
+    assert(sdslen(str) == sizeof(long double));
+    add_module_memory_stat_alloc(-sds_memory(str));
+    sdsfree(str);
+    return value;
+}
 
 
 /* --------------------------------------------------------------------------
@@ -4003,7 +4085,6 @@ void RM_LogRaw(RedisModule *module, const char *levelstr, const char *fmt, va_li
  */
 void RM_Log(RedisModuleCtx *ctx, const char *levelstr, const char *fmt, ...) {
     if (!ctx->module) return;   /* Can only log if module is initialized */
-
     va_list ap;
     va_start(ap, fmt);
     RM_LogRaw(ctx->module,levelstr,fmt,ap);
@@ -4622,10 +4703,12 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(CreateCommand);
     REGISTER_API(SetModuleAttribs);
     REGISTER_API(SetOvc);
+    REGISTER_API(UpdateOvc);
     REGISTER_API(GetOvc);
     REGISTER_API(IsModuleNameBusy);
     REGISTER_API(WrongArity);
     REGISTER_API(ReplyWithOk);
+    REGISTER_API(ReplyWithEmptyScan);
     REGISTER_API(ReplyWithLongLong);
     REGISTER_API(ReplyWithLongDouble);
     REGISTER_API(ReplyWithError);
@@ -4647,6 +4730,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(DbEntrySetVal);
     REGISTER_API(DbGetValue);
     REGISTER_API(DbSetValue);
+    REGISTER_API(SignalModifiedKey);
     REGISTER_API(GetKey);
     REGISTER_API(GetModuleTypeId);
     REGISTER_API(GetModuleTypeById);
@@ -4687,6 +4771,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(ReplicationFeedRobjToAllSlaves);
     REGISTER_API(DeleteKey);
     REGISTER_API(DeleteTombstone);
+    REGISTER_API(DeleteTombstoneByKey);
     REGISTER_API(UnlinkKey);
     REGISTER_API(StringSet);
     REGISTER_API(StringDMA);
@@ -4718,6 +4803,8 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(ModuleTypeLoadRdbAddValue);
     REGISTER_API(ModuleTypeGetType);
     REGISTER_API(ModuleTypeGetValue);
+    REGISTER_API(ModuleGetValue);
+    REGISTER_API(ModuleGetTombstone);
     REGISTER_API(SaveUnsigned);
     REGISTER_API(LoadUnsigned);
     REGISTER_API(SaveSigned);
@@ -4729,6 +4816,8 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(LoadStringBuffer);
     REGISTER_API(SaveDouble);
     REGISTER_API(LoadDouble);
+    REGISTER_API(SaveLongDouble);
+    REGISTER_API(LoadLongDouble);
     REGISTER_API(SaveFloat);
     REGISTER_API(LoadFloat);
     REGISTER_API(EmitAOF);

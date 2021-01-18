@@ -380,6 +380,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 test "run two process create conflict" {
                     set load_handle0 [start_write_script $master_host $master_port 1000  { 
                         $r set k [randomValue]
+                        $r set k1 1
+                        $r set k2 a
                         $r mset k1 [randomValue] k2 [randomValue]
                         $r hset h k [randomValue] k1 [randomValue]
                         $r hdel h k 
@@ -388,6 +390,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                     } ]
                     set load_handle1 [start_write_script $peer_host $peer_port 1000  { 
                         $r set k [randomValue]
+                        $r set k1 1
+                        $r set k2 a
                         $r mset k1 [randomValue] k2 [randomValue]
                         $r hset h k v k1 [randomValue]
                         $r hdel h k 
@@ -397,30 +401,41 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                     after 1000
                     stop_write_load $load_handle0
                     stop_write_load $load_handle1
-                    after 2000
-                    assert_equal [$master get k] [$peer get k]
-                    assert_equal [$slave get k] [$peer_slave get k]
-                    assert_equal [$master get k] [$slave get k]
-
-                    assert_equal [$master hget h k] [$peer hget h k]
-                    assert_equal [$slave hget h k] [$peer_slave hget h k]
-                    assert_equal [$master hget h k] [$slave hget h k]
-
-                    assert_equal [$master hget h k1] [$peer hget h k1]
-                    assert_equal [$slave hget h k1] [$peer_slave hget h k1]
-                    assert_equal [$master hget h k1] [$slave hget h k1]
-
-                    assert_equal [$master get k1]  [$peer get k1] 
-                    assert_equal [$slave get k1] [$peer_slave get k1]
-                    assert_equal [$master get k1]  [$slave get k1] 
-
-                    assert_equal [$master get k2] [$peer get k2]
-                    assert_equal [$slave get k2] [$peer_slave get k2]
-                    assert_equal [$master get k2] [$slave get k2]
-
-                    assert_equal [$master mget k1 k2] [$peer mget k1 k2]
-                    assert_equal [$slave mget k1 k2] [$peer_slave mget k1 k2]
-                    assert_equal [$master mget k1 k2] [$slave mget k1 k2]
+                    after 3000
+                    test "1" {
+                        assert_equal [$master get k] [$peer get k]
+                        assert_equal [$slave get k] [$peer_slave get k]
+                        assert_equal [$master get k] [$slave get k]
+                    }
+                    
+                    test "2" {
+                        assert_equal [$master hget h k] [$peer hget h k]
+                        assert_equal [$slave hget h k] [$peer_slave hget h k]
+                        assert_equal [$master hget h k] [$slave hget h k]
+                    }
+                    
+                    test "3" {
+                        assert_equal [$master hget h k1] [$peer hget h k1]
+                        assert_equal [$slave hget h k1] [$peer_slave hget h k1]
+                        assert_equal [$master hget h k1] [$slave hget h k1]
+                    }
+                    test "4" {
+                        assert_equal [$master get k1]  [$peer get k1] 
+                        assert_equal [$slave get k1] [$peer_slave get k1]
+                        assert_equal [$master get k1]  [$slave get k1] 
+                    }
+                    
+                    test "5" {
+                        assert_equal [$master get k2] [$peer get k2]
+                        assert_equal [$slave get k2] [$peer_slave get k2]
+                        assert_equal [$master get k2] [$slave get k2]
+                    }
+                    test "6" {
+                        assert_equal [$master mget k1 k2] [$peer mget k1 k2]
+                        assert_equal [$slave mget k1 k2] [$peer_slave mget k1 k2]
+                        assert_equal [$master mget k1 k2] [$slave mget k1 k2]
+                    }
+                    
                 }
             }
         }

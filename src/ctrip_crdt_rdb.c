@@ -242,6 +242,7 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
         dictReleaseIterator(di);
 
         d = db->deleted_keys;
+       
         di = dictGetSafeIterator(d);
         if (!di) return C_ERR;
         if (dictSize(d) != 0) {
@@ -616,6 +617,14 @@ int rdbSaveAuxFieldCrdt(rio *rdb) {
             == -1)  return C_ERR;
         if (rdbSaveAuxFieldStrInt(rdb, "peer-master-port", masterInstance->masterport)
             == -1)  return C_ERR;
+        if(masterInstance->master) {
+            if (rdbSaveAuxFieldStrInt(rdb, "peer-master-dbid", masterInstance->master->db->id) 
+                == -1) return C_ERR;
+        } else {
+            if (rdbSaveAuxFieldStrInt(rdb, "peer-master-dbid", masterInstance->dbid) 
+                == -1) return C_ERR;
+        }
+        
         char* replid = NULL;
         long long replid_offset  = -1;
         if(masterInstance->master) {
@@ -633,14 +642,16 @@ int rdbSaveAuxFieldCrdt(rio *rdb) {
             == -1)  return C_ERR;
         if (rdbSaveAuxFieldStrInt(rdb, "peer-master-repl-offset", replid_offset)
             == -1)  return C_ERR;
-
     }
     return C_OK;
 }
 int rdbSaveCrdtInfoAuxFields(rio* rdb) {
     sds vclockSds = vectorClockToSds(crdtServer.vectorClock);
     if (rdbSaveAuxFieldStrStr(rdb,"vclock",vclockSds)
-        == -1) return -1;
+        == -1) {
+        sdsfree(vclockSds);
+        return -1;
+    }
     sdsfree(vclockSds);
     if (rdbSaveAuxFieldStrStr(rdb,"crdt-repl-id",crdtServer.replid)
         == -1) return -1;
@@ -779,7 +790,7 @@ int data2CrdtData(client* fakeClient,robj* key, robj* val) {
         }      
         break;
         case OBJ_SET: {
-            len = hashTypeLength(val);
+            len = setTypeSize(val);
             int i = 0;
             setTypeIterator* si = setTypeInitIterator(val);
             sds field = setTypeNextObject(si);
@@ -791,12 +802,74 @@ int data2CrdtData(client* fakeClient,robj* key, robj* val) {
                 i = 2;
                 do {
                     fakeClient->argv[i++] = createRawStringObject(field, sdslen(field));
+                    sdsfree(field);
                     len--;
                 } while ((field = setTypeNextObject(si)) != NULL && i < MAX_FAKECLIENT_ARGV);
                 fakeClient->argc = i;
                 processInputRdb(fakeClient);
             } 
             setTypeReleaseIterator(si);
+        }
+        break;
+        case OBJ_ZSET: {
+            int len = zsetLength(val);
+            if (val->encoding == OBJ_ENCODING_ZIPLIST) {
+                unsigned char *zl = val->ptr;
+                unsigned char *eptr, *sptr;
+                unsigned char *vstr;
+                unsigned int vlen;
+                long long vlong;
+                eptr = ziplistIndex(zl,0);
+                sptr = ziplistNext(zl,eptr);
+                while (len > 0) {
+                    fakeClient->argv[0] = shared.zadd;
+                    incrRefCount(shared.zadd);
+                    fakeClient->argv[1] = key;
+                    incrRefCount(key);
+                    int i = 2;
+                    do {
+                        ziplistGet(eptr,&vstr,&vlen,&vlong);
+                        assert(vstr != NULL);                   
+                        double score = zzlGetScore(sptr);
+                        fakeClient->argv[i++] = createStringObjectFromLongDouble((long double)score, 1);
+                        zzlNext(zl,&eptr,&sptr);
+                        fakeClient->argv[i++] = createRawStringObject(vstr, vlen);
+                        len--;
+                    } while (eptr != NULL && i < MAX_FAKECLIENT_ARGV);
+                    fakeClient->argc = i;
+                    processInputRdb(fakeClient);
+                }
+
+            } else if (val->encoding == OBJ_ENCODING_SKIPLIST) {
+                zset *zs = val->ptr;
+                zskiplist *zsl = zs->zsl;
+                zskiplistNode *ln;
+                sds ele;
+                /* Check if starting point is trivial, before doing log(N) lookup. */  
+                ln = zsl->header->level[0].forward;
+                while(len > 0) {
+                    fakeClient->argv[0] = shared.zadd;
+                    incrRefCount(shared.zadd);
+                    fakeClient->argv[1] = key;
+                    incrRefCount(key);
+                    int i = 2;
+                    do {
+                        ele = ln->ele;
+                        // addReplyBulkCBuffer(c,ele,sdslen(ele));
+                        long double score = (long double)ln->score;
+                        fakeClient->argv[i++] =  createStringObjectFromLongDouble(score, 1);
+                        fakeClient->argv[i++] = createRawStringObject(ele, sdslen(ele));
+                        
+                        ln = ln->level[0].forward;
+                        len--;
+                    } while(ln != NULL && i < MAX_FAKECLIENT_ARGV);
+                    fakeClient->argc = i;
+                    processInputRdb(fakeClient);
+                }
+            } else {
+                serverPanic("Unknown sorted set encoding");
+            }
+            
         }
         break;
         // case OBJ_MODULE: freeModuleObject(o); break;
@@ -817,8 +890,8 @@ error:
 int expire2CrdtExpire(client* fakeClient, robj* key, long long expiretime) {
     fakeClient->argc = 3;
     // fakeClient->argv = zmalloc(sizeof(robj*)*3);
-    fakeClient->argv[0] = shared.expireat;
-    incrRefCount(shared.expireat); 
+    fakeClient->argv[0] = shared.pexpireat;
+    incrRefCount(shared.pexpireat); 
     fakeClient->argv[1] = key;
     incrRefCount(key);
     fakeClient->argv[2] = createStrRobjFromLongLong(expiretime);

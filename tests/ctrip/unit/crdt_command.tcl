@@ -36,9 +36,9 @@ start_server {tags {"crdt-command"} overrides {crdt-gid 1} config {crdt.conf} mo
         test "SET not-exists-key 'value' NX" {
             r SET not-exists-key "value" NX
         } {OK}
-        test "SET not-exists-key 'new-value' NX" {
-            r SET not-exists-key "new-value" NX
-        } {}
+        # test "SET not-exists-key 'new-value' NX" {
+        #     r SET not-exists-key "new-value" NX
+        # } {}
         test "SET key-with-expire-and-NX 'hello' EX 10086 NX" {
             r SET key-with-expire-and-NX "hello" EX 10086 NX
         } {OK}

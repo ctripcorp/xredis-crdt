@@ -11,13 +11,49 @@ source tests/support/tmpfile.tcl
 source tests/support/test.tcl
 source tests/support/util.tcl
 source tests/support/aof.tcl
-
+source tests/test_script/utils.tcl
 set ::all_tests {
-    ctrip/unit/multi
-    ctrip/unit/crdt_counter
-    ctrip/basic/set
-    ctrip/basic/scan
+    ctrip/unit/string
+    ctrip/unit/expire
+    ctrip/unit/rc1 
+    ctrip/unit/rc2 
+    ctrip/unit/rc3 
+    ctrip/unit/rc4 
+    ctrip/unit/rc5
+    ctrip/master-not-crdt/convert-set-on-load
+    ctrip/master-not-crdt/convert-zset-on-load
+    ctrip/master-not-crdt/slave-update-peer-repl-offset
+    ctrip/integration/master-slave/slave-update-peer-offset-when-master-slave-add-sync
+    ctrip/integration/composite/peer-offset-check
+    ctrip/integration/bug/free-replication-blocklog
+    ctrip/integration/bug/peerof_other_peer_when_master-peer_full_sync
     ctrip/unit/crdt_set
+    ctrip/unit/counter2
+    ctrip/unit/counter
+    ctrip/unit/crdt_zset5
+    ctrip/unit/crdt_zset1
+    ctrip/unit/crdt_zset2 
+    ctrip/unit/crdt_zset3 
+    ctrip/unit/crdt_zset4 
+    ctrip/unit/crdt_command
+    ctrip/basic/set
+    ctrip/unit/gc
+    ctrip/integration/master-master/replication
+    ctrip/readonly/basic_crdt_type_del
+    ctrip/basic/basic_crdt_type_del
+    ctrip/basic/basic_type
+    ctrip/master-not-crdt/slave-redis
+    ctrip/unit/aof
+    ctrip/unit/crdt_publish
+    ctrip/integration/master-slave/rdb3
+    ctrip/integration/bug/redis-unfree-client-when-master-to-slave
+    ctrip/integration/bug/hash-miss-send-when-full-sync
+    ctrip/integration/bug/full-sync-timeout
+
+    ctrip/integration/composite/full-sync
+    ctrip/unit/crdt_register
+    ctrip/unit/crdt_hash
+    ctrip/basic/scan
     ctrip/integration/bug/set_binary
     ctrip/integration/bug/del_hash_tombstone_when_merge_hash
     ctrip/master-not-crdt/master-offset
@@ -25,67 +61,64 @@ set ::all_tests {
     ctrip/integration/bug/peer-full-sync-losing-meta-data
     ctrip/integration/master-master/full_sync_memory_limit
     ctrip/master-not-crdt/convert-zipmap-hash-on-load
-    ctrip/unit/multi
     ctrip/integration/bug/slave-non-read-only-peer-backlog
     ctrip/integration/bug/hashtombstone_purge_kv
+
+    ctrip/master-not-crdt/full-sync-error-datatype
+    ctrip/master-not-crdt/full-sync-error-datatype2
+    ctrip/master-not-crdt/add-sync-stop
+    ctrip/master-not-crdt/crdt-redis-when-inited-not-full-sync-from-redis
+    ctrip/master-not-crdt/jump-vectorclock
+    ctrip/master-not-crdt/master-redis-peer
+    ctrip/integration/composite/full-sync
+    ctrip/integration/master-master/full_sync-3
+    ctrip/integration/master-master/replication-2
+    ctrip/integration/master-master/full_sync-2
     ctrip/integration/bug/slave-non-read-only-send-slave
-    ctrip/integration/composite/peer-offset-check
-    ctrip/master-not-crdt/slave-update-peer-repl-offset
     ctrip/integration/master-slave/slave-update-peer-offset-when-master-slave-full-sync
-    ctrip/integration/master-slave/slave-update-peer-offset-when-master-slave-add-sync
-    ctrip/integration/bug/peerof_other_peer_when_master-peer_full_sync
+    
     ctrip/integration/master-slave/auth-gid
     ctrip/integration/bug/master-master-add-sync-when-slave-change-to-master
+    
     ctrip/master-not-crdt/more-write-db
     ctrip/master-not-crdt/update-peer-repl-offset
     ctrip/integration/master-slave/more-write-db
     ctrip/integration/master-slave/slave-peer-offset
-
     ctrip/master-not-crdt/peerof
 
     ctrip/unit/namespace
-    ctrip/unit/module_memory
-    ctrip/integration/bug/free-replication-blocklog
+    
     ctrip/master-not-crdt/crdt_replid_reuse
     ctrip/integration/bug/not_remember_slave_key_with_expire_when_master_is_non_crdt
-    ctrip/unit/crdt_command
     ctrip/readonly/basic_crdt_type
     ctrip/readonly/basic_type
-    ctrip/readonly/basic_crdt_type_del
+
     ctrip/unit/peerof
     ctrip/unit/dict-expend
+
     ctrip/integration/bug/slave-merge-expired-object-bug
     ctrip/integration/bug/peerof
     ctrip/integration/master-master/add_sync
-
     ctrip/master-not-crdt/master-redis-peer2
-    ctrip/master-not-crdt/master-redis-peer
-    ctrip/master-not-crdt/jump-vectorclock
-    ctrip/master-not-crdt/crdt-redis-when-inited-not-full-sync-from-redis
-    ctrip/master-not-crdt/full-sync-error-datatype
-    ctrip/master-not-crdt/load-redis-rdb
     ctrip/master-not-crdt/master-redis-slave-crdt
-    ctrip/master-not-crdt/add-sync-stop
-    ctrip/master-not-crdt/full-sync-error-datatype2
     ctrip/master-not-crdt/full-sync-stop
-    ctrip/master-not-crdt/slave-redis
-    ctrip/unit/aof
+    
 
-    ctrip/unit/expire
-    ctrip/unit/crdt_publish
-    ctrip/integration/master-slave/rdb3
-    ctrip/integration/bug/redis-unfree-client-when-master-to-slave
-    ctrip/integration/bug/hash-miss-send-when-full-sync
-    ctrip/integration/bug/full-sync-timeout
+    ctrip/integration/master-master/replication
+    ctrip/integration/master-master/full_sync
+    ctrip/integration/master-master/partial-sync
+    ctrip/unit/multi
 
-    ctrip/basic/basic_crdt_type
-    ctrip/basic/basic_type
-    ctrip/basic/basic_crdt_type_del
+    ctrip/integration/composite/concurrent-conflict-full
+    ctrip/integration/composite/master-slave-failover
+    ctrip/unit/crdt_conflict
+    ctrip/unit/crdt_del_conflict
+    ctrip/integration/master-slave/rdb
+    ctrip/integration/master-slave/rdb2
+    ctrip/integration/master-slave/psync2
+    ctrip/integration/master-slave/replication-psync
 
-
-    ctrip/unit/crdt_hash
     ctrip/unit/crdt_del
-    ctrip/unit/crdt_register
     ctrip/unit/merge_different_type
     ctrip/unit/crdt_hdel_mem_leak
     ctrip/unit/gc
@@ -98,29 +131,55 @@ set ::all_tests {
     ctrip/integration/master-slave/replication-3
     ctrip/integration/master-slave/replication-4
     ctrip/integration/master-slave/psync2-reg
+    
+    ctrip/unit/zset
+    ctrip/master-not-crdt/convert-data-on-load
+}   
 
-    ctrip/integration/master-master/replication
-    ctrip/integration/master-master/full_sync
-    ctrip/integration/master-master/full_sync-2
-    ctrip/integration/master-master/partial-sync
-    ctrip/integration/master-master/replication-2
-    ctrip/integration/master-master/full_sync-3
+set ::temp_tests { 
 
-    ctrip/integration/composite/full-sync
-    ctrip/integration/composite/concurrent-conflict-full
-    ctrip/integration/composite/master-slave-failover
-    ctrip/unit/crdt_conflict
-    ctrip/unit/crdt_del_conflict
-    ctrip/integration/master-slave/rdb
-    ctrip/integration/master-slave/rdb2
-    ctrip/integration/master-slave/psync2
-    ctrip/integration/master-slave/replication-psync
-}
 
-set ::temp_tests {  
-    ##
+    
+
+
+    #
+    test_script/peer_master
+    test_script/change_master_slave
+    test_script/sync_master
+    test_script/sync_slave
+    test_script/check
+    test_script/peer_master
+    test_script/change_master_slave    
+#
+
+    ctrip/master-not-crdt/update-peer-repl-offset
+    ctrip/master-not-crdt/master-redis-slave-crdt
+    
+    #
+    test_script/rc
+    test_script/zadd
+    ctrip/unit/crdt_zset2
+    ctrip/unit/zset
+    ctrip/unit/crdt_zset
+    
+    ctrip/unit/crdt_set
+    ctrip/unit/zset
+    test_script/zadd
+    test_script/rc
+    ctrip/unit/crdt_set
+    ctrip/unit/counter
+    ctrip/basic/basic_type
+    ctrip/master-not-crdt/convert-data-on-load
+    ctrip/unit/crdt_zset
+    
+    ctrip/unit/module_memory
+    ctrip/unit/counter
+    ctrip/unit/crdt_zset
+    ctrip/unit/zset
+    ctrip/basic/basic_type
     
     
+     
     #####
     ctrip/integration/bug/redis-crash-when-full-sync-hash-merge
     ctrip/integration/bug/redis-when-full-sync-mater-timeout-vectorclock-update

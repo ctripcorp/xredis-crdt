@@ -331,7 +331,8 @@ struct redisCommand redisCommandTable[] = {
     {"tombstoneSize",tombstoneSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
     {"expireSize",expireSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
     {"crdt.authGid", crdtAuthGidCommand,2,"rF", 0, NULL,0,0,0,0,0},
-    {"crdt.auth", crdtAuthCommand, 3, "rF", 0,NULL,0,0,0,0,0}
+    {"crdt.auth", crdtAuthCommand, 3, "rF", 0,NULL,0,0,0,0,0},
+    {"crdt.replication", crdtReplicationCommand, 4, "rF", 0, NULL, 0,0,0,0,0}
 };
 
 /*============================ CRDT functions ============================ */
@@ -382,7 +383,6 @@ void serverLogRaw(int level, const char *msg) {
             (int)getpid(),role_char, buf,c[level],msg);
     }
     fflush(fp);
-
     if (!log_to_stdout) fclose(fp);
     if (server.syslog_enabled) syslog(syslogLevelMap[level], "%s", msg);
 }
@@ -1432,8 +1432,9 @@ void createSharedObjects(void) {
     shared.set = createStringObject("SET", 3);
     shared.hset = createStringObject("HSET", 4);
     shared.sadd = createStringObject("SADD", 4);
+    shared.zadd = createStringObject("ZADD", 4);
     shared.crdtexec = createStringObject("CRDT.EXEC", 9);
-    shared.expireat = createStringObject("EXPIREAt", 8);
+    shared.pexpireat = createStringObject("PEXPIREAt", 9);
     for (j = 0; j < OBJ_SHARED_INTEGERS; j++) {
         shared.integers[j] =
             makeObjectShared(createObject(OBJ_STRING,(void*)(long)j));
@@ -3517,6 +3518,7 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                                 "peer%d_host:%s\r\n"
                                 "peer%d_port:%d\r\n"
                                 "peer%d_gid:%lld\r\n"
+                                "peer%d_dbid:%lld\r\n"
                                 "peer%d_link_status:%s\r\n"
                                 "peer%d_last_io_seconds_ago:%d\r\n"
                                 "peer%d_sync_in_progress:%d\r\n"
@@ -3526,6 +3528,7 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                                 masterid, masterInstance->masterhost,
                                 masterid, masterInstance->masterport,
                                 masterid, masterInstance->gid,
+                                masterid, masterInstance->dbid,
                                 masterid, (masterInstance->repl_state == REPL_STATE_CONNECTED) ?
                                 "up" : "down",
                                 masterid, masterInstance->master ?
