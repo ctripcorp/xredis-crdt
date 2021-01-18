@@ -780,7 +780,7 @@ struct sharedObjectsStruct {
     *masterdownerr, *roslaveerr, *execaborterr, *noautherr, *noreplicaserr,
     *busykeyerr, *oomerr, *plus, *messagebulk, *pmessagebulk, *subscribebulk, *crdtsubscribebulk,
     *unsubscribebulk, *uncrdtsubscribebulk, *psubscribebulk, *crdtpsubscribebulk, *punsubscribebulk, *crdtpunsubscribebulk, *del, *unlink, *crdtdel,
-    *rpop, *lpop, *lpush,*set,*hset,*expireat, *emptyscan, *crdtexec, *sadd,
+    *rpop, *lpop, *lpush,*set,*hset,*pexpireat, *emptyscan, *crdtexec, *sadd, *zadd,
     *crdtmergeerr,
     *select[PROTO_SHARED_SELECT_CMDS],
     *integers[OBJ_SHARED_INTEGERS],
@@ -909,9 +909,9 @@ typedef struct CRDT_Master_Instance {
     time_t repl_down_since; /* Unix time at which link with master went down */
     char master_replid[CONFIG_RUN_ID_SIZE+1];  /* Master PSYNC repl_id. */
     long long master_initial_offset;           /* Master PSYNC offset. used for the full sync*/
-
+    
     VectorClock vectorClock;
-
+    int dbid;
 } CRDT_Master_Instance;
 
 /*-----------------------------------------------------------------------------
@@ -1624,6 +1624,7 @@ void crdtAuthGidCommand(client *c);
 
 void sendSelectCommandToSlave(int dictid);
 void crdtAuthCommand(client *c);
+void crdtReplicationCommand(client *c);
 void freeClientArgv(client* c);
 void feedCrdtBacklog(robj **argv, int argc);
 void replicationFeedAllSlaves(int dictid, robj **argv, int argc);

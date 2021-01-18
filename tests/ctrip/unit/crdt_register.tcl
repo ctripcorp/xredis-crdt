@@ -12,7 +12,8 @@ start_server {tags {"crdt-register"} overrides {crdt-gid 1} config {crdt.conf} m
 
     test {"[crdt_register.tcl]SET and GET"} {
         r set x foobar
-        set info [r crdt.dataInfo x]
+        set info [r crdt.datainfo x]
+        puts $info
         assert_equal [string match  "type: lww_register, gid: 1, timestamp: *, vector-clock: 1:1, val: foobar" [lindex $info 0]] 1
         r get x
     } {foobar}

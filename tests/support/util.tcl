@@ -131,6 +131,12 @@ proc randomInt {max} {
     expr {int(rand()*$max)}
 }
 
+proc randomFloat { min max } {
+    set rd [expr rand()]
+    set result [expr $rd * ($max - $min) + $min]
+    return $result
+}
+
 # Random signed integer between -max and max (both extremes excluded).
 proc randomSignedInt {max} {
     set i [randomInt $max]
@@ -160,7 +166,16 @@ proc randomValue {} {
         randpath {randstring 0 256 alpha} \
                 {randstring 0 256 compr} \
                 {randstring 0 256 binary}
+    } {
+        #float 
+        randomFloat -1 1
     }
+}
+
+proc randomString {} {
+    randpath {randstring 0 256 alpha} \
+                {randstring 0 256 compr} \
+                {randstring 0 256 binary}
 }
 
 proc randomKey {} {

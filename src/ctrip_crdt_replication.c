@@ -61,6 +61,7 @@ CRDT_Master_Instance *createPeerMaster(client *c, int gid) {
     masterInstance->masterauth = NULL;
     masterInstance->vectorClock = newVectorClock(0);
     masterInstance->repl_transfer_lastio = mstime();
+    masterInstance->dbid = 0;
     return masterInstance;
 }
 
@@ -264,7 +265,7 @@ crdtMergeStartCommand(client *c) {
     if (isNullVectorClockUnit(getVectorClockUnit(crdtServer.vectorClock, sourceGid))) {
         crdtServer.vectorClock = addVectorClockUnit(crdtServer.vectorClock, sourceGid, 0);
     }
-    freeVectorClock(vclock);;
+    freeVectorClock(vclock);
     freeVectorClock(curGcVclock);
     server.dirty ++;
     serverLog(LL_NOTICE, "[CRDT][crdtMergeStartCommand][end] master gid: %lld", sourceGid);
@@ -741,8 +742,8 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
     if(crdtMaster->repl_state == REPL_STATE_RECEIVE_CRDT_AUTH) {
         err = crdtSendSynchronousCommand(crdtMaster, SYNC_CMD_READ, fd, NULL);
         if (err[0] == '-') {
-            serverLog(LL_NOTICE,"[CRDT] Unable to Namespace and GID to MASTER namespace :%s, gid: %lld , error: '%s'", 
-                    crdtServer.crdt_namespace,crdtMaster->gid, err);
+            serverLog(LL_NOTICE,"[CRDT] Unable to Namespace and GID to MASTER namespace :%s, gid: %lld ,host:%s, port:%d, error: '%s'", 
+                    crdtServer.crdt_namespace,crdtMaster->gid, crdtMaster->masterhost, crdtMaster->masterport, err);
             sdsfree(err);
             goto error;
         }
@@ -1130,7 +1131,9 @@ void crdtReplicationCreateMasterClient(CRDT_Master_Instance *crdtMaster, client*
     c->gid = crdtMaster->gid;
     c->flags |= CLIENT_CRDT_MASTER;
     c->authenticated = 1;
-    if (dbid != -1) selectDb(c,dbid);
+    if (dbid != -1) {
+        selectDb(c,dbid);
+    } 
     crdtMaster->master = c;
 }
 
@@ -1438,6 +1441,7 @@ void replicationFeedStringToAllSlaves(int dictid, void* cmdbuf, size_t cmdlen) {
     }
     server.slaveseldb = dictid;
     crdtServer.slaveseldb = dictid;
+    
     replicationFeedString(cmdbuf, cmdlen);
 }
 /* Propagate write commands to slaves, and populate the replication backlog
@@ -1901,3 +1905,52 @@ void crdtRoleCommand(client *c) {
     }
 }
 
+void crdtReplicationCommand(client *c) {
+    struct redisServer* srv;
+    if(strcasecmp(c->argv[1]->ptr, "master") == 0) {
+        srv = &server;
+    } else {
+        srv = &crdtServer;
+    }
+    if(srv->repl_backlog == NULL) {
+        addReply(c, shared.nullbulk);
+        return;
+    }
+    long long start = 0, len = 0;
+    if (getLongLongFromObjectOrReply(c, c->argv[2], &start, NULL) != C_OK)
+            return;
+    if (getLongLongFromObjectOrReply(c, c->argv[3], &len, NULL) != C_OK)
+            return;
+    if(start > srv->repl_backlog_idx) {
+        addReply(c, shared.nullbulk);
+        return;
+    }
+    /* Compute the amount of bytes we need to discard. */
+    long long skip = start - srv->repl_backlog_off;
+    serverLog(LL_DEBUG, "[PSYNC] Skipping: %lld", skip);
+
+    /* Point j to the oldest byte, that is actually our
+     * srv->repl_backlog_off byte. */
+    long long j = (srv->repl_backlog_idx +
+        (srv->repl_backlog_size-srv->repl_backlog_histlen)) %
+        srv->repl_backlog_size;
+
+    /* Discard the amount of data to seek to the specified 'offset'. */
+    j = (j + skip) % srv->repl_backlog_size;
+
+    /* Feed slave with data. Since it is a circular buffer we have to
+     * split the reply in two parts if we are cross-boundary. */
+    // len = srv->repl_backlog_histlen - skip;
+    sds s = sdsempty();
+    while(len) {
+        long long thislen =
+            ((srv->repl_backlog_size - j) < len) ?
+            (srv->repl_backlog_size - j) : len;
+
+        s = sdscatlen(s , srv->repl_backlog + j, thislen);
+        len -= thislen;
+        j = 0;
+    }
+    addReplyBulkCBuffer(c, s, sdslen(s));
+    sdsfree(s);
+}
