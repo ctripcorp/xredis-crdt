@@ -1585,7 +1585,7 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
     } 
 
     CRDT_Master_Instance *currentMasterInstance = NULL;
-    if (isCrdtRdb && crdt_enabled ) {
+    if (isCrdtRdb && crdt_enabled && iAmMaster() != C_OK ) {
         if(crdtServer.crdtMasters == NULL) {
             crdtServer.crdtMasters = zmalloc((MAX_PEERS + 1) * sizeof(void*));
             int i = 0;
@@ -1715,27 +1715,41 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                         "Can't load peer-master-gid from RDB file! "
                         "BODY: %d", gid);
                 }
+                currentMasterInstance = NULL;
                 CRDT_Master_Instance *masterInstance = getPeerMaster(gid);
-                if(masterInstance == NULL) {
+                /**
+                 *  master 
+                 *      rdb < config
+                 *   slave  
+                 *      config > rdb
+                 */
+                if (masterInstance == NULL) {
                     masterInstance = createPeerMaster(NULL, gid);
                     crdtServer.crdtMasters[gid] = masterInstance;
+                } else if(iAmMaster()) {
+                    continue;
                 }
-                addPeerSet(gid);
                 currentMasterInstance = masterInstance;
                 crdtReplicationCreateMasterClient(currentMasterInstance, createClient(-1), -1);
+                
             } else if(!strcasecmp(auxkey->ptr,"peer-master-dbid")) {
+                if(currentMasterInstance == NULL) {continue;}
                 selectDb(currentMasterInstance->master, atoi(auxval->ptr));
                 currentMasterInstance->dbid = atoi(auxval->ptr);
             } else if (!strcasecmp(auxkey->ptr,"peer-master-host")) {
+                if(currentMasterInstance == NULL) {continue;}
                 sdsfree(currentMasterInstance->masterhost);
                 currentMasterInstance->masterhost = sdsdup(auxval->ptr);
             } else if (!strcasecmp(auxkey->ptr,"peer-master-port")) {
+                if(currentMasterInstance == NULL) {continue;}
                 currentMasterInstance->masterport = atoi(auxval->ptr);
             } else if (!strcasecmp(auxkey->ptr,"peer-master-repl-id")) {
+                if(currentMasterInstance == NULL) {continue;}
                 if (sdslen(auxval->ptr) == CONFIG_RUN_ID_SIZE) {
                     memcpy(currentMasterInstance->master->replid, auxval->ptr,CONFIG_RUN_ID_SIZE+1);
                 }
             } else if (!strcasecmp(auxkey->ptr,"peer-master-repl-offset")) {
+                if(currentMasterInstance == NULL) {continue;}
                 currentMasterInstance->master->reploff = strtoll(auxval->ptr,NULL,10); 
             }else {
                 /* We ignore fields we don't understand, as by AUX field

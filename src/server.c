@@ -237,6 +237,7 @@ struct redisCommand redisCommandTable[] = {
     {"dbsize",dbsizeCommand,1,"rF",0,NULL,0,0,0,0,0},
     {"auth",authCommand,2,"sltF",0,NULL,0,0,0,0,0},
     {"ping",pingCommand,-1,"tF",0,NULL,0,0,0,0,0},
+    {"getvc",getVcCommand, -1, "tF",0, NULL,0,0,0,0,0},
     {"echo",echoCommand,2,"F",0,NULL,0,0,0,0,0},
     {"save",saveCommand,1,"as",0,NULL,0,0,0,0,0},
     {"bgsave",bgsaveCommand,-1,"a",0,NULL,0,0,0,0,0},
@@ -318,14 +319,14 @@ struct redisCommand redisCommandTable[] = {
 //    {"host:",securityWarningCommand,-1,"lt",0,NULL,0,0,0,0,0},
     {"latency",latencyCommand,-2,"aslt",0,NULL,0,0,0,0,0},
     {"crdt.psync",crdtPsyncCommand,3,"ars",0,NULL,0,0,0,0,0},
-    {"crdt.merge_start", crdtMergeStartCommand,-1,"ars",0,NULL,0,0,0,0,0},
-    {"crdt.merge",crdtMergeCommand,-1,"wm",0,NULL,0,0,0,0,0},
-    {"crdt.merge_del",crdtMergeDelCommand,-1,"wm",0,NULL,0,0,0,0,0},
-    {"crdt.merge_end",crdtMergeEndCommand,-1,"ars",0,NULL,0,0,0,0,0},
+    {"crdt.merge_start", crdtMergeStartCommand,-1,"lars",0,NULL,0,0,0,0,0},
+    {"crdt.merge",crdtMergeCommand,-1,"lwm",0,NULL,0,0,0,0,0},
+    {"crdt.merge_del",crdtMergeDelCommand,-1,"lwm",0,NULL,0,0,0,0,0},
+    {"crdt.merge_end",crdtMergeEndCommand,-1,"lars",0,NULL,0,0,0,0,0},
     {"crdt.replconf",replconfCommand,-1,"aslt",0,NULL,0,0,0,0,0},
     {"crdt.role",crdtRoleCommand,3,"lst",0,NULL,0,0,0,0,0},
     {"crdt.info",crdtinfoCommand,-1,"lt",0,NULL,0,0,0,0,0},
-    {"peerof",peerofCommand,4,"ast",0,NULL,0,0,0,0,0},
+    {"peerof",peerofCommand,-4,"ast",0,NULL,0,0,0,0,0},
     {"crdt.peer.change",peerChangeCommand,3,"lF", 0,NULL,0,0,0,0,0},
     {"debugCancelCrdt",debugCancelCrdt,3,"ast",0,NULL,0,0,0,0,0},
     {"tombstoneSize",tombstoneSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
@@ -1456,7 +1457,13 @@ void createSharedObjects(void) {
 
 void initServerConfig(struct redisServer *srv) {
     int j;
-
+    if(srv == &crdtServer) {
+        srv->crdtMasters = zmalloc((MAX_PEERS + 1) * sizeof(void*));
+        int i = 0;
+        for(; i < (MAX_PEERS + 1); i ++) {
+            srv->crdtMasters[i] = NULL;
+        }
+    }
     pthread_mutex_init(&srv->next_client_id_mutex,NULL);
     pthread_mutex_init(&srv->lruclock_mutex,NULL);
     pthread_mutex_init(&srv->unixtime_mutex,NULL);
@@ -2122,11 +2129,6 @@ void initServer(struct redisServer *srv) {
     }
 
     if(srv == &crdtServer) {
-        srv->crdtMasters = zmalloc((MAX_PEERS + 1) * sizeof(void*));
-        int i = 0;
-        for(; i < (MAX_PEERS + 1); i ++) {
-            srv->crdtMasters[i] = NULL;
-        }
         srv->crdt_gid = server.crdt_gid;
     }
     VectorClock vc = newVectorClock(1);
@@ -2383,7 +2385,7 @@ void call(client *c, int flags) {
     /* Sent the command to clients in MONITOR mode, only if the commands are
      * not generated from reading an AOF. */
     if (listLength(server.monitors) &&
-        !server.loading &&
+        !server.loading && !crdtServer.loading &&
         !(c->cmd->flags & (CMD_SKIP_MONITOR|CMD_ADMIN)))
     {
         replicationFeedMonitors(c,server.monitors,c->db->id,c->argv,c->argc);
@@ -2405,7 +2407,7 @@ void call(client *c, int flags) {
 
     /* When EVAL is called loading the AOF we don't want commands called
      * from Lua to go into the slowlog or to populate statistics. */
-    if (server.loading && c->flags & CLIENT_LUA)
+    if ((server.loading || crdtServer.loading) && c->flags & CLIENT_LUA)
         flags &= ~(CMD_CALL_SLOWLOG | CMD_CALL_STATS);
 
     /* If the caller is Lua, we want to force the EVAL caller to propagate
@@ -2657,11 +2659,10 @@ int processCommand(client *c) {
 
     /* Loading DB? Return an error if the command has not the
      * CMD_LOADING flag. */
-    if (server.loading && !(c->cmd->flags & CMD_LOADING)) {
+    if ((server.loading || crdtServer.loading) && !(c->cmd->flags & CMD_LOADING)) {
         addReply(c, shared.loadingerr);
         return C_OK;
     }
-
     /* Lua script too slow? Only allow a limited number of commands. */
     if (server.lua_timedout &&
           c->cmd->proc != authCommand &&
@@ -4241,7 +4242,8 @@ int main(int argc, char **argv) {
     if (server.maxmemory > 0 && server.maxmemory < 1024*1024) {
         serverLog(LL_WARNING,"WARNING: You specified a maxmemory value that is less than 1MB (current value is %llu bytes). Are you sure this is what you really want?", server.maxmemory);
     }
-
+    server.start_time = ustime();
+    peerBackFlow();
     aeSetBeforeSleepProc(server.el,beforeSleep);
     aeSetAfterSleepProc(server.el,afterSleep);
     aeMain(server.el);
