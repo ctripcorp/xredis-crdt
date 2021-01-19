@@ -488,7 +488,7 @@ int luaRedisGenericCommand(lua_State *lua, int raise_error) {
                 "Write commands not allowed after non deterministic commands. Call redis.replicate_commands() at the start of your script in order to switch to single commands replication mode.");
             goto cleanup;
         } else if (server.masterhost && server.repl_slave_ro &&
-                   !server.loading &&
+                   !server.loading && !crdtServer.loading &&
                    !(server.lua_caller->flags & CLIENT_MASTER))
         {
             luaPushError(lua, shared.roslaveerr->ptr);
@@ -521,7 +521,7 @@ int luaRedisGenericCommand(lua_State *lua, int raise_error) {
     /* If this is a Redis Cluster node, we need to make sure Lua is not
      * trying to access non-local keys, with the exception of commands
      * received from our master or when loading the AOF back in memory. */
-    if (server.cluster_enabled && !server.loading &&
+    if (server.cluster_enabled && !server.loading && !crdtServer.loading &&
         !(server.lua_caller->flags & CLIENT_MASTER))
     {
         /* Duplicate relevant flags in the lua client. */

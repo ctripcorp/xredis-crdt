@@ -746,7 +746,9 @@ void syncCommand(client *c) {
      * So the slave knows the new replid and offset to try a PSYNC later
      * if the connection with the master is lost. */
     if (!strcasecmp(c->argv[0]->ptr,"psync")) {
-        if (masterTryPartialResynchronization(&server, c) == C_OK) {
+        if (c->slave_capa & SLAVE_CAPA_BACKFLOW) {
+            //full resync
+        } else if (masterTryPartialResynchronization(&server, c) == C_OK) {
             server.stat_sync_partial_ok++;
             return; /* No full resync needed, return. */
         } else {
@@ -882,6 +884,21 @@ void replconfCommand(client *c) {
         else if (!strcasecmp(c->argv[j]->ptr,"min-vc")) {
             serverAssertWithInfo(c, NULL, sdsEncodedObject(c->argv[j+1]));
             refreshVectorClock(c, c->argv[j+1]->ptr);
+            long long vcu = get_vcu_from_vc(c->vectorClock, crdtServer.crdt_gid, NULL);
+            c->filterVectorClock = addVectorClockUnit(c->filterVectorClock, crdtServer.crdt_gid, vcu);
+        } 
+        else if (!strcasecmp(c->argv[j]->ptr, "backflow")) {
+            serverAssertWithInfo(c, NULL, sdsEncodedObject(c->argv[j+1]));
+            // c->gid = atoi(c->argv[j+1]->ptr);
+            serverLog(LL_WARNING, "backflow: %s", c->argv[j+1]->ptr);
+            // refreshVectorClock(c, c->argv[j+1]->ptr);
+            VectorClock vc = sdsToVectorClock(c->argv[j+1]->ptr);
+            VectorClock old_vc = c->filterVectorClock;
+            c->filterVectorClock = vectorClockMerge(c->filterVectorClock, vc);
+            freeVectorClock(old_vc);
+            freeVectorClock(vc);
+            c->slave_capa  |= SLAVE_CAPA_BACKFLOW;
+
         }
         else if (!strcasecmp(c->argv[j]->ptr,"ack-vc")) {
             /* REPLCONF ACK is used by slave to inform the master the amount

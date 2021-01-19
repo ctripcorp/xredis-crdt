@@ -103,7 +103,7 @@ int gcIfNeeded(dict *d, robj *key) {
     CrdtObject *tombstone = retrieveCrdtObject(val);
 
     /* Don't del anything while loading. It will be done later. */
-    if (server.loading) return 0;
+    if (server.loading || crdtServer.loading) return 0;
 
     /* It's ready to be deleted, when and only when other peers already know what happend.
      * 1. Gc Vector Clock is collected from each peer's vector clock, and do a minimium of them

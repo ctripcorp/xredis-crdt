@@ -253,4 +253,7 @@ vectorClockMerge(VectorClock vclock1, VectorClock vclock2);
 void
 updateProcessVectorClock(VectorClock *dst, VectorClock *src, int gid, int currentGid);
 
+
+long long get_vcu_from_vc(VectorClock vc, int gid, int* index);
+int VectorClockEqual(VectorClock a, VectorClock b);
 #endif //REDIS_VECTOR_CLOCK_H

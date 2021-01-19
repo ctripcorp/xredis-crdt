@@ -308,12 +308,14 @@ typedef long long mstime_t; /* millisecond time type. */
 #define REPL_STATE_SEND_CRDT 17
 #define REPL_STATE_RECEIVE_CRDT 18
 #define REPL_STATE_RECEIVE_VC 19 /* Wait for Vector Clock reply */
-#define REPL_STATE_SEND_PSYNC 20 /* Send PSYNC */
-#define REPL_STATE_RECEIVE_PSYNC 21 /* Wait for PSYNC reply */
+#define REPL_STATE_SEND_BACKFLOW 20
+#define REPL_STATE_RECEIVE_BACKFLOW 21
+#define REPL_STATE_SEND_PSYNC 22 /* Send PSYNC */
+#define REPL_STATE_RECEIVE_PSYNC 23 /* Wait for PSYNC reply */
 
 /* --- End of handshake states --- */
-#define REPL_STATE_TRANSFER 22 /* Receiving .rdb from master */
-#define REPL_STATE_CONNECTED 23 /* Connected to master */
+#define REPL_STATE_TRANSFER 24 /* Receiving .rdb from master */
+#define REPL_STATE_CONNECTED 25 /* Connected to master */
 
 /* State of slaves from the POV of the master. Used in client->replstate.
  * In SEND_BULK and ONLINE state the slave receives new updates
@@ -329,6 +331,7 @@ typedef long long mstime_t; /* millisecond time type. */
 #define SLAVE_CAPA_EOF (1<<0)    /* Can parse the RDB EOF streaming format. */
 #define SLAVE_CAPA_PSYNC2 (1<<1) /* Supports PSYNC2 protocol. */
 #define SLAVE_CAPA_CRDT (1<<2)
+#define SLAVE_CAPA_BACKFLOW (1<<3)
 /* Synchronous read timeout - slave side */
 #define CONFIG_REPL_SYNCIO_TIMEOUT 5
 
@@ -759,6 +762,7 @@ typedef struct client {
     // struct CRDT_Master_Instance* peer_master;
     int gid;
     long long pending_used_offset;
+    VectorClock filterVectorClock;
 } client;
 
 struct saveparam {
@@ -912,6 +916,7 @@ typedef struct CRDT_Master_Instance {
     
     VectorClock vectorClock;
     int dbid;
+    VectorClock backflow;
 } CRDT_Master_Instance;
 
 /*-----------------------------------------------------------------------------
@@ -1279,6 +1284,7 @@ struct redisServer {
     long long crdt_set_del_conflict;
     long long local_clock;
     int peer_set;
+    long long start_time;
 }redisServer;
 
 typedef struct pubsubPattern {
@@ -2172,7 +2178,7 @@ void pfdebugCommand(client *c);
 void latencyCommand(client *c);
 void moduleCommand(client *c);
 void securityWarningCommand(client *c);
-
+void getVcCommand(client *c);
 #if defined(__GNUC__)
 void *calloc(size_t count, size_t size) __attribute__ ((deprecated));
 void free(void *ptr) __attribute__ ((deprecated));
