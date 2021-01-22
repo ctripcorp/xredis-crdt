@@ -1,7 +1,12 @@
-proc print_log_file {log} {
+proc read_file {log} {
     set fp [open $log r]
     set content [read $fp]
     close $fp
+    return $content
+}
+
+proc print_log_file {log} {
+    set content [read_file $log]
     puts $content
 }
 
@@ -130,6 +135,25 @@ proc start_local {port dir gid} {
        puts [file mkdir $dir]
     }
     exec "./src/redis-server" "--crdt-gid" "default" $gid "--loadmodule" "../../crdt-module/crdt.so" "--port" $port "--logfile" "redis.log" "--daemonize" "yes" "--dir" $dir "--protected-mode" "no" 
+}
+
+proc start_local_by_file {port dir gid} {
+    if { [file exists $dir] != 1} {  
+    puts [file mkdir $dir]
+    }
+    set redis_conf [format "%s/redis.conf" $dir]
+    if { [file exists $redis_conf] != 1} {
+        set f [open $redis_conf w+]
+        puts $f [format "crdt-gid default %s " $gid ]
+        puts $f "loadmodule ../../crdt-module/crdt.so" 
+        puts $f [format "port %s" $port ]
+        puts $f "logfile redis.log"
+        puts $f "daemonize yes"
+        puts $f [format "dir %s" $dir]
+        puts $f "protected-mode no"
+    }
+    puts $redis_conf
+    exec "./src/redis-server" $redis_conf
 }
 
 proc stop_local {host port} {

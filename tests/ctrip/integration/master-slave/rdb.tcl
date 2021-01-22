@@ -103,6 +103,7 @@ proc save {add check server_path dbfile} {
             wait [lindex $peers 1] 0 crdt.info [lindex $peer_stdouts 1]
             [lindex $peers 1] debug set-crdt-ovc 0
             test [format "bgsave %s" $dbfile] {
+                [lindex $peers 0] peerof [lindex $peer_gids 1] no one 
                 run [replace_client $add {[lindex $peers 0]}]  1
                 [lindex $peers 0] bgsave
             }
@@ -123,7 +124,6 @@ proc save {add check server_path dbfile} {
         
         [lindex $peers 0] config crdt.set repl-diskless-sync-delay 1
         [lindex $peers 0] config set repl-diskless-sync-delay 1
-        [lindex $peers 0] debug set-crdt-ovc 0
         run [replace_client $check {[lindex $peers 0]}]  1
     }
 }

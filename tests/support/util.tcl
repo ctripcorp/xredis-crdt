@@ -126,6 +126,22 @@ proc wait_for_peer_sync r {
     }
 }
 
+proc wait_for_peers_sync {i r} {
+    set index 0
+    while 1 {
+        set s [format "peer%s_link_status" $index]
+        if {[crdt_status $r $s] eq "down"} {
+            after 10
+        } else {
+            if {$index == $i} {
+                break
+            } else {
+                incr index
+            }
+        }
+    }
+}
+
 # Random integer between 0 and max (excluded).
 proc randomInt {max} {
     expr {int(rand()*$max)}

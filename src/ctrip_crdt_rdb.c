@@ -243,6 +243,7 @@ int crdtSendMergeRequest2(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di, cons
             goto error;
         }
         if(filter == NULL) {
+            serverLog(LL_WARNING, "[CRDT][FILTER] key:{%s} filter fail", keystr);
             continue;
         }
         if(length >= 2) {
@@ -321,7 +322,7 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
         if (needDelete == C_OK) {
             decrRefCount(selectcmd);
         }
-        if (dictSize(d) != 0) {
+        if (dictSize(d) != 0) {           
             // int num = crdtSendMergeRequest(rdb, rsi, di, "CRDT.Merge", dataFilter, freeDataFilter,db);
             int num = crdtSendMergeRequest2(rdb, rsi, di, "CRDT.Merge", dataFilter2, freeDataFilter,db);
             if(num == C_ERR) {
@@ -702,6 +703,7 @@ int rdbSaveAuxFieldCrdt(rio *rdb) {
     for (int gid = 0; gid < (MAX_PEERS + 1); gid++) {
         CRDT_Master_Instance *masterInstance = crdtServer.crdtMasters[gid];
         if(masterInstance == NULL) continue;
+        serverLog(LL_WARNING, "save gid %d", gid);
         if (rdbSaveAuxFieldStrInt(rdb, "peer-master-gid", masterInstance->gid)
             == -1)  return C_ERR;
         if (rdbSaveAuxFieldStrStr(rdb, "peer-master-host", masterInstance->masterhost)

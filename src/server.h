@@ -331,7 +331,7 @@ typedef long long mstime_t; /* millisecond time type. */
 #define SLAVE_CAPA_EOF (1<<0)    /* Can parse the RDB EOF streaming format. */
 #define SLAVE_CAPA_PSYNC2 (1<<1) /* Supports PSYNC2 protocol. */
 #define SLAVE_CAPA_CRDT (1<<2)
-#define SLAVE_CAPA_BACKFLOW (1<<3)
+#define SLAVE_CAPA_BACKSTREAM (1<<3)
 /* Synchronous read timeout - slave side */
 #define CONFIG_REPL_SYNCIO_TIMEOUT 5
 
@@ -916,7 +916,7 @@ typedef struct CRDT_Master_Instance {
     
     VectorClock vectorClock;
     int dbid;
-    VectorClock backflow;
+    VectorClock backstream_vc;
 } CRDT_Master_Instance;
 
 /*-----------------------------------------------------------------------------
@@ -1014,6 +1014,7 @@ struct redisServer {
     double stat_fork_rate;          /* Fork rate in GB/sec. */
     long long stat_rejected_conn;   /* Clients rejected because of maxclients */
     long long stat_sync_full;       /* Number of full resyncs with slaves. */
+    long long stat_sync_backstream;   /* Number of backstream resyncs with peers. */
     long long stat_sync_partial_ok; /* Number of accepted PSYNC requests. */
     long long stat_sync_partial_err;/* Number of unaccepted PSYNC requests. */
     list *slowlog;                  /* SLOWLOG list of commands */
@@ -1610,6 +1611,8 @@ void crdtMergeDelCommand(client *c);
 void crdtMergeStartCommand(client *c);
 void crdtMergeEndCommand(client *c);
 void peerofCommand(client *c);
+int peerBackStream();
+void cleanSlavePeerBackStream();
 void peerChangeCommand(client *c);
 void crdtReplicationSetMaster(int gid, char *ip, int port);
 void crdtReplicationCacheMaster(client *c);
@@ -2178,7 +2181,7 @@ void pfdebugCommand(client *c);
 void latencyCommand(client *c);
 void moduleCommand(client *c);
 void securityWarningCommand(client *c);
-void getVcCommand(client *c);
+void crdtVcCommand(client *c);
 #if defined(__GNUC__)
 void *calloc(size_t count, size_t size) __attribute__ ((deprecated));
 void free(void *ptr) __attribute__ ((deprecated));

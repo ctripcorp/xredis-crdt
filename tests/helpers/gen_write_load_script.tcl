@@ -9,10 +9,15 @@ proc gen_write_load {host port seconds script} {
     $r select 9
     set num 10000
     while {$num} {
-        run $script 1
+        catch {run $script 1} error 
+        if {$error != 0} {
+            puts $error
+            break
+        }
         if {[clock seconds]-$start_time > $seconds} {
             exit 0
         }
+        after 10
         # incr num -1
     }
 }
