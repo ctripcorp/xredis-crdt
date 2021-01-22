@@ -858,7 +858,7 @@ int rdbSaveInfoAuxFields(rio *rdb, int flags, rdbSaveInfo *rsi) {
     if (rdbSaveAuxFieldStrInt(rdb,"redis-bits",redis_bits) == -1) return -1;
     if (rdbSaveAuxFieldStrInt(rdb,"ctime",time(NULL)) == -1) return -1;
     if (rdbSaveAuxFieldStrInt(rdb,"used-mem",zmalloc_used_memory()) == -1) return -1;
-
+    serverLog(LL_WARNING, "save 1");
     /* Handle saving options that generate aux fields. */
     if (rsi) {
         if (rdbSaveAuxFieldStrInt(rdb,"repl-stream-db",rsi->repl_stream_db)
@@ -868,6 +868,7 @@ int rdbSaveInfoAuxFields(rio *rdb, int flags, rdbSaveInfo *rsi) {
         if (rdbSaveAuxFieldStrInt(rdb,"repl-offset",server.master_repl_offset)
             == -1) return -1;
         /**add crdt stuff*/
+        serverLog(LL_WARNING, "save 2");
         rdbSaveCrdtInfoAuxFields(rdb);
     }
     if (rdbSaveAuxFieldStrInt(rdb,"aof-preamble",aof_preamble) == -1) return -1;
@@ -1599,7 +1600,9 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                 freePeerMaster(crdtMaster);
             }
         }
-
+        if(crdtServer.loading) {
+            crdtServer.loading = 0;
+        }
     }
     client* fakeClient = createFakeClient();
     fakeClient->argv = zmalloc(sizeof(robj*)*MAX_FAKECLIENT_ARGV);
@@ -1710,6 +1713,7 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                 crdtServer.master_repl_offset = strtoll(auxval->ptr,NULL,10);
             } else if (!strcasecmp(auxkey->ptr,"peer-master-gid")) {
                 int gid = atoi(auxval->ptr);
+                serverLog(LL_WARNING, "load gid %d", gid);
                 if(!check_gid(gid)) {
                     rdbExitReportCorruptRDB(
                         "Can't load peer-master-gid from RDB file! "
@@ -1726,6 +1730,7 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                 if (masterInstance == NULL) {
                     masterInstance = createPeerMaster(NULL, gid);
                     crdtServer.crdtMasters[gid] = masterInstance;
+                    
                 } else if(iAmMaster()) {
                     continue;
                 }

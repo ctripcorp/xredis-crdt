@@ -237,7 +237,7 @@ struct redisCommand redisCommandTable[] = {
     {"dbsize",dbsizeCommand,1,"rF",0,NULL,0,0,0,0,0},
     {"auth",authCommand,2,"sltF",0,NULL,0,0,0,0,0},
     {"ping",pingCommand,-1,"tF",0,NULL,0,0,0,0,0},
-    {"getvc",getVcCommand, -1, "tF",0, NULL,0,0,0,0,0},
+    {"crdt.vc",crdtVcCommand, -1, "tF",0, NULL,0,0,0,0,0},
     {"echo",echoCommand,2,"F",0,NULL,0,0,0,0,0},
     {"save",saveCommand,1,"as",0,NULL,0,0,0,0,0},
     {"bgsave",bgsaveCommand,-1,"a",0,NULL,0,0,0,0,0},
@@ -263,7 +263,7 @@ struct redisCommand redisCommandTable[] = {
 //    {"touch",touchCommand,-2,"rF",0,NULL,1,1,1,0,0},
     {"pttl",pttlCommand,2,"rF",0,NULL,1,1,1,0,0},
     // {"persist",persistCommand,2,"wF",0,NULL,1,1,1,0,0},
-    {"slaveof",slaveofCommand,3,"ast",0,NULL,0,0,0,0,0},
+    {"slaveof",slaveofCommand,3,"last",0,NULL,0,0,0,0,0},
     {"xslaveof",xslaveofCommand,3,"ast",0,NULL,0,0,0,0,0},
     {"role",roleCommand,1,"lst",0,NULL,0,0,0,0,0},
     {"debug",debugCommand,-1,"as",0,NULL,0,0,0,0,0},
@@ -326,7 +326,7 @@ struct redisCommand redisCommandTable[] = {
     {"crdt.replconf",replconfCommand,-1,"aslt",0,NULL,0,0,0,0,0},
     {"crdt.role",crdtRoleCommand,3,"lst",0,NULL,0,0,0,0,0},
     {"crdt.info",crdtinfoCommand,-1,"lt",0,NULL,0,0,0,0,0},
-    {"peerof",peerofCommand,-4,"ast",0,NULL,0,0,0,0,0},
+    {"peerof",peerofCommand,-4,"last",0,NULL,0,0,0,0,0},
     {"crdt.peer.change",peerChangeCommand,3,"lF", 0,NULL,0,0,0,0,0},
     {"debugCancelCrdt",debugCancelCrdt,3,"ast",0,NULL,0,0,0,0,0},
     {"tombstoneSize",tombstoneSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
@@ -1931,6 +1931,7 @@ void resetServerStats(struct redisServer *srv) {
     srv->stat_fork_rate = 0;
     srv->stat_rejected_conn = 0;
     srv->stat_sync_full = 0;
+    srv->stat_sync_backstream = 0;
     srv->crdt_type_conflict = 0;
     srv->crdt_set_conflict = 0;
     srv->crdt_del_conflict = 0;
@@ -3186,90 +3187,91 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
     /* Persistence */
     if (allsections || defsections || !strcasecmp(section,"persistence")) {
         if (sections++) info = sdscat(info,"\r\n");
-        info = sdscatprintf(info,
-            "# Persistence\r\n"
-            "loading:%d\r\n"
-            "rdb_changes_since_last_save:%lld\r\n"
-            "rdb_bgsave_in_progress:%d\r\n"
-            "rdb_last_save_time:%jd\r\n"
-            "rdb_last_bgsave_status:%s\r\n"
-            "rdb_last_bgsave_time_sec:%jd\r\n"
-            "rdb_current_bgsave_time_sec:%jd\r\n"
-            "rdb_last_cow_size:%zu\r\n"
-            "aof_enabled:%d\r\n"
-            "aof_rewrite_in_progress:%d\r\n"
-            "aof_rewrite_scheduled:%d\r\n"
-            "aof_last_rewrite_time_sec:%jd\r\n"
-            "aof_current_rewrite_time_sec:%jd\r\n"
-            "aof_last_bgrewrite_status:%s\r\n"
-            "aof_last_write_status:%s\r\n"
-            "aof_last_cow_size:%zu\r\n",
-            srv->loading,
-            srv->dirty,
-            srv->rdb_child_pid != -1,
-            (intmax_t)srv->lastsave,
-            (srv->lastbgsave_status == C_OK) ? "ok" : "err",
-            (intmax_t)srv->rdb_save_time_last,
-            (intmax_t)((srv->rdb_child_pid == -1) ?
-                -1 : time(NULL)-srv->rdb_save_time_start),
-            srv->stat_rdb_cow_bytes,
-            srv->aof_state != AOF_OFF,
-            srv->aof_child_pid != -1,
-            srv->aof_rewrite_scheduled,
-            (intmax_t)srv->aof_rewrite_time_last,
-            (intmax_t)((srv->aof_child_pid == -1) ?
-                -1 : time(NULL)-srv->aof_rewrite_time_start),
-            (srv->aof_lastbgrewrite_status == C_OK) ? "ok" : "err",
-            (srv->aof_last_write_status == C_OK) ? "ok" : "err",
-            srv->stat_aof_cow_bytes);
-
-        if (server.aof_state != AOF_OFF) {
+        if (srv == &server) {
             info = sdscatprintf(info,
-                "aof_current_size:%lld\r\n"
-                "aof_base_size:%lld\r\n"
-                "aof_pending_rewrite:%d\r\n"
-                "aof_buffer_length:%zu\r\n"
-                "aof_rewrite_buffer_length:%lu\r\n"
-                "aof_pending_bio_fsync:%llu\r\n"
-                "aof_delayed_fsync:%lu\r\n",
-                (long long) server.aof_current_size,
-                (long long) server.aof_rewrite_base_size,
-                server.aof_rewrite_scheduled,
-                sdslen(server.aof_buf),
-                aofRewriteBufferSize(),
-                bioPendingJobsOfType(BIO_AOF_FSYNC),
-                server.aof_delayed_fsync);
-        }
+                "# Persistence\r\n"
+                "loading:%d\r\n"
+                "rdb_changes_since_last_save:%lld\r\n"
+                "rdb_bgsave_in_progress:%d\r\n"
+                "rdb_last_save_time:%jd\r\n"
+                "rdb_last_bgsave_status:%s\r\n"
+                "rdb_last_bgsave_time_sec:%jd\r\n"
+                "rdb_current_bgsave_time_sec:%jd\r\n"
+                "rdb_last_cow_size:%zu\r\n"
+                "aof_enabled:%d\r\n"
+                "aof_rewrite_in_progress:%d\r\n"
+                "aof_rewrite_scheduled:%d\r\n"
+                "aof_last_rewrite_time_sec:%jd\r\n"
+                "aof_current_rewrite_time_sec:%jd\r\n"
+                "aof_last_bgrewrite_status:%s\r\n"
+                "aof_last_write_status:%s\r\n"
+                "aof_last_cow_size:%zu\r\n",
+                srv->loading,
+                srv->dirty,
+                srv->rdb_child_pid != -1,
+                (intmax_t)srv->lastsave,
+                (srv->lastbgsave_status == C_OK) ? "ok" : "err",
+                (intmax_t)srv->rdb_save_time_last,
+                (intmax_t)((srv->rdb_child_pid == -1) ?
+                    -1 : time(NULL)-srv->rdb_save_time_start),
+                srv->stat_rdb_cow_bytes,
+                srv->aof_state != AOF_OFF,
+                srv->aof_child_pid != -1,
+                srv->aof_rewrite_scheduled,
+                (intmax_t)srv->aof_rewrite_time_last,
+                (intmax_t)((srv->aof_child_pid == -1) ?
+                    -1 : time(NULL)-srv->aof_rewrite_time_start),
+                (srv->aof_lastbgrewrite_status == C_OK) ? "ok" : "err",
+                (srv->aof_last_write_status == C_OK) ? "ok" : "err",
+                srv->stat_aof_cow_bytes);
 
-        if (server.loading) {
-            double perc;
-            time_t eta, elapsed;
-            off_t remaining_bytes = server.loading_total_bytes-
-                                    server.loading_loaded_bytes;
-
-            perc = ((double)server.loading_loaded_bytes /
-                   (server.loading_total_bytes+1)) * 100;
-
-            elapsed = time(NULL)-server.loading_start_time;
-            if (elapsed == 0) {
-                eta = 1; /* A fake 1 second figure if we don't have
-                            enough info */
-            } else {
-                eta = (elapsed*remaining_bytes)/(server.loading_loaded_bytes+1);
+            if (server.aof_state != AOF_OFF) {
+                info = sdscatprintf(info,
+                    "aof_current_size:%lld\r\n"
+                    "aof_base_size:%lld\r\n"
+                    "aof_pending_rewrite:%d\r\n"
+                    "aof_buffer_length:%zu\r\n"
+                    "aof_rewrite_buffer_length:%lu\r\n"
+                    "aof_pending_bio_fsync:%llu\r\n"
+                    "aof_delayed_fsync:%lu\r\n",
+                    (long long) server.aof_current_size,
+                    (long long) server.aof_rewrite_base_size,
+                    server.aof_rewrite_scheduled,
+                    sdslen(server.aof_buf),
+                    aofRewriteBufferSize(),
+                    bioPendingJobsOfType(BIO_AOF_FSYNC),
+                    server.aof_delayed_fsync);
             }
+            if (server.loading) {
+                double perc;
+                time_t eta, elapsed;
+                off_t remaining_bytes = server.loading_total_bytes-
+                                        server.loading_loaded_bytes;
 
-            info = sdscatprintf(info,
-                "loading_start_time:%jd\r\n"
-                "loading_total_bytes:%llu\r\n"
-                "loading_loaded_bytes:%llu\r\n"
-                "loading_loaded_perc:%.2f\r\n"
-                "loading_eta_seconds:%jd\r\n",
-                (intmax_t) server.loading_start_time,
-                (unsigned long long) server.loading_total_bytes,
-                (unsigned long long) server.loading_loaded_bytes,
-                perc,
-                (intmax_t)eta
-            );
+                perc = ((double)server.loading_loaded_bytes /
+                    (server.loading_total_bytes+1)) * 100;
+
+                elapsed = time(NULL)-server.loading_start_time;
+                if (elapsed == 0) {
+                    eta = 1; /* A fake 1 second figure if we don't have
+                                enough info */
+                } else {
+                    eta = (elapsed*remaining_bytes)/(server.loading_loaded_bytes+1);
+                }
+
+                info = sdscatprintf(info,
+                    "loading_start_time:%jd\r\n"
+                    "loading_total_bytes:%llu\r\n"
+                    "loading_loaded_bytes:%llu\r\n"
+                    "loading_loaded_perc:%.2f\r\n"
+                    "loading_eta_seconds:%jd\r\n",
+                    (intmax_t) server.loading_start_time,
+                    (unsigned long long) server.loading_total_bytes,
+                    (unsigned long long) server.loading_loaded_bytes,
+                    perc,
+                    (intmax_t)eta
+                );
+            }
         }
     }
 
@@ -3464,12 +3466,14 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
         info = sdscatprintf(info,
                             "# CRDT Stats\r\n"
                             "sync_full:%lld\r\n"
+                            "sync_backstream:%lld\r\n"
                             "sync_partial_ok:%lld\r\n"
                             "sync_partial_err:%lld\r\n"
                             "latest_fork_usec:%lld\r\n"
                             "crdt_conflict:type=%lld,set=%lld,del=%lld,set_del=%lld\r\n"
                             "crdt_conflict_op:modify=%lld,merge=%lld\r\n",
                             crdtServer.stat_sync_full,
+                            crdtServer.stat_sync_backstream,
                             crdtServer.stat_sync_partial_ok,
                             crdtServer.stat_sync_partial_err,
                             crdtServer.stat_fork_time,
@@ -3497,6 +3501,8 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
         info = sdscatprintf(info, 
                             "gid:%d\r\n", crdtServer.crdt_gid);
 
+        info = sdscatprintf(info, 
+                            "backstreaming:%d\r\n", crdtServer.loading);        
 
         int masterid = 0;
         for (int gid = 0; gid < (MAX_PEERS + 1); gid++) {
@@ -3513,13 +3519,13 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                 peer_replid = masterInstance->cached_master->replid;
             }
 
-
+            
             info = sdscatprintf(info,
                                 "#Peer_Master_%d\r\n"
                                 "peer%d_host:%s\r\n"
                                 "peer%d_port:%d\r\n"
                                 "peer%d_gid:%lld\r\n"
-                                "peer%d_dbid:%lld\r\n"
+                                "peer%d_dbid:%d\r\n"
                                 "peer%d_link_status:%s\r\n"
                                 "peer%d_last_io_seconds_ago:%d\r\n"
                                 "peer%d_sync_in_progress:%d\r\n"
@@ -3538,6 +3544,14 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                                 masterid, peer_repl_offset,
                                 masterid, peer_replid
             );
+            if(!isNullVectorClock(masterInstance->backstream_vc)) {
+                sds backstream_vc_str = vectorClockToSds(masterInstance->backstream_vc);
+                info = sdscatprintf(info, 
+                                    "peer%d_backstream_vc:%s\r\n",
+                                    masterid, backstream_vc_str);
+                sdsfree(backstream_vc_str);
+            }
+            
 
             if (masterInstance->repl_state != REPL_STATE_CONNECTED) {
                 info = sdscatprintf(info,
@@ -4243,7 +4257,7 @@ int main(int argc, char **argv) {
         serverLog(LL_WARNING,"WARNING: You specified a maxmemory value that is less than 1MB (current value is %llu bytes). Are you sure this is what you really want?", server.maxmemory);
     }
     server.start_time = ustime();
-    peerBackFlow();
+    peerBackStream();
     aeSetBeforeSleepProc(server.el,beforeSleep);
     aeSetAfterSleepProc(server.el,afterSleep);
     aeMain(server.el);

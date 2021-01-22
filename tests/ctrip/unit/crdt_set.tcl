@@ -63,7 +63,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
             }
             test {crdt.sadd1} {
                 
-                $master crdt.sadd myset2 1 10 1:1 16 17
+                $master crdt.sadd myset2 1 10 1:2 16 17
                 assert_equal 2 [$master scard myset2]
                 assert_equal 1 [$master sismember myset2 16]
                 assert_equal 1 [$master sismember myset2 17]

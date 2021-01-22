@@ -367,7 +367,6 @@ void loadServerConfigFromString(char *config) {
                 // crdtReplicationSetMaster(gid, c->argv[2]->ptr, (int)port);
                 iter->masterhost = sdsnew(argv[2]);
                 iter->masterport = atoi(argv[3]);
-                // iter->backflow = addVectorClockUnit(iter->backflow, crdtServer.crdt_gid, 0);
                 crdtServer.crdtMasters[gid] = iter;
                 serverLog(LL_WARNING, "load peerof %d", gid);
             } 
@@ -1869,7 +1868,7 @@ void rewriteConfigPeerofOption(struct rewriteConfigState *state) {
     for(int i = 0; i < (1 << GIDSIZE); i++) {
         CRDT_Master_Instance* peer = getPeerMaster(i);
         if(peer == NULL) { continue; }
-        line = sdscatprintf(sdsempty(),"%s %d %s %d", option, peer->gid,
+        line = sdscatprintf(sdsempty(),"%s %lld %s %d", option, peer->gid,
             peer->masterhost, peer->masterport);
         rewriteConfigRewriteLine(state,option,line,1);
     }

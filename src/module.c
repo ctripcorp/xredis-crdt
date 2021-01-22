@@ -248,19 +248,23 @@ static void zsetKeyReset(RedisModuleKey *key);
 #include <stdio.h>
 #include <execinfo.h>
 #define STACK_SIZE 1000
-static void debug_memory(size_t memory, size_t num)
-{
+#define DEBUG_MODULE_MEMORY 0
+__attribute__((unused)) static void debug_module_memory(size_t memory, size_t num)
+{  
+    //only debug
     void *trace[STACK_SIZE];
     size_t size = backtrace(trace, STACK_SIZE);
     num = min(num, size - 1);
     char **symbols = (char **)backtrace_symbols(trace,size);
     for (size_t i = 0; i<num; i++) {
-        printf("%d--->%s\n", i, symbols[i+1]);
+        printf("%zu--->%s\n", i, symbols[i+1]);
     }
     printf("use memory:[%zu]\n", memory);
-    free(symbols);
+    //./src/server.h:2188:42 'free' has been explicitly marked deprecated here
+    // free(symbols);
     return;
 }
+
 /* Use like malloc(). Memory allocated with this function is reported in
  * Redis INFO memory, used for keys eviction according to maxmemory settings
  * and in general is taken into account as memory allocated by Redis.
@@ -279,11 +283,9 @@ void *RM_Alloc(size_t bytes) {
     size_t old_size = zmalloc_used_memory();
     void* r = zmalloc(bytes);
     size_t memory = zmalloc_used_memory() - old_size;
-
-    // #if defined (TCL_TEST)
-    //     debug_memory(memory, 3);
-    // #endif
-
+    #if defined (DEBUG)
+        debug_module_memory(memory, 3);
+    #endif
     add_module_memory_stat_alloc(memory);
     return r;
 }
@@ -360,7 +362,7 @@ void RM_Free(void *ptr) {
     zfree(ptr);
     size_t free_size = zmalloc_used_memory() - old_size;
     // #if defined (TCL_TEST)
-    //     debug_memory(free_size, 3);
+    //     debug_module_memory(free_size, 3);
     // #endif
     add_module_memory_stat_alloc(free_size);
 }
@@ -1674,7 +1676,7 @@ int RM_CheckGid(int gid) {
 void jumpVectorClock() {
     long long qps = getQps();
     // incrLocalVcUnit(100000);
-    incrLocalVcUnit(max(qps * 60 * 24 , 10000));
+    incrLocalVcUnit(max(qps * 60 * 60 * 24 , 1000000));
 }
 void RM_IncrLocalVectorClock (long long delta) {
     incrLocalVcUnit(delta);
