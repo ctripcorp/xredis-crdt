@@ -472,99 +472,99 @@ start_server {tags {"zset"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
             assert_error "*not*string*" {r zrangebylex fooz -x \[bar}
         }
 
-        # test "ZREMRANGEBYSCORE basics" {
-        #     proc remrangebyscore {min max} {
-        #         create_zset zset {1 a 2 b 3 c 4 d 5 e}
-        #         assert_equal 1 [r exists zset]
-        #         r zremrangebyscore zset $min $max
-        #     }
+        test "ZREMRANGEBYSCORE basics" {
+            proc remrangebyscore {min max} {
+                create_zset zset {1 a 2 b 3 c 4 d 5 e}
+                assert_equal 1 [r exists zset]
+                r zremrangebyscore zset $min $max
+            }
 
-        #     # inner range
-        #     assert_equal 3 [remrangebyscore 2 4]
-        #     assert_equal {a e} [r zrange zset 0 -1]
+            # inner range
+            assert_equal 3 [remrangebyscore 2 4]
+            assert_equal {a e} [r zrange zset 0 -1]
 
-        #     # start underflow
-        #     assert_equal 1 [remrangebyscore -10 1]
-        #     assert_equal {b c d e} [r zrange zset 0 -1]
+            # start underflow
+            assert_equal 1 [remrangebyscore -10 1]
+            assert_equal {b c d e} [r zrange zset 0 -1]
 
-        #     # end overflow
-        #     assert_equal 1 [remrangebyscore 5 10]
-        #     assert_equal {a b c d} [r zrange zset 0 -1]
+            # end overflow
+            assert_equal 1 [remrangebyscore 5 10]
+            assert_equal {a b c d} [r zrange zset 0 -1]
 
-        #     # switch min and max
-        #     assert_equal 0 [remrangebyscore 4 2]
-        #     assert_equal {a b c d e} [r zrange zset 0 -1]
+            # switch min and max
+            assert_equal 0 [remrangebyscore 4 2]
+            assert_equal {a b c d e} [r zrange zset 0 -1]
 
-        #     # -inf to mid
-        #     assert_equal 3 [remrangebyscore -inf 3]
-        #     assert_equal {d e} [r zrange zset 0 -1]
+            # -inf to mid
+            assert_equal 3 [remrangebyscore -inf 3]
+            assert_equal {d e} [r zrange zset 0 -1]
 
-        #     # mid to +inf
-        #     assert_equal 3 [remrangebyscore 3 +inf]
-        #     assert_equal {a b} [r zrange zset 0 -1]
+            # mid to +inf
+            assert_equal 3 [remrangebyscore 3 +inf]
+            assert_equal {a b} [r zrange zset 0 -1]
 
-        #     # -inf to +inf
-        #     assert_equal 5 [remrangebyscore -inf +inf]
-        #     assert_equal {} [r zrange zset 0 -1]
+            # -inf to +inf
+            assert_equal 5 [remrangebyscore -inf +inf]
+            assert_equal {} [r zrange zset 0 -1]
 
-        #     # exclusive min
-        #     assert_equal 4 [remrangebyscore (1 5]
-        #     assert_equal {a} [r zrange zset 0 -1]
-        #     assert_equal 3 [remrangebyscore (2 5]
-        #     assert_equal {a b} [r zrange zset 0 -1]
+            # exclusive min
+            assert_equal 4 [remrangebyscore (1 5]
+            assert_equal {a} [r zrange zset 0 -1]
+            assert_equal 3 [remrangebyscore (2 5]
+            assert_equal {a b} [r zrange zset 0 -1]
 
-        #     # exclusive max
-        #     assert_equal 4 [remrangebyscore 1 (5]
-        #     assert_equal {e} [r zrange zset 0 -1]
-        #     assert_equal 3 [remrangebyscore 1 (4]
-        #     assert_equal {d e} [r zrange zset 0 -1]
+            # exclusive max
+            assert_equal 4 [remrangebyscore 1 (5]
+            assert_equal {e} [r zrange zset 0 -1]
+            assert_equal 3 [remrangebyscore 1 (4]
+            assert_equal {d e} [r zrange zset 0 -1]
 
-        #     # exclusive min and max
-        #     assert_equal 3 [remrangebyscore (1 (5]
-        #     assert_equal {a e} [r zrange zset 0 -1]
+            # exclusive min and max
+            assert_equal 3 [remrangebyscore (1 (5]
+            assert_equal {a e} [r zrange zset 0 -1]
 
-        #     # destroy when empty
-        #     assert_equal 5 [remrangebyscore 1 5]
-        #     assert_equal 0 [r exists zset]
-        # }
+            # destroy when empty
+            assert_equal 5 [remrangebyscore 1 5]
+            assert_equal 0 [r exists zset]
+        }
 
-        # test "ZREMRANGEBYSCORE with non-value min or max" {
-        #     assert_error "*not*float*" {r zremrangebyscore fooz str 1}
-        #     assert_error "*not*float*" {r zremrangebyscore fooz 1 str}
-        #     assert_error "*not*float*" {r zremrangebyscore fooz 1 NaN}
-        # }
+        test "ZREMRANGEBYSCORE with non-value min or max" {
+            assert_error "*not*float*" {r zremrangebyscore fooz str 1}
+            assert_error "*not*float*" {r zremrangebyscore fooz 1 str}
+            assert_error "*not*float*" {r zremrangebyscore fooz 1 NaN}
+        }
 
-        # test "ZREMRANGEBYRANK basics" {
-        #     proc remrangebyrank {min max} {
-        #         create_zset zset {1 a 2 b 3 c 4 d 5 e}
-        #         assert_equal 1 [r exists zset]
-        #         r zremrangebyrank zset $min $max
-        #     }
+        test "ZREMRANGEBYRANK basics" {
+            proc remrangebyrank {min max} {
+                create_zset zset {1 a 2 b 3 c 4 d 5 e}
+                assert_equal 1 [r exists zset]
+                r zremrangebyrank zset $min $max
+            }
 
-        #     # inner range
-        #     assert_equal 3 [remrangebyrank 1 3]
-        #     assert_equal {a e} [r zrange zset 0 -1]
+            # inner range
+            assert_equal 3 [remrangebyrank 1 3]
+            assert_equal {a e} [r zrange zset 0 -1]
 
-        #     # start underflow
-        #     assert_equal 1 [remrangebyrank -10 0]
-        #     assert_equal {b c d e} [r zrange zset 0 -1]
+            # start underflow
+            assert_equal 1 [remrangebyrank -10 0]
+            assert_equal {b c d e} [r zrange zset 0 -1]
 
-        #     # start overflow
-        #     assert_equal 0 [remrangebyrank 10 -1]
-        #     assert_equal {a b c d e} [r zrange zset 0 -1]
+            # start overflow
+            assert_equal 0 [remrangebyrank 10 -1]
+            assert_equal {a b c d e} [r zrange zset 0 -1]
 
-        #     # end underflow
-        #     assert_equal 0 [remrangebyrank 0 -10]
-        #     assert_equal {a b c d e} [r zrange zset 0 -1]
+            # end underflow
+            assert_equal 0 [remrangebyrank 0 -10]
+            assert_equal {a b c d e} [r zrange zset 0 -1]
 
-        #     # end overflow
-        #     assert_equal 5 [remrangebyrank 0 10]
-        #     assert_equal {} [r zrange zset 0 -1]
+            # end overflow
+            assert_equal 5 [remrangebyrank 0 10]
+            assert_equal {} [r zrange zset 0 -1]
 
-        #     # destroy when empty
-        #     assert_equal 5 [remrangebyrank 0 4]
-        #     assert_equal 0 [r exists zset]
-        # }
+            # destroy when empty
+            assert_equal 5 [remrangebyrank 0 4]
+            assert_equal 0 [r exists zset]
+        }
 
     #     test "ZUNIONSTORE against non-existing key doesn't set destination - $encoding" {
     #         r del zseta
@@ -730,341 +730,343 @@ start_server {tags {"zset"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
     #     }
     # }
 
-    # test "ZSET commands don't accept the empty strings as valid score" {
-    #     assert_error "*not*float*" {r zadd myzset "" abc}
-    # }
+    test "ZSET commands don't accept the empty strings as valid score" {
+        assert_error "*not*float*" {r zadd myzset "" abc}
+    }
 
-    # proc stressers {encoding} {
-    #     if {$encoding == "ziplist"} {
-    #         # Little extra to allow proper fuzzing in the sorting stresser
-    #         r config set zset-max-ziplist-entries 256
-    #         r config set zset-max-ziplist-value 64
-    #         set elements 128
-    #     } elseif {$encoding == "skiplist"} {
-    #         r config set zset-max-ziplist-entries 0
-    #         r config set zset-max-ziplist-value 0
-    #         if {$::accurate} {set elements 1000} else {set elements 100}
-    #     } else {
-    #         puts "Unknown sorted set encoding"
-    #         exit
-    #     }
+    proc stressers {encoding} {
+        if {$encoding == "ziplist"} {
+            # Little extra to allow proper fuzzing in the sorting stresser
+            r config set zset-max-ziplist-entries 256
+            r config set zset-max-ziplist-value 64
+            set elements 128
+        } elseif {$encoding == "skiplist"} {
+            r config set zset-max-ziplist-entries 0
+            r config set zset-max-ziplist-value 0
+            if {$::accurate} {set elements 1000} else {set elements 100}
+        } else {
+            puts "Unknown sorted set encoding"
+            exit
+        }
 
-    #     test "ZSCORE - $encoding" {
-    #         r del zscoretest
-    #         set aux {}
-    #         for {set i 0} {$i < $elements} {incr i} {
-    #             set score [expr rand()]
-    #             lappend aux $score
-    #             r zadd zscoretest $score $i
-    #         }
+        test "ZSCORE - $encoding" {
+            r del zscoretest
+            set aux {}
+            for {set i 0} {$i < $elements} {incr i} {
+                set score [expr rand()]
+                lappend aux $score
+                r zadd zscoretest $score $i
+            }
 
-    #         assert_encoding $encoding zscoretest
-    #         for {set i 0} {$i < $elements} {incr i} {
-    #             assert_equal [lindex $aux $i] [r zscore zscoretest $i]
-    #         }
-    #     }
+            assert_encoding $encoding zscoretest
+            for {set i 0} {$i < $elements} {incr i} {
+                assert_equal [lindex $aux $i] [r zscore zscoretest $i]
+            }
+        }
 
-    #     test "ZSCORE after a DEBUG RELOAD - $encoding" {
-    #         r del zscoretest
-    #         set aux {}
-    #         for {set i 0} {$i < $elements} {incr i} {
-    #             set score [expr rand()]
-    #             lappend aux $score
-    #             r zadd zscoretest $score $i
-    #         }
+        test "ZSCORE after a DEBUG RELOAD - $encoding" {
+            r del zscoretest
+            set aux {}
+            for {set i 0} {$i < $elements} {incr i} {
+                set score [expr rand()]
+                lappend aux $score
+                r zadd zscoretest $score $i
+            }
 
-    #         r debug reload
-    #         assert_encoding $encoding zscoretest
-    #         for {set i 0} {$i < $elements} {incr i} {
-    #             assert_equal [lindex $aux $i] [r zscore zscoretest $i]
-    #         }
-    #     }
+            r debug reload
+            assert_encoding $encoding zscoretest
+            for {set i 0} {$i < $elements} {incr i} {
+                assert_equal [lindex $aux $i] [r zscore zscoretest $i]
+            }
+        }
 
-    #     test "ZSET sorting stresser - $encoding" {
-    #         set delta 0
-    #         for {set test 0} {$test < 2} {incr test} {
-    #             unset -nocomplain auxarray
-    #             array set auxarray {}
-    #             set auxlist {}
-    #             r del myzset
-    #             for {set i 0} {$i < $elements} {incr i} {
-    #                 if {$test == 0} {
-    #                     set score [expr rand()]
-    #                 } else {
-    #                     set score [expr int(rand()*10)]
-    #                 }
-    #                 set auxarray($i) $score
-    #                 r zadd myzset $score $i
-    #                 # Random update
-    #                 if {[expr rand()] < .2} {
-    #                     set j [expr int(rand()*1000)]
-    #                     if {$test == 0} {
-    #                         set score [expr rand()]
-    #                     } else {
-    #                         set score [expr int(rand()*10)]
-    #                     }
-    #                     set auxarray($j) $score
-    #                     r zadd myzset $score $j
-    #                 }
-    #             }
-    #             foreach {item score} [array get auxarray] {
-    #                 lappend auxlist [list $score $item]
-    #             }
-    #             set sorted [lsort -command zlistAlikeSort $auxlist]
-    #             set auxlist {}
-    #             foreach x $sorted {
-    #                 lappend auxlist [lindex $x 1]
-    #             }
+        test "ZSET sorting stresser - $encoding" {
+            set delta 0
+            for {set test 0} {$test < 2} {incr test} {
+                unset -nocomplain auxarray
+                array set auxarray {}
+                set auxlist {}
+                r del myzset
+                for {set i 0} {$i < $elements} {incr i} {
+                    if {$test == 0} {
+                        set score [expr rand()]
+                    } else {
+                        set score [expr int(rand()*10)]
+                    }
+                    set auxarray($i) $score
+                    r zadd myzset $score $i
+                    # Random update
+                    if {[expr rand()] < .2} {
+                        set j [expr int(rand()*1000)]
+                        if {$test == 0} {
+                            set score [expr rand()]
+                        } else {
+                            set score [expr int(rand()*10)]
+                        }
+                        set auxarray($j) $score
+                        r zadd myzset $score $j
+                    }
+                }
+                foreach {item score} [array get auxarray] {
+                    lappend auxlist [list $score $item]
+                }
+                set sorted [lsort -command zlistAlikeSort $auxlist]
+                set auxlist {}
+                foreach x $sorted {
+                    lappend auxlist [lindex $x 1]
+                }
 
-    #             assert_encoding $encoding myzset
-    #             set fromredis [r zrange myzset 0 -1]
-    #             set delta 0
-    #             for {set i 0} {$i < [llength $fromredis]} {incr i} {
-    #                 if {[lindex $fromredis $i] != [lindex $auxlist $i]} {
-    #                     incr delta
-    #                 }
-    #             }
-    #         }
-    #         assert_equal 0 $delta
-    #     }
+                assert_encoding $encoding myzset
+                set fromredis [r zrange myzset 0 -1]
+                set delta 0
+                for {set i 0} {$i < [llength $fromredis]} {incr i} {
+                    if {[lindex $fromredis $i] != [lindex $auxlist $i]} {
+                        incr delta
+                    }
+                }
+            }
+            assert_equal 0 $delta
+        }
 
-    #     test "ZRANGEBYSCORE fuzzy test, 100 ranges in $elements element sorted set - $encoding" {
-    #         set err {}
-    #         r del zset
-    #         for {set i 0} {$i < $elements} {incr i} {
-    #             r zadd zset [expr rand()] $i
-    #         }
+        test "ZRANGEBYSCORE fuzzy test, 100 ranges in $elements element sorted set - $encoding" {
+            set err {}
+            r del zset
+            for {set i 0} {$i < $elements} {incr i} {
+                r zadd zset [expr rand()] $i
+            }
 
-    #         assert_encoding $encoding zset
-    #         for {set i 0} {$i < 100} {incr i} {
-    #             set min [expr rand()]
-    #             set max [expr rand()]
-    #             if {$min > $max} {
-    #                 set aux $min
-    #                 set min $max
-    #                 set max $aux
-    #             }
-    #             set low [r zrangebyscore zset -inf $min]
-    #             set ok [r zrangebyscore zset $min $max]
-    #             set high [r zrangebyscore zset $max +inf]
-    #             set lowx [r zrangebyscore zset -inf ($min]
-    #             set okx [r zrangebyscore zset ($min ($max]
-    #             set highx [r zrangebyscore zset ($max +inf]
+            assert_encoding $encoding zset
+            for {set i 0} {$i < 100} {incr i} {
+                set min [expr rand()]
+                set max [expr rand()]
+                if {$min > $max} {
+                    set aux $min
+                    set min $max
+                    set max $aux
+                }
+                set low [r zrangebyscore zset -inf $min]
+                set ok [r zrangebyscore zset $min $max]
+                set high [r zrangebyscore zset $max +inf]
+                set lowx [r zrangebyscore zset -inf ($min]
+                set okx [r zrangebyscore zset ($min ($max]
+                set highx [r zrangebyscore zset ($max +inf]
 
-    #             if {[r zcount zset -inf $min] != [llength $low]} {
-    #                 append err "Error, len does not match zcount\n"
-    #             }
-    #             if {[r zcount zset $min $max] != [llength $ok]} {
-    #                 append err "Error, len does not match zcount\n"
-    #             }
-    #             if {[r zcount zset $max +inf] != [llength $high]} {
-    #                 append err "Error, len does not match zcount\n"
-    #             }
-    #             if {[r zcount zset -inf ($min] != [llength $lowx]} {
-    #                 append err "Error, len does not match zcount\n"
-    #             }
-    #             if {[r zcount zset ($min ($max] != [llength $okx]} {
-    #                 append err "Error, len does not match zcount\n"
-    #             }
-    #             if {[r zcount zset ($max +inf] != [llength $highx]} {
-    #                 append err "Error, len does not match zcount\n"
-    #             }
+                if {[r zcount zset -inf $min] != [llength $low]} {
+                    append err "Error, len does not match zcount\n"
+                }
+                if {[r zcount zset $min $max] != [llength $ok]} {
+                    append err "Error, len does not match zcount\n"
+                }
+                if {[r zcount zset $max +inf] != [llength $high]} {
+                    append err "Error, len does not match zcount\n"
+                }
+                if {[r zcount zset -inf ($min] != [llength $lowx]} {
+                    append err "Error, len does not match zcount\n"
+                }
+                if {[r zcount zset ($min ($max] != [llength $okx]} {
+                    append err "Error, len does not match zcount\n"
+                }
+                if {[r zcount zset ($max +inf] != [llength $highx]} {
+                    append err "Error, len does not match zcount\n"
+                }
 
-    #             foreach x $low {
-    #                 set score [r zscore zset $x]
-    #                 if {$score > $min} {
-    #                     append err "Error, score for $x is $score > $min\n"
-    #                 }
-    #             }
-    #             foreach x $lowx {
-    #                 set score [r zscore zset $x]
-    #                 if {$score >= $min} {
-    #                     append err "Error, score for $x is $score >= $min\n"
-    #                 }
-    #             }
-    #             foreach x $ok {
-    #                 set score [r zscore zset $x]
-    #                 if {$score < $min || $score > $max} {
-    #                     append err "Error, score for $x is $score outside $min-$max range\n"
-    #                 }
-    #             }
-    #             foreach x $okx {
-    #                 set score [r zscore zset $x]
-    #                 if {$score <= $min || $score >= $max} {
-    #                     append err "Error, score for $x is $score outside $min-$max open range\n"
-    #                 }
-    #             }
-    #             foreach x $high {
-    #                 set score [r zscore zset $x]
-    #                 if {$score < $max} {
-    #                     append err "Error, score for $x is $score < $max\n"
-    #                 }
-    #             }
-    #             foreach x $highx {
-    #                 set score [r zscore zset $x]
-    #                 if {$score <= $max} {
-    #                     append err "Error, score for $x is $score <= $max\n"
-    #                 }
-    #             }
-    #         }
-    #         assert_equal {} $err
-    #     }
+                foreach x $low {
+                    set score [r zscore zset $x]
+                    if {$score > $min} {
+                        append err "Error, score for $x is $score > $min\n"
+                    }
+                }
+                foreach x $lowx {
+                    set score [r zscore zset $x]
+                    if {$score >= $min} {
+                        append err "Error, score for $x is $score >= $min\n"
+                    }
+                }
+                foreach x $ok {
+                    set score [r zscore zset $x]
+                    if {$score < $min || $score > $max} {
+                        append err "Error, score for $x is $score outside $min-$max range\n"
+                    }
+                }
+                foreach x $okx {
+                    set score [r zscore zset $x]
+                    if {$score <= $min || $score >= $max} {
+                        append err "Error, score for $x is $score outside $min-$max open range\n"
+                    }
+                }
+                foreach x $high {
+                    set score [r zscore zset $x]
+                    if {$score < $max} {
+                        append err "Error, score for $x is $score < $max\n"
+                    }
+                }
+                foreach x $highx {
+                    set score [r zscore zset $x]
+                    if {$score <= $max} {
+                        append err "Error, score for $x is $score <= $max\n"
+                    }
+                }
+            }
+            assert_equal {} $err
+        }
 
-    #     test "ZRANGEBYLEX fuzzy test, 100 ranges in $elements element sorted set - $encoding" {
-    #         set lexset {}
-    #         r del zset
-    #         for {set j 0} {$j < $elements} {incr j} {
-    #             set e [randstring 0 30 alpha]
-    #             lappend lexset $e
-    #             r zadd zset 0 $e
-    #         }
-    #         set lexset [lsort -unique $lexset]
-    #         for {set j 0} {$j < 100} {incr j} {
-    #             set min [randstring 0 30 alpha]
-    #             set max [randstring 0 30 alpha]
-    #             set mininc [randomInt 2]
-    #             set maxinc [randomInt 2]
-    #             if {$mininc} {set cmin "\[$min"} else {set cmin "($min"}
-    #             if {$maxinc} {set cmax "\[$max"} else {set cmax "($max"}
-    #             set rev [randomInt 2]
-    #             if {$rev} {
-    #                 set cmd zrevrangebylex
-    #             } else {
-    #                 set cmd zrangebylex
-    #             }
+        test "ZRANGEBYLEX fuzzy test, 100 ranges in $elements element sorted set - $encoding" {
+            set lexset {}
+            r del zset
+            for {set j 0} {$j < $elements} {incr j} {
+                set e [randstring 0 30 alpha]
+                lappend lexset $e
+                r zadd zset 0 $e
+            }
+            set lexset [lsort -unique $lexset]
+            for {set j 0} {$j < 100} {incr j} {
+                set min [randstring 0 30 alpha]
+                set max [randstring 0 30 alpha]
+                set mininc [randomInt 2]
+                set maxinc [randomInt 2]
+                if {$mininc} {set cmin "\[$min"} else {set cmin "($min"}
+                if {$maxinc} {set cmax "\[$max"} else {set cmax "($max"}
+                set rev [randomInt 2]
+                if {$rev} {
+                    set cmd zrevrangebylex
+                } else {
+                    set cmd zrangebylex
+                }
 
-    #             # Make sure data is the same in both sides
-    #             assert {[r zrange zset 0 -1] eq $lexset}
+                # Make sure data is the same in both sides
+                assert {[r zrange zset 0 -1] eq $lexset}
 
-    #             # Get the Redis output
-    #             set output [r $cmd zset $cmin $cmax]
-    #             if {$rev} {
-    #                 set outlen [r zlexcount zset $cmax $cmin]
-    #             } else {
-    #                 set outlen [r zlexcount zset $cmin $cmax]
-    #             }
+                # Get the Redis output
+                set output [r $cmd zset $cmin $cmax]
+                if {$rev} {
+                    set outlen [r zlexcount zset $cmax $cmin]
+                } else {
+                    set outlen [r zlexcount zset $cmin $cmax]
+                }
 
-    #             # Compute the same output via Tcl
-    #             set o {}
-    #             set copy $lexset
-    #             if {(!$rev && [string compare $min $max] > 0) ||
-    #                 ($rev && [string compare $max $min] > 0)} {
-    #                 # Empty output when ranges are inverted.
-    #             } else {
-    #                 if {$rev} {
-    #                     # Invert the Tcl array using Redis itself.
-    #                     set copy [r zrevrange zset 0 -1]
-    #                     # Invert min / max as well
-    #                     lassign [list $min $max $mininc $maxinc] \
-    #                         max min maxinc mininc
-    #                 }
-    #                 foreach e $copy {
-    #                     set mincmp [string compare $e $min]
-    #                     set maxcmp [string compare $e $max]
-    #                     if {
-    #                          ($mininc && $mincmp >= 0 || !$mininc && $mincmp > 0)
-    #                          &&
-    #                          ($maxinc && $maxcmp <= 0 || !$maxinc && $maxcmp < 0)
-    #                     } {
-    #                         lappend o $e
-    #                     }
-    #                 }
-    #             }
-    #             assert {$o eq $output}
-    #             assert {$outlen eq [llength $output]}
-    #         }
-    #     }
+                # Compute the same output via Tcl
+                set o {}
+                set copy $lexset
+                if {(!$rev && [string compare $min $max] > 0) ||
+                    ($rev && [string compare $max $min] > 0)} {
+                    # Empty output when ranges are inverted.
+                } else {
+                    if {$rev} {
+                        # Invert the Tcl array using Redis itself.
+                        set copy [r zrevrange zset 0 -1]
+                        # Invert min / max as well
+                        lassign [list $min $max $mininc $maxinc] \
+                            max min maxinc mininc
+                    }
+                    foreach e $copy {
+                        set mincmp [string compare $e $min]
+                        set maxcmp [string compare $e $max]
+                        if {
+                             ($mininc && $mincmp >= 0 || !$mininc && $mincmp > 0)
+                             &&
+                             ($maxinc && $maxcmp <= 0 || !$maxinc && $maxcmp < 0)
+                        } {
+                            lappend o $e
+                        }
+                    }
+                }
+                assert {$o eq $output}
+                assert {$outlen eq [llength $output]}
+            }
+        }
 
-    #     test "ZREMRANGEBYLEX fuzzy test, 100 ranges in $elements element sorted set - $encoding" {
-    #         set lexset {}
-    #         r del zset zsetcopy
-    #         for {set j 0} {$j < $elements} {incr j} {
-    #             set e [randstring 0 30 alpha]
-    #             lappend lexset $e
-    #             r zadd zset 0 $e
-    #         }
-    #         set lexset [lsort -unique $lexset]
-    #         for {set j 0} {$j < 100} {incr j} {
-    #             # Copy...
-    #             r zunionstore zsetcopy 1 zset
-    #             set lexsetcopy $lexset
+        test "ZREMRANGEBYLEX fuzzy test, 100 ranges in $elements element sorted set - $encoding" {
+            set lexset {}
+            r del zset zsetcopy
+            for {set j 0} {$j < $elements} {incr j} {
+                set e [randstring 0 30 alpha]
+                lappend lexset $e
+                r zadd zset 0 $e
+                #Copy...
+                r zadd zsetcopy 0 $e
+            }
+            set lexset [lsort -unique $lexset]
+            for {set j 0} {$j < 100} {incr j} {
+                # Copy...
+                # r zunionstore zsetcopy 1 zset
+                set lexsetcopy $lexset
 
-    #             set min [randstring 0 30 alpha]
-    #             set max [randstring 0 30 alpha]
-    #             set mininc [randomInt 2]
-    #             set maxinc [randomInt 2]
-    #             if {$mininc} {set cmin "\[$min"} else {set cmin "($min"}
-    #             if {$maxinc} {set cmax "\[$max"} else {set cmax "($max"}
+                set min [randstring 0 30 alpha]
+                set max [randstring 0 30 alpha]
+                set mininc [randomInt 2]
+                set maxinc [randomInt 2]
+                if {$mininc} {set cmin "\[$min"} else {set cmin "($min"}
+                if {$maxinc} {set cmax "\[$max"} else {set cmax "($max"}
 
-    #             # Make sure data is the same in both sides
-    #             assert {[r zrange zset 0 -1] eq $lexset}
+                # Make sure data is the same in both sides
+                assert {[r zrange zset 0 -1] eq $lexset}
 
-    #             # Get the range we are going to remove
-    #             set torem [r zrangebylex zset $cmin $cmax]
-    #             set toremlen [r zlexcount zset $cmin $cmax]
-    #             r zremrangebylex zsetcopy $cmin $cmax
-    #             set output [r zrange zsetcopy 0 -1]
+                # Get the range we are going to remove
+                set torem [r zrangebylex zset $cmin $cmax]
+                set toremlen [r zlexcount zset $cmin $cmax]
+                r zremrangebylex zsetcopy $cmin $cmax
+                set output [r zrange zsetcopy 0 -1]
 
-    #             # Remove the range with Tcl from the original list
-    #             if {$toremlen} {
-    #                 set first [lsearch -exact $lexsetcopy [lindex $torem 0]]
-    #                 set last [expr {$first+$toremlen-1}]
-    #                 set lexsetcopy [lreplace $lexsetcopy $first $last]
-    #             }
-    #             assert {$lexsetcopy eq $output}
-    #         }
-    #     }
+                # Remove the range with Tcl from the original list
+                if {$toremlen} {
+                    set first [lsearch -exact $lexsetcopy [lindex $torem 0]]
+                    set last [expr {$first+$toremlen-1}]
+                    set lexsetcopy [lreplace $lexsetcopy $first $last]
+                }
+                assert {$lexsetcopy eq $output}
+            }
+        }
 
-    #     test "ZSETs skiplist implementation backlink consistency test - $encoding" {
-    #         set diff 0
-    #         for {set j 0} {$j < $elements} {incr j} {
-    #             r zadd myzset [expr rand()] "Element-$j"
-    #             r zrem myzset "Element-[expr int(rand()*$elements)]"
-    #         }
+        test "ZSETs skiplist implementation backlink consistency test - $encoding" {
+            set diff 0
+            for {set j 0} {$j < $elements} {incr j} {
+                r zadd myzset [expr rand()] "Element-$j"
+                r zrem myzset "Element-[expr int(rand()*$elements)]"
+            }
 
-    #         assert_encoding $encoding myzset
-    #         set l1 [r zrange myzset 0 -1]
-    #         set l2 [r zrevrange myzset 0 -1]
-    #         for {set j 0} {$j < [llength $l1]} {incr j} {
-    #             if {[lindex $l1 $j] ne [lindex $l2 end-$j]} {
-    #                 incr diff
-    #             }
-    #         }
-    #         assert_equal 0 $diff
-    #     }
+            assert_encoding $encoding myzset
+            set l1 [r zrange myzset 0 -1]
+            set l2 [r zrevrange myzset 0 -1]
+            for {set j 0} {$j < [llength $l1]} {incr j} {
+                if {[lindex $l1 $j] ne [lindex $l2 end-$j]} {
+                    incr diff
+                }
+            }
+            assert_equal 0 $diff
+        }
 
-    #     test "ZSETs ZRANK augmented skip list stress testing - $encoding" {
-    #         set err {}
-    #         r del myzset
-    #         for {set k 0} {$k < 2000} {incr k} {
-    #             set i [expr {$k % $elements}]
-    #             if {[expr rand()] < .2} {
-    #                 r zrem myzset $i
-    #             } else {
-    #                 set score [expr rand()]
-    #                 r zadd myzset $score $i
-    #                 assert_encoding $encoding myzset
-    #             }
+        test "ZSETs ZRANK augmented skip list stress testing - $encoding" {
+            set err {}
+            r del myzset
+            for {set k 0} {$k < 2000} {incr k} {
+                set i [expr {$k % $elements}]
+                if {[expr rand()] < .2} {
+                    r zrem myzset $i
+                } else {
+                    set score [expr rand()]
+                    r zadd myzset $score $i
+                    assert_encoding $encoding myzset
+                }
 
-    #             set card [r zcard myzset]
-    #             if {$card > 0} {
-    #                 set index [randomInt $card]
-    #                 set ele [lindex [r zrange myzset $index $index] 0]
-    #                 set rank [r zrank myzset $ele]
-    #                 if {$rank != $index} {
-    #                     set err "$ele RANK is wrong! ($rank != $index)"
-    #                     break
-    #                 }
-    #             }
-    #         }
-    #         assert_equal {} $err
-    #     }
-    # }
+                set card [r zcard myzset]
+                if {$card > 0} {
+                    set index [randomInt $card]
+                    set ele [lindex [r zrange myzset $index $index] 0]
+                    set rank [r zrank myzset $ele]
+                    if {$rank != $index} {
+                        set err "$ele RANK is wrong! ($rank != $index)"
+                        break
+                    }
+                }
+            }
+            assert_equal {} $err
+        }
+    }
 
-    # tags {"slow"} {
-    #     stressers ziplist
-    #     stressers skiplist
-    # }
+    tags {"slow"} {
+        # stressers ziplist
+        # stressers skiplist
+    }
 }
 
 
@@ -1299,3 +1301,139 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
 
     }
 }
+
+test "params" {
+    start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
+  
+        proc params_error {script} {
+            catch {[uplevel 1 $script ]} result opts
+            # puts $result
+            assert_match "*ERR wrong number of arguments for '*' command*" $result
+        }
+        test "params" {
+            params_error {
+                r zadd
+            }
+            params_error {
+                r ZSCORE 
+            }
+            params_error {
+                r ZCARD 
+            }
+            params_error {
+                r zincrby
+            }
+            params_error {
+                r zcount
+            }
+            params_error {
+                r ZRANGE
+            }
+            params_error {
+                r zremrangebylex
+            }
+            params_error {
+                r zrevrange
+            }
+            params_error {
+                r zrangebyscore
+            }
+            params_error {
+                r zrevrangebyscore
+            }
+            params_error {
+                r zrank
+            }
+            params_error {
+                r zrevrank
+            }
+            params_error {
+                r zrem
+            }
+            params_error {
+                r zremrangebyrank
+            }
+            params_error {
+                r zremrangebyscore
+            }
+            params_error {
+                r zrangebylex
+            }
+            params_error {
+                r zlexcount
+            }
+            params_error {
+                r zrevrangebylex
+            }
+            params_error {
+                r zscan
+            }
+        }
+        proc type_error {script} {
+            catch {[uplevel 1 $script ]} result opts
+            assert_match "*WRONGTYPE Operation against a key holding the wrong kind of value*" $result
+        }
+        test "type_error" {
+            r set zset a 
+            type_error {
+                r zadd zset 1.0 a
+            }
+            type_error {
+                r ZSCORE zset a
+            }
+            type_error {
+                r ZCARD zset
+            }
+            type_error {
+                r zincrby zset 1.0 a
+            }
+            type_error {
+                r zcount zset 0 -1
+            }
+            type_error {
+                r ZRANGE zset 0 1
+            }
+            type_error {
+                r zremrangebylex zset {[alpha} {[omega}
+            }
+            type_error {
+                r zrevrange zset 0 -1
+            }
+            type_error {
+                r zrangebyscore zset 0 -1
+            }
+            type_error {
+                r zrevrangebyscore zset 0 -1
+            }
+            type_error {
+                r zrank zset a 
+            }
+            type_error {
+                r zrevrank zset a
+            }
+            type_error {
+                r zrem zset a
+            }
+            type_error {
+                r zremrangebyrank zset 0 -1
+            }
+            type_error {
+                r zremrangebyscore zset 0 2
+            }
+            type_error {
+                r zrangebylex zset  {[aaa} {(g}
+            }
+            type_error {
+                r zlexcount zset {[aaa} {(g}
+            }
+            type_error {
+                r zrevrangebylex zset {(g} {[aaa}
+            }
+            type_error {
+                r zscan zset 0
+            }
+            assert_equal [r get zset] a
+        }
+    }
+}
+
