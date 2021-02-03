@@ -833,7 +833,7 @@ int data2CrdtData(client* fakeClient,robj* key, robj* val) {
                         double score = zzlGetScore(sptr);
                         fakeClient->argv[i++] = createStringObjectFromLongDouble((long double)score, 1);
                         zzlNext(zl,&eptr,&sptr);
-                        fakeClient->argv[i++] = createRawStringObject(vstr, vlen);
+                        fakeClient->argv[i++] = createObject(OBJ_STRING, sdsnewlen(vstr,vlen));
                         len--;
                     } while (eptr != NULL && i < MAX_FAKECLIENT_ARGV);
                     fakeClient->argc = i;

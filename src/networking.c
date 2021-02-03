@@ -1362,7 +1362,7 @@ int processMultibulkBuffer(client *c) {
 }
 
 void printCommand(client *c) {
-    sds command = (sds)c->argv[0]->ptr;
+    // sds command = (sds)c->argv[0]->ptr;
     size_t max_buf = 1024;
     char buf[max_buf];
     int len = sprintf(buf, "cmd: ");

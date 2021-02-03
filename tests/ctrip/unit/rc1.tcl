@@ -19,6 +19,88 @@ proc wait { client index type log}  {
         error "assertion: Master-Slave not correctly synchronized"
     }
 }
+
+start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
+    set master [srv 0 client]
+    set master_gid 1
+    set master_host [srv 0 host]
+    set master_port [srv 0 port]
+    set master_log [srv 0 stdout]
+    proc params_error {script} {
+        catch {[uplevel 1 $script ]} result opts
+        # puts $result
+        assert_match "*ERR wrong number of arguments for '*' command*" $result
+    }
+    test "params" {
+        params_error {
+            $master get 
+        }
+        params_error {
+            $master set 
+        }
+        params_error {
+            $master incr
+        }
+        params_error {
+            $master decr 
+        }
+        params_error {
+            $master incrbyfloat 
+        }
+        params_error {
+            $master incrby 
+        }
+        params_error {
+            $master setex 
+        }
+        params_error {
+            $master setnx 
+        }
+        params_error {
+            $master expire 
+        }
+        params_error {
+            $master PERSIST
+        }
+        params_error {
+            $master pexpire
+        }
+    }
+    proc type_error {script} {
+        catch {[uplevel 1 $script ]} result opts
+        assert_match "*WRONGTYPE Operation against a key holding the wrong kind of value*" $result
+    }
+    test "type_error" {
+        $master hset k a b 
+        type_error {
+            $master get k 
+        }
+        type_error {
+            $master set k v 
+        }
+        type_error {
+            $master incr k 
+        }
+        type_error {
+            $master decr k 
+        }
+        type_error {
+            $master incrbyfloat k  1.0
+        }
+        type_error {
+            $master incrby k 1
+        }
+        type_error {
+            $master setex k 10 a 
+        }
+        assert_equal [$master hget k a ] b
+    }
+    test "setex" {
+        assert_equal [$master ttl exkey] -2 
+        $master setex exkey 100 v 
+        assert {[$master ttl exkey] != -1} 
+    }
+}
 start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
     set master [srv 0 client]
     set master_gid 1
