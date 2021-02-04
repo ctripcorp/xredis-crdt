@@ -25,6 +25,78 @@ proc wait { client index type log}  {
         error "assertion: Master-Slave not correctly synchronized"
     }
 }
+
+start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
+    set master [srv 0 client]
+    set master_gid 1
+    set master_host [srv 0 host]
+    set master_port [srv 0 port]
+    set master_log [srv 0 stdout]
+    proc params_error {script} {
+        catch {[uplevel 1 $script ]} result opts
+        # puts $result
+        assert_match "*ERR wrong number of arguments for '*' command*" $result
+    }
+    test "params_error" {
+        params_error {
+            $master sadd 
+        }
+        params_error {
+            $master sismember 
+        }
+        params_error {
+            $master srem 
+        }
+        params_error {
+            $master scard 
+        }
+        params_error {
+            $master smembers
+        }
+        params_error {
+            $master sunion
+        }
+        params_error {
+            $master sscan
+        }
+        params_error {
+            $master spop
+        }
+        
+    }
+    proc type_error {script} {
+        catch {[uplevel 1 $script ]} result opts
+        assert_match "*WRONGTYPE Operation against a key holding the wrong kind of value*" $result
+    }
+    test "type_error" {
+        r set mset a 
+        type_error {
+            $master sadd mset a  
+        }
+        type_error {
+            $master sismember mset a 
+        }
+        type_error {
+            $master srem  mset a
+        }
+        type_error {
+            $master scard mset 
+        }
+        type_error {
+            $master smembers mset 
+        }
+        type_error {
+            $master sunion mset mset1
+        }
+        type_error {
+            $master sscan mset  0
+        }
+        type_error {
+            $master spop mset  
+        }
+        assert_equal [r get mset] a 
+    }
+}
 start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
     set master [srv 0 client]
     set master_gid 1

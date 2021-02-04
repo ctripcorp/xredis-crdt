@@ -10,6 +10,13 @@ HIGH:     There is a critical bug that may affect a subset of users. Upgrade!
 CRITICAL: There is a critical bug affecting MOST USERS. Upgrade ASAP.
 --------------------------------------------------------------------------------
 ================================================================================
+XRedis-CRDT 1.0.10 Released Thu Feb  4 14:31:37 CST 2021
+================================================================================
+Upgrade urgency HIGH: Compared with the previous version, there are some improvements, mainly:
+Major things: 
+* [bugfix] redis-server crash when the zrange command uses wrong parameters
+
+================================================================================
 XRedis-CRDT 1.0.9 Released Sun Dec 13 23:42:49 CST 2020
 ================================================================================
 Upgrade urgency LOW: Compared with the previous version, there are some improvements, mainly:

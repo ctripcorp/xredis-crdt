@@ -1,5 +1,5 @@
 APP=xredis-crdt
-Version=1.0.9
+Version=1.0.10
 Package=$APP-$Version
 
 find . -name ctrip.h -exec sed -i "s/XREDIS_CRDT_VERSION \"\(.*\)\"/XREDIS_CRDT_VERSION \"$Version\"/" {} \;

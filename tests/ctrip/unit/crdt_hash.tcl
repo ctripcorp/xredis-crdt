@@ -19,6 +19,98 @@ proc decode_binary_str {binary_str size} {
     return $result
 }
 start_server {tags {"crdt-hash"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so}} {
+    set master [srv 0 client]
+    set master_gid 1
+    set master_host [srv 0 host]
+    set master_port [srv 0 port]
+    set master_log [srv 0 stdout]
+    proc params_error {script} {
+        catch {[uplevel 1 $script ]} result opts
+        # puts $result
+        assert_match "*ERR wrong number of arguments for '*' command*" $result
+    }
+    test "params_error" {
+        params_error {
+            $master hset k 
+        }
+        params_error {
+            $master hdel k 
+        }
+        params_error {
+            $master hscan k 
+        }
+        params_error {
+            $master hmset k 
+        }
+        params_error {
+            $master hget k 
+        }
+        params_error {
+            $master hmget k 
+        }
+        params_error {
+            $master del 
+        }
+        params_error {
+            $master HGETALL
+        }
+        params_error {
+            $master hkeys
+        }
+        params_error {
+            $master hvals
+        }
+        params_error {
+            $master hlen
+        }
+        params_error {
+            $master hscan
+        }
+    }
+    proc type_error {script} {
+        catch {[uplevel 1 $script ]} result opts
+        assert_match "*WRONGTYPE Operation against a key holding the wrong kind of value*" $result
+    }
+    test "type_error" {
+        r set hash a 
+        type_error {
+            $master hset hash k v 
+        }
+        type_error {
+            $master hdel hash k v 
+        }
+        type_error {
+            $master hscan  hash 0
+        }
+        type_error {
+            $master hmset hash k v k1 v2 
+        }
+        type_error {
+            $master hget hash k 
+        }
+        type_error {
+            $master hmget hash k 
+        }
+        type_error {
+            $master hgetall hash  
+        }
+        type_error {
+            $master hkeys hash  
+        }
+        type_error {
+            $master hvals hash  
+        }
+        type_error {
+            $master hscan hash 0  
+        }
+        type_error {
+            $master hlen hash  
+        }
+        assert_equal [r get hash] a 
+    }
+}
+
+start_server {tags {"crdt-hash"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so}} {
 
     set redis_host [srv 0 host]
     set redis_port [srv 0 port]

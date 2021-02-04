@@ -12,6 +12,7 @@ source tests/support/test.tcl
 source tests/support/util.tcl
 source tests/support/aof.tcl
 source tests/test_script/utils.tcl
+
 set ::all_tests {
     ctrip/unit/string
     ctrip/unit/expire
