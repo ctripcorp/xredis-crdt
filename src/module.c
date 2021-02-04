@@ -248,17 +248,18 @@ static void zsetKeyReset(RedisModuleKey *key);
 #include <stdio.h>
 #include <execinfo.h>
 #define STACK_SIZE 1000
-static void debug_memory(size_t memory, size_t num)
+__attribute__((unused)) static void debug_memory(size_t memory, size_t num)
 {
     void *trace[STACK_SIZE];
     size_t size = backtrace(trace, STACK_SIZE);
     num = min(num, size - 1);
     char **symbols = (char **)backtrace_symbols(trace,size);
     for (size_t i = 0; i<num; i++) {
-        printf("%d--->%s\n", i, symbols[i+1]);
+        printf("%zu--->%s\n", i, symbols[i+1]);
     }
     printf("use memory:[%zu]\n", memory);
-    free(symbols);
+    //./src/server.h:2188:42 'free' has been explicitly marked deprecated here
+    // free(symbols);
     return;
 }
 /* Use like malloc(). Memory allocated with this function is reported in
