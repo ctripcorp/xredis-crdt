@@ -114,7 +114,8 @@ start_server {tags {"backstreaming, can't  write and read"} overrides {crdt-gid 
             assert_match "*LOADING Redis is loading the dataset in memory*" $error 
             catch {$master get k} error
             assert_match "*LOADING Redis is loading the dataset in memory*" $error
-            wait_for_peer_sync $master 
+            wait_for_peer_sync $master
+            after 1000
             $master set k v 
             assert_equal [$master get k] v
         }

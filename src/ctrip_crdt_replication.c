@@ -68,7 +68,6 @@ CRDT_Master_Instance *createPeerMaster(client *c, int gid) {
 }
 
 void freePeerMaster(CRDT_Master_Instance *masterInstance) {
-    serverLog(LL_WARNING, "free peer master");
     if (!masterInstance) {
         return;
     }
@@ -81,6 +80,11 @@ void freePeerMaster(CRDT_Master_Instance *masterInstance) {
     if(!isNullVectorClock(masterInstance->vectorClock)) {
         freeVectorClock(masterInstance->vectorClock);
         masterInstance->vectorClock = newVectorClock(0);
+    }
+
+    if(!isNullVectorClock(masterInstance->backstream_vc)) {
+        freeVectorClock(masterInstance->backstream_vc);
+        masterInstance->backstream_vc = newVectorClock(0);
     }
     if (masterInstance->master) {
         masterInstance->master->flags &= ~CLIENT_CRDT_MASTER;
@@ -1954,7 +1958,9 @@ void crdtReplicationCron(void) {
                 if(isNullVectorClock(min_vc)) {
                     min_vc = dupVectorClock(slave->filterVectorClock);
                 } else {
+                    VectorClock old = min_vc;
                     min_vc = mergeMinVectorClock(min_vc, slave->filterVectorClock);
+                    freeVectorClock(old);
                 }
             }
         }
@@ -1968,6 +1974,8 @@ void crdtReplicationCron(void) {
             // startCrdtBgsaveForReplication(min_logic_time);
             startCrdtBgsaveForReplication2(min_vc);
         }
+
+        freeVectorClock(min_vc);
     }
 
     /* Refresh the number of slaves with lag <= min-slaves-max-lag. */
@@ -2169,7 +2177,6 @@ int peerBackStream() {
     if(max_gid == -1) {
         return loading;
     }
-    serverLog(LL_WARNING, "max_gid: %d, max_vcu: %lld", max_gid, max_vcu);
     for(int i = 0; i < 16; i++) {
         CRDT_Master_Instance* peer = getPeerMaster(i);
         if(peer == NULL) continue;
