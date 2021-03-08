@@ -243,7 +243,6 @@ int crdtSendMergeRequest2(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di, cons
             goto error;
         }
         if(filter == NULL) {
-            serverLog(LL_WARNING, "[CRDT][FILTER] key:{%s} filter fail", keystr);
             continue;
         }
         if(length >= 2) {
@@ -703,7 +702,6 @@ int rdbSaveAuxFieldCrdt(rio *rdb) {
     for (int gid = 0; gid < (MAX_PEERS + 1); gid++) {
         CRDT_Master_Instance *masterInstance = crdtServer.crdtMasters[gid];
         if(masterInstance == NULL) continue;
-        serverLog(LL_WARNING, "save gid %d", gid);
         if (rdbSaveAuxFieldStrInt(rdb, "peer-master-gid", masterInstance->gid)
             == -1)  return C_ERR;
         if (rdbSaveAuxFieldStrStr(rdb, "peer-master-host", masterInstance->masterhost)
@@ -735,6 +733,15 @@ int rdbSaveAuxFieldCrdt(rio *rdb) {
             == -1)  return C_ERR;
         if (rdbSaveAuxFieldStrInt(rdb, "peer-master-repl-offset", replid_offset)
             == -1)  return C_ERR;
+        // if(!isNullVectorClock( masterInstance->vectorClock)) {
+        //     sds ovc = vectorClockToSds(masterInstance->vectorClock);
+        //     if (rdbSaveAuxFieldStrStr(rdb, "peer-master-ovc", ovc) == -1) {
+        //         sdsfree(ovc);
+        //         return C_ERR;
+        //     }
+        //     sdsfree(ovc);   
+        // }
+        
     }
     return C_OK;
 }

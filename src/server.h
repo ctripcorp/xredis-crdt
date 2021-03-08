@@ -1617,7 +1617,7 @@ void peerChangeCommand(client *c);
 void crdtReplicationSetMaster(int gid, char *ip, int port);
 void crdtReplicationCacheMaster(client *c);
 void crdtReplicationHandleMasterDisconnection(client *c);
-void incrLocalVcUnit(long delta);
+void incrLocalVcUnit(long long delta);
 void crdtPsyncCommand(client *c);
 CRDT_Master_Instance *getPeerMaster(int gid);
 void refreshVectorClock(client *c, sds vcStr);

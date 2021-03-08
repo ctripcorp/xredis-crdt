@@ -64,6 +64,7 @@ CRDT_Master_Instance *createPeerMaster(client *c, int gid) {
     masterInstance->repl_transfer_lastio = mstime();
     masterInstance->dbid = 0;
     masterInstance->backstream_vc = newVectorClock(0);
+    addPeerSet(gid);
     return masterInstance;
 }
 
@@ -213,11 +214,20 @@ void peerofCommand(client *c) {
     crdtReplicationSetMaster(gid, c->argv[2]->ptr, (int)port);
     peerMaster = getPeerMaster(gid);
     if(!isNullVectorClock(peerMaster->backstream_vc)) {
+        sds old_backstream_vc = vectorClockToSds(peerMaster->backstream_vc);
+        sds now_backstream_vc = vectorClockToSds(backstream_vc);
+        serverLog(LL_WARNING, "[BACKSTREAM] CHANGE %s -> %s", old_backstream_vc, now_backstream_vc);
+        sdsfree(old_backstream_vc);
+        sdsfree(now_backstream_vc);
         if(!isNullVectorClock(backstream_vc)) {
             freeVectorClock(peerMaster->backstream_vc);
             peerMaster->backstream_vc = backstream_vc;
         }
+        
     } else if(!isNullVectorClock(backstream_vc)) {
+        sds now_backstream_vc = vectorClockToSds(backstream_vc);
+        serverLog(LL_WARNING, "[BACKSTREAM] VC %s ", now_backstream_vc);
+        sdsfree(now_backstream_vc);
         peerMaster->backstream_vc = backstream_vc;
     }
     if (server.configfile != NULL && rewriteConfig(server.configfile) == -1) {
@@ -227,12 +237,10 @@ void peerofCommand(client *c) {
         return;
     } 
     addPeerSet(gid);
-    if (iAmMaster() == C_OK) {
-        sds client = catClientInfoString(sdsempty(), c);
-        serverLog(LL_NOTICE, "[CRDT]PEER OF %lld %s:%d enabled (user request from '%s')",
-                  gid, peerMaster->masterhost, peerMaster->masterport, client);
-        sdsfree(client);
-    } 
+    sds client = catClientInfoString(sdsempty(), c);
+    serverLog(LL_NOTICE, "[CRDT]PEER OF %lld %s:%d enabled (user request from '%s')",
+                gid, peerMaster->masterhost, peerMaster->masterport, client);
+    sdsfree(client);
     server.dirty ++;
     addReply(c,shared.ok);
 }
@@ -358,6 +366,12 @@ crdtMergeEndCommand(client *c) {
         long long process_vcu = get_logic_clock(process_clk);
         long long backstream_vcu = get_logic_clock(backstream_clk);
         if(process_vcu < backstream_vcu) {
+            sds process_sds = vectorClockToSds(crdtServer.vectorClock);
+            sds back_sds = vectorClockToSds(peerMaster->vectorClock); 
+            serverLog(LL_WARNING, "process vc %s < %s", process_sds, back_sds);
+            sdsfree(process_sds);
+            sdsfree(back_sds);
+            serverLog(LL_WARNING, "process_vcu %lld < %lld", process_vcu, backstream_vcu);
             incrLocalVcUnit(backstream_vcu - process_vcu);
             jumpVectorClock();
         }
@@ -2125,8 +2139,8 @@ long long getSelfVcuFromPeer(char* host, int port) {
 
     c = redisConnect(host, port);
     struct timeval tv;
-    tv.tv_sec = 0;
-    tv.tv_usec = 10000;//μs
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;//μs
     redisSetTimeout(c, tv);
     reply = redisCommand(c,"crdt.vc");
     if(reply == NULL) {
@@ -2155,6 +2169,16 @@ long long getSelfVcuFromPeer(char* host, int port) {
     return -1;
 }
 
+int isNullDb() {
+    for(int j = 0; j < server.dbnum; j++) {
+        redisDb *db = server.db+j;
+        if(dictSize(db->dict) != 0 || dictSize(db->deleted_keys) !=0) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
 int peerBackStream() {
     long long max_vcu = -1;
     int max_gid = -1;
@@ -2173,10 +2197,32 @@ int peerBackStream() {
             }
         }
     }
+    
+    /**
+     * load rdb and process vcu < 
+     */
+    if( !isNullDb()) {
+        clk process_clk = getVectorClockUnit(crdtServer.vectorClock, crdtServer.crdt_gid);
+        long long process_vcu = get_logic_clock(process_clk);
+        serverLog(LL_WARNING, "[backstream] max vcu %lld , process_vcu %lld ", max_vcu, process_vcu);
+        if(max_vcu < process_vcu) {
+            cleanSlavePeerBackStream();
+            //jumpVectorClock();
+            return 0;
+        }
+        emptyDb(
+            -1,
+            server.repl_slave_lazy_flush ? EMPTYDB_ASYNC : EMPTYDB_NO_FLAGS,
+            NULL);
+        resetVectorClock(crdtServer.vectorClock);
+        resetVectorClock(crdtServer.gcVectorClock);
+    } 
     crdtServer.loading = loading;
     if(max_gid == -1) {
         return loading;
     }
+    
+    serverLog(LL_WARNING, "[backstream]max from gid: %d, vcu: %lld", max_gid, max_vcu);
     for(int i = 0; i < 16; i++) {
         CRDT_Master_Instance* peer = getPeerMaster(i);
         if(peer == NULL) continue;
@@ -2185,7 +2231,7 @@ int peerBackStream() {
         } else if(isNullVectorClock(peer->backstream_vc)) {
             peer->backstream_vc = addVectorClockUnit(peer->backstream_vc, crdtServer.crdt_gid, max_vcu);
         }
-    }
+    }  
     return loading;
 }
 

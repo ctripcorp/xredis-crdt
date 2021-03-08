@@ -339,7 +339,7 @@ struct redisCommand redisCommandTable[] = {
 /*============================ CRDT functions ============================ */
 
 void
-incrLocalVcUnit(long delta) {
+incrLocalVcUnit(long long delta) {
     // VectorClockUnit *localVcu = getVectorClockUnit(crdtServer.vectorClock, crdtServer.crdt_gid);
     incrLogicClock(&crdtServer.vectorClock, crdtServer.crdt_gid, delta);
 }
@@ -3915,7 +3915,7 @@ void loadDataFromDisk(void) {
         if (rdbLoad(server.rdb_filename,&rsi) == C_OK) {
             serverLog(LL_NOTICE,"DB loaded from disk: %.3f seconds",
                 (float)(ustime()-start)/1000000);
-            jumpVectorClock();
+            
             /* Restore the replication ID / offset from the RDB file. */
             if (server.masterhost &&
                 rsi.repl_id_is_set &&
@@ -4061,7 +4061,6 @@ int redisIsSupervised(int mode) {
 int main(int argc, char **argv) {
     struct timeval tv;
     int j;
-
 #ifdef REDIS_TEST
     if (argc == 3 && !strcasecmp(argv[1], "test")) {
         if (!strcasecmp(argv[2], "ziplist")) {
@@ -4203,7 +4202,7 @@ int main(int argc, char **argv) {
             redisGitSHA1(),
             strtol(redisGitDirty(),NULL,10) > 0,
             (int)getpid());
-
+    
     if (argc == 1) {
         serverLog(LL_WARNING, "Warning: no config file specified, using the default config. In order to specify a config file use %s /path/to/%s.conf", argv[0], server.sentinel_mode ? "sentinel" : "redis");
     } else {
@@ -4289,7 +4288,6 @@ void sendSelectCommandToSlave(int dictid) {
             "*2\r\n$6\r\nSELECT\r\n$%d\r\n%s\r\n",
             dictid_len, llstr));
     }
-    
     
 
     /* Add the SELECT command into the backlog. */

@@ -368,7 +368,7 @@ void loadServerConfigFromString(char *config) {
                 iter->masterhost = sdsnew(argv[2]);
                 iter->masterport = atoi(argv[3]);
                 crdtServer.crdtMasters[gid] = iter;
-                serverLog(LL_WARNING, "load peerof %d", gid);
+                serverLog(LL_WARNING, "load config peerof info: gid: %d, host: %s, port: %d", gid, iter->masterhost, iter->masterport);
             } 
         }else if (!strcasecmp(argv[0],"repl-ping-slave-period") && argc == 2) {
             server.repl_ping_slave_period = atoi(argv[1]);

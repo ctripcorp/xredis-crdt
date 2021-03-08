@@ -116,7 +116,9 @@ int gcIfNeeded(dict *d, robj *key) {
     if(!method->gc(tombstone, crdtServer.gcVectorClock)){
         return 0;
     }
-    // serverLog(LL_WARNING, "[gc]key: %s",key->ptr);
+    #if defined(DEBUG) 
+        serverLog(LL_WARNING, "[gc]key: %s",key->ptr);
+    #endif
     if (dictDelete(d,key->ptr) == DICT_OK) {
         return 1;
     } else {
@@ -175,7 +177,17 @@ VectorClock getGcVectorClock() {
             }
             VectorClock old = gcVectorClock;
             gcVectorClock = mergeMinVectorClock(old, other);
+            // #if defined(DEBUG) 
+            //     sds vc_str = vectorClockToSds(other);
+            //     sds gcvc1_str = vectorClockToSds(old);
+            //     sds gcvc_str = vectorClockToSds(gcVectorClock);
+            //     serverLog(LL_WARNING, "[mergeminvc]:%s  + %s = %s", vc_str, gcvc1_str, gcvc_str);
+            //     sdsfree(vc_str);
+            //     sdsfree(gcvc1_str);
+            //     sdsfree(gcvc_str);
+            // #endif
             freeVectorClock(old);
+            
         }
         
     }
@@ -221,7 +233,9 @@ int activeGcCycleTryGc(dict *d, dictEntry *de) {
         return 0;
     }
     sds key = dictGetKey(de);
-    // serverLog(LL_WARNING, "[gc]key: %s",key);
+    #if defined(DEBUG) 
+        serverLog(LL_WARNING, "[gc]key: %s",key);
+    #endif
     if (dictDelete(d,key) == DICT_OK) {
         return 1;
     } else {

@@ -89,7 +89,8 @@ proc load {check server_path dbfile} {
         [lindex $peers 0] debug set-crdt-ovc 0
         # log_file_matches [lindex $peer_stdouts 0]
         test  "check" {
-            run [replace_client $check {[lindex $peers 0]}]  2
+            # run [] 2
+            replace_client $check {[lindex $peers 0]}
         };
 
     }

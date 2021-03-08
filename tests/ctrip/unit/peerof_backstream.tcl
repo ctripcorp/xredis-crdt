@@ -1,3 +1,9 @@
+proc read_file {log} {
+    set fp [open $log r]
+    set content [read $fp]
+    close $fp
+    return $content
+}
 proc run_test_all_api {c} {
     test "kv" {
         $c set mykv1 a 

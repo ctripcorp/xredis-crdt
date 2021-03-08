@@ -433,3 +433,54 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt_no_save.conf} 
         }
     }
 }
+
+start_server {tags {"master"} overrides {crdt-gid 1} config {crdt_no_save.conf} module {crdt.so} } {
+    set master [srv 0 client]
+    set master_gid 1
+    set master_host [srv 0 host]
+    set master_port [srv 0 port]
+    set master_stdout [srv 0 stdout]
+    set master_stderr [srv 0 stderr]
+    set master_config_file [srv 0 config_file]
+    set master_config [srv 0 config]
+    # $master peerof 2 127.0.0.1 0 
+    start_server {tags {"peer"} overrides {crdt-gid 2} config {crdt.conf} module {crdt.so} } {
+        set peer [srv 0 client]
+        set peer_gid 2
+        set peer_host [srv 0 host]
+        set peer_port [srv 0 port]
+        set peer_stdout [srv 0 stdout]
+        set peer_stderr [srv 0 stderr]
+        $peer config crdt.set repl-diskless-sync-delay 1 
+        $master config crdt.set repl-diskless-sync-delay 1
+        $peer peerof $master_gid $master_host $master_port
+        $master peerof $peer_gid $peer_host $peer_port
+        wait_for_peer_sync $peer 
+        wait_for_peer_sync $master
+        $peer set peer_key a 
+        $master set master_key a 
+        $master set k a 
+        $peer set k b 
+        catch {$master shutdown} 
+        start_server_by_config $master_config_file $master_config $master_host $master_port $master_stdout $master_stderr 0 {
+            after 2000
+            set master [redis $master_host $master_port]
+            wait_for_peer_sync $master
+            puts [$master crdt.info replication]
+            $master select 9
+            assert_equal [$master crdt.datainfo peer_key] [$peer crdt.datainfo peer_key] 
+            assert_equal [$master crdt.datainfo master_key] [$peer crdt.datainfo master_key] 
+            assert_equal [$master crdt.datainfo k] [$peer crdt.datainfo k] 
+            
+            $master peerof $peer_gid no one 
+            $master flushall 
+            $master peerof $peer_gid $peer_host $peer_port backstream 0
+            wait_for_peer_sync $master
+            puts [read_file $master_stdout]
+
+            assert_equal [$master crdt.datainfo peer_key] [$peer crdt.datainfo peer_key] 
+            assert_equal [$master crdt.datainfo master_key] [$peer crdt.datainfo master_key] 
+            assert_equal [$master crdt.datainfo k] [$peer crdt.datainfo k] 
+        }
+    }
+}

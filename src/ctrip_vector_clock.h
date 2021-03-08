@@ -227,7 +227,7 @@ clk
 getVectorClockUnit(VectorClock vc, int gid);
 
 void
-incrLogicClock(VectorClock *vc, int gid, int delta);
+incrLogicClock(VectorClock *vc, int gid, long long delta);
 
 void
 sortVectorClock(VectorClock vc);
@@ -256,4 +256,6 @@ updateProcessVectorClock(VectorClock *dst, VectorClock *src, int gid, int curren
 
 long long get_vcu_from_vc(VectorClock vc, int gid, int* index);
 int VectorClockEqual(VectorClock a, VectorClock b);
+
+void resetVectorClock(VectorClock vc);
 #endif //REDIS_VECTOR_CLOCK_H

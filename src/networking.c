@@ -1370,8 +1370,11 @@ void printCommand(client *c) {
     sds command = (sds)c->argv[0]->ptr;
     UNUSED(command);
     size_t max_buf = 1024;
+    if(!strcasecmp("CRDT.REPLCONF", command) || !strcasecmp("CRDT.OVC", command) || !strcasecmp("CLIENT", command)) {
+        return;
+    }
     char buf[max_buf];
-    int len = sprintf(buf, "cmd: ");
+    int len = sprintf(buf, "cmd: %d", c->argc);
     for(int i = 0; i < c->argc; i++) {
         if((len + sdslen(c->argv[i]->ptr) + 10) > max_buf) {
             goto end;

@@ -18,8 +18,9 @@ proc gen_write_load {host port seconds script} {
             exit 0
         }
         after 10
-        # incr num -1
+        incr num -1
     }
+    $r close
 }
 
 gen_write_load [lindex $argv 0] [lindex $argv 1] [lindex $argv 2] [lindex $argv 3]

@@ -24,12 +24,18 @@ proc create_config {port dir gid} {
     close $f
 }
 
+proc print_log_file {log} {
+    set fp [open $log r]
+    set content [read $fp]
+    close $fp
+    puts $content
+}
 
 proc start_local {port dir gid} {
     if { [file exists $dir] != 1} {  
        puts [file mkdir $dir]
+       create_config $port $dir $gid
     }
-    create_config $port $dir $gid
     set redis_conf [format "%s/redis.conf" $dir]
     exec "./src/redis-server" $redis_conf
 }
@@ -50,15 +56,15 @@ proc start_stand_alone_three_master {port1 port2 port3} {
     start_local  $port3 [format "%s/%s" $dir $port3] 3
 }
 
-proc stop_stand_alone_one_slave {port} {
+proc stop_stand_alone_one_redis {port} {
     set local_host "127.0.0.1"
     stop_local $local_host $port
 }
 
-proc start_stand_alone_one_slave {port} {
+proc start_stand_alone_one_redis {port gid} {
     set local_host "127.0.0.1"
     set dir "./local_crdt/"
-    start_local  $port [format "%s/%s" $dir $port] 1
+    start_local  $port [format "%s/%s" $dir $port] $gid
 }
 
 proc del_local_crdt_dir {port} {
@@ -69,7 +75,36 @@ proc del_local_crdt_dir {port} {
 
 proc write_all_api {host port time} {
     return [start_write_script $host $port $time {
-        $r set k v 
+        $r sadd myset a b c
+        $r srem myset a
+        after 50
+        $r del myset
+        $r set myrc [randomInt 123456789]
+        after 50
+        $r set mykv k
+        $r set mykv [randomValue]
+        after 50
+        $r hset myhash [randomKey] [randomValue]
+        $r set mykv2 a 
+        after 50
+        $r set mykv3 1
+        $r mset mykv2 [randstring 0 256 alpha ] mykv3 [randomInt 1234567]
+        after 50
+        $r incrby myrc 10
+        $r incrbyfloat myrc 20.0
+        after 50
+        $r zadd myzset  [randomFloat -99999999 999999999] mfield
+        $r zadd myzset2 [randomInt 9999999] [randomValue] [randomInt 9999999] [randomValue]
+        after 50
+        $r zincrby myzset [randomFloat -999999999 99999999] mfield
+        $r zrem myzset mfield
+        after 50
+        $r del myrc
+        $r del mykv
+        after 50
+        $r del myhash
+        $r del myzset2  
+        after 50
     }]
 }
 
@@ -350,10 +385,25 @@ proc try_check {client1 client2 num} {
 }
 
 proc try_check_all {comment client1 client2 num} {
-    
     if {[try_check $client1 $client2 $num] == 1} {
         return 1
     }
     puts [format "try_check_all fail: %s" $comment]
     return 0
+}
+
+proc wait_replication_offset {master slave num} {
+    while {$num} {
+        set offset [expr [status $master "master_repl_offset"] - [status $slave "master_repl_offset"]]
+        if {$offset < 10 } {
+            break
+        }
+        incr num -1
+        after 100
+    }
+    if {$num == 0} {
+        puts "master - slave  sync timeout "
+        return 0
+    }
+    return 1
 }

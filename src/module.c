@@ -283,9 +283,9 @@ void *RM_Alloc(size_t bytes) {
     size_t old_size = zmalloc_used_memory();
     void* r = zmalloc(bytes);
     size_t memory = zmalloc_used_memory() - old_size;
-    #if defined (DEBUG)
-        debug_module_memory(memory, 3);
-    #endif
+    // #if defined (DEBUG)
+    //     debug_module_memory(memory, 3);
+    // #endif
     add_module_memory_stat_alloc(memory);
     return r;
 }
@@ -764,8 +764,8 @@ void RM_SetOvc(RedisModuleCtx *ctx, VectorClock vc) {
     getPeerMaster(ctx->client->gid)->vectorClock = vc;
 }
 
-void RM_UpdateOvc(RedisModuleCtx *ctx, VectorClock vc) {
-    CRDT_Master_Instance* instance = getPeerMaster(ctx->client->gid);
+void RM_UpdateOvc(int gid, VectorClock vc) {
+    CRDT_Master_Instance* instance = getPeerMaster(gid);
     if(instance != NULL) {
         VectorClock old_vc = instance->vectorClock;
         VectorClock new_vc = vectorClockMerge(old_vc, vc);
@@ -773,6 +773,8 @@ void RM_UpdateOvc(RedisModuleCtx *ctx, VectorClock vc) {
         if(!isNullVectorClock(old_vc)) {
             freeVectorClock(old_vc);
         }
+    } else {
+        serverLog(LL_WARNING, "[update ovc] can't find CRDT_Master_Instance ,gid : %d", gid);
     }
     
 }
@@ -1675,8 +1677,9 @@ int RM_CheckGid(int gid) {
 }
 void jumpVectorClock() {
     long long qps = getQps();
-    // incrLocalVcUnit(100000);
-    incrLocalVcUnit(max(qps * 60 * 60 * 24 , 1000000));
+    long long jump_vcu = max(qps * 60 * 60 * 24 , 1000000);
+    serverLog(LL_WARNING, "jump vcu:%lld", jump_vcu);
+    incrLocalVcUnit(jump_vcu);
 }
 void RM_IncrLocalVectorClock (long long delta) {
     incrLocalVcUnit(delta);
