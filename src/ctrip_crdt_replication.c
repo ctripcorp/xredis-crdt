@@ -2199,7 +2199,8 @@ int peerBackStream() {
     }
     
     /**
-     * load rdb and process vcu < 
+     *  After loading RDB, when the clock is higher than the clock obtained in other computer rooms, use the data in RDB, otherwise perform reflow
+     * 
      */
     if( !isNullDb()) {
         clk process_clk = getVectorClockUnit(crdtServer.vectorClock, crdtServer.crdt_gid);

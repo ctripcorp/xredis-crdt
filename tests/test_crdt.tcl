@@ -16,6 +16,7 @@ source tests/test_script/utils.tcl
 set ::all_tests {
     ctrip/integration/composite/peer-offset-check
     ctrip/unit/restart_backstream 
+    ctrip/unit/hash
     ctrip/unit/string
     ctrip/unit/expire
     ctrip/unit/rc1 

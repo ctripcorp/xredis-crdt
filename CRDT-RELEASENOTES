@@ -15,6 +15,7 @@ XRedis-CRDT 1.0.11 Released Thu Feb  4 14:31:37 CST 2021
 Upgrade urgency LOW: Compared with the previous version, there are some improvements, mainly:
 Major things: 
 * [feature] Increase the data return function, when the local computer room accidentally loses data, the local computer room data can be restored through other computer rooms
+* [feature] add hsetnx and hexists command
 ================================================================================
 ================================================================================
 XRedis-CRDT 1.0.10 Released Thu Feb  4 14:31:37 CST 2021
