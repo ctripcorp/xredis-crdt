@@ -427,7 +427,9 @@ int masterTryPartialResynchronization(struct redisServer *srv, client *c) {
     char *master_replid = c->argv[1]->ptr;
     char buf[128];
     int buflen;
-
+    if(srv == &crdtServer && (c->slave_capa & SLAVE_CAPA_BACKSTREAM)) {
+        goto need_full_resync;
+    }
     /* Parse the replication offset asked by the slave. Go to full sync
      * on parse error: this should never happen but we try to handle
      * it in a robust way compared to aborting. */
@@ -615,6 +617,9 @@ int startBgsaveForReplication(int mincapa) {
 void refullSyncWithSlaves(struct redisServer *srv, client *c) {
     /* Full resynchronization. */
     srv->stat_sync_full++;
+    if(srv == &crdtServer && (c->slave_capa & SLAVE_CAPA_BACKSTREAM)) {
+        srv->stat_sync_backstream++;
+    }
 
     /* Setup the slave as one waiting for BGSAVE to start. The following code
      * paths will change the state if we handle the slave differently. */
@@ -882,6 +887,26 @@ void replconfCommand(client *c) {
         else if (!strcasecmp(c->argv[j]->ptr,"min-vc")) {
             serverAssertWithInfo(c, NULL, sdsEncodedObject(c->argv[j+1]));
             refreshVectorClock(c, c->argv[j+1]->ptr);
+            long long vcu = get_vcu_from_vc(c->vectorClock, crdtServer.crdt_gid, NULL);
+            c->filterVectorClock = addVectorClockUnit(c->filterVectorClock, crdtServer.crdt_gid, vcu);
+        } 
+        else if (!strcasecmp(c->argv[j]->ptr, "backstream")) {
+            serverAssertWithInfo(c, NULL, sdsEncodedObject(c->argv[j+1]));
+            // c->gid = atoi(c->argv[j+1]->ptr);
+            serverLog(LL_WARNING, "backstream: %s", c->argv[j+1]->ptr);
+            // refreshVectorClock(c, c->argv[j+1]->ptr);
+            VectorClock vc = sdsToVectorClock(c->argv[j+1]->ptr);
+            VectorClock old_vc = c->filterVectorClock;
+            c->filterVectorClock = vectorClockMerge(c->filterVectorClock, vc);
+            freeVectorClock(old_vc);
+            freeVectorClock(vc);
+            {//del
+                sds vc_str = vectorClockToSds(c->filterVectorClock);
+                serverLog(LL_WARNING, "filterVectorClock: %s", vc_str);
+                sdsfree(vc_str);
+            }
+            c->slave_capa  |= SLAVE_CAPA_BACKSTREAM;
+
         }
         else if (!strcasecmp(c->argv[j]->ptr,"ack-vc")) {
             /* REPLCONF ACK is used by slave to inform the master the amount
@@ -892,10 +917,11 @@ void replconfCommand(client *c) {
             c->repl_ack_time = server.unixtime;
             serverAssertWithInfo(c, NULL, sdsEncodedObject(c->argv[j+1]));
             refreshVectorClock(c, c->argv[j+1]->ptr);
-
-            VectorClock vclock = sdsToVectorClock(c->argv[j+1]->ptr);
-            refreshGcVectorClock(vclock);
-            freeVectorClock(vclock);
+            //Failure to send to slave will result in inconsistent gc
+            // VectorClock vclock = sdsToVectorClock(c->argv[j+1]->ptr);
+            // refreshGcVectorClock(vclock);
+            // freeVectorClock(vclock);
+            
             /* If this was a diskless replication, we need to really put
              * the slave online when the first ACK is received (which
              * confirms slave is online and ready to get more data). */
@@ -1949,6 +1975,7 @@ void syncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
      * uninstalling the read handler from the file descriptor. */
 
     if (psync_result == PSYNC_CONTINUE) {
+        cleanSlavePeerBackStream();
         serverLog(LL_NOTICE, "MASTER <-> SLAVE sync: Master accepted a Partial Resynchronization.");
         return;
     }
@@ -2181,6 +2208,11 @@ void replicationHandleMasterDisconnection(void) {
 }
 
 void slaveofCommand(client *c) {
+    //when crdtServer.loading , slaveof command can used
+    if (server.loading) {
+        addReply(c, shared.loadingerr);
+        return;
+    }
     /* SLAVEOF is not allowed in cluster mode as replication is automatically
      * configured using the current address of the master node. */
     if (server.cluster_enabled) {

@@ -137,6 +137,7 @@ client *createClient(int fd) {
     c->crdt_pubsub_patterns = listCreate();
     c->peerid = NULL;
     c->vectorClock = newVectorClock(0);
+    c->filterVectorClock = newVectorClock(0);
     listSetFreeMethod(c->pubsub_patterns,decrRefCountVoid);
     listSetMatchMethod(c->pubsub_patterns,listMatchObjects);
     listSetFreeMethod(c->crdt_pubsub_patterns,decrRefCountVoid);
@@ -921,6 +922,10 @@ void freeClient(client *c) {
         freeVectorClock(c->vectorClock);
         c->vectorClock = newVectorClock(0);
     }
+    if (!isNullVectorClock(c->filterVectorClock)) {
+        freeVectorClock(c->filterVectorClock);
+        c->filterVectorClock = newVectorClock(0);
+    }
     zfree(c->argv);
     freeClientMultiState(c);
     sdsfree(c->peerid);
@@ -1362,10 +1367,14 @@ int processMultibulkBuffer(client *c) {
 }
 
 void printCommand(client *c) {
-    // sds command = (sds)c->argv[0]->ptr;
+    sds command = (sds)c->argv[0]->ptr;
+    UNUSED(command);
     size_t max_buf = 1024;
+    if(!strcasecmp("CRDT.REPLCONF", command) || !strcasecmp("CRDT.OVC", command) || !strcasecmp("CLIENT", command)) {
+        return;
+    }
     char buf[max_buf];
-    int len = sprintf(buf, "cmd: ");
+    int len = sprintf(buf, "cmd: %d", c->argc);
     for(int i = 0; i < c->argc; i++) {
         if((len + sdslen(c->argv[i]->ptr) + 10) > max_buf) {
             goto end;

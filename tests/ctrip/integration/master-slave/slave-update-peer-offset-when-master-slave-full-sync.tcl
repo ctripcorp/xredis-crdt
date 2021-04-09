@@ -320,7 +320,7 @@ slave-peer-offset "1. master->slave full sync 2. peer -> master partial sync" {
     $peer_slave slaveof $peer_host $peer_port
     wait $peer 0 info $peer_log
     wait $master 0 info $master_log
-    after 1000
+    wait_for_sync $peer_slave
 
     assert_equal [$peer_slave dbsize] [$peer dbsize]
     $master peerof $peer_slave_gid $peer_slave_host $peer_slave_port

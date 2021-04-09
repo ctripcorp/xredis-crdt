@@ -248,8 +248,10 @@ static void zsetKeyReset(RedisModuleKey *key);
 #include <stdio.h>
 #include <execinfo.h>
 #define STACK_SIZE 1000
-__attribute__((unused)) static void debug_memory(size_t memory, size_t num)
-{
+#define DEBUG_MODULE_MEMORY 0
+__attribute__((unused)) static void debug_module_memory(size_t memory, size_t num)
+{  
+    //only debug
     void *trace[STACK_SIZE];
     size_t size = backtrace(trace, STACK_SIZE);
     num = min(num, size - 1);
@@ -262,6 +264,7 @@ __attribute__((unused)) static void debug_memory(size_t memory, size_t num)
     // free(symbols);
     return;
 }
+
 /* Use like malloc(). Memory allocated with this function is reported in
  * Redis INFO memory, used for keys eviction according to maxmemory settings
  * and in general is taken into account as memory allocated by Redis.
@@ -280,11 +283,9 @@ void *RM_Alloc(size_t bytes) {
     size_t old_size = zmalloc_used_memory();
     void* r = zmalloc(bytes);
     size_t memory = zmalloc_used_memory() - old_size;
-
-    // #if defined (TCL_TEST)
-    //     debug_memory(memory, 3);
+    // #if defined (DEBUG)
+    //     debug_module_memory(memory, 3);
     // #endif
-
     add_module_memory_stat_alloc(memory);
     return r;
 }
@@ -361,7 +362,7 @@ void RM_Free(void *ptr) {
     zfree(ptr);
     size_t free_size = zmalloc_used_memory() - old_size;
     // #if defined (TCL_TEST)
-    //     debug_memory(free_size, 3);
+    //     debug_module_memory(free_size, 3);
     // #endif
     add_module_memory_stat_alloc(free_size);
 }
@@ -763,8 +764,8 @@ void RM_SetOvc(RedisModuleCtx *ctx, VectorClock vc) {
     getPeerMaster(ctx->client->gid)->vectorClock = vc;
 }
 
-void RM_UpdateOvc(RedisModuleCtx *ctx, VectorClock vc) {
-    CRDT_Master_Instance* instance = getPeerMaster(ctx->client->gid);
+void RM_UpdateOvc(int gid, VectorClock vc) {
+    CRDT_Master_Instance* instance = getPeerMaster(gid);
     if(instance != NULL) {
         VectorClock old_vc = instance->vectorClock;
         VectorClock new_vc = vectorClockMerge(old_vc, vc);
@@ -772,6 +773,8 @@ void RM_UpdateOvc(RedisModuleCtx *ctx, VectorClock vc) {
         if(!isNullVectorClock(old_vc)) {
             freeVectorClock(old_vc);
         }
+    } else {
+        serverLog(LL_WARNING, "[update ovc] can't find CRDT_Master_Instance ,gid : %d", gid);
     }
     
 }
@@ -1674,8 +1677,9 @@ int RM_CheckGid(int gid) {
 }
 void jumpVectorClock() {
     long long qps = getQps();
-    // incrLocalVcUnit(100000);
-    incrLocalVcUnit(max(qps * 60 * 24 , 10000));
+    long long jump_vcu = max(qps * 60 * 60 * 24 , 1000000);
+    serverLog(LL_WARNING, "jump vcu:%lld", jump_vcu);
+    incrLocalVcUnit(jump_vcu);
 }
 void RM_IncrLocalVectorClock (long long delta) {
     incrLocalVcUnit(delta);
@@ -2098,6 +2102,7 @@ int RM_SetExpire(RedisModuleKey *key, mstime_t expire) {
         return REDISMODULE_ERR;
     if (expire != REDISMODULE_NO_EXPIRE) {
         expire += mstime();
+        
         setExpire(key->ctx->client,key->db,key->key,expire);
     } else {
         removeExpire(key->db,key->key);

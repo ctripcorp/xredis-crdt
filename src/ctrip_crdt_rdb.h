@@ -42,8 +42,10 @@ typedef struct crdtRdbSaveInfo {
     long long repl_offset;                  /* Replication offset. */
     /* CRDT Specialized param */
     long long logic_time;
+    int backstreaming;
+    VectorClock min_vc;
 } crdtRdbSaveInfo;
-#define CRDT_RDB_SAVE_INFO_INIT {-1,0,"000000000000000000000000000000",-1,0}
+#define CRDT_RDB_SAVE_INFO_INIT {-1,0,"000000000000000000000000000000",-1,0,0}
 //crdt module
 
 #define SAVE_CRDT_VALUE  "RdbSaveCrdtValue"

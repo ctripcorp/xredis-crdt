@@ -72,7 +72,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 test "a + bad" {
                     test "before + bad success" {
                         $master crdt.counter rc6150 1 1000 1:6 4 4:3.0 
-                        $peer crdt.rc rc6150 1 1000 1:7 3:3:2.0 -1
+                        $peer crdt.rc rc6150 1 1000 {1:5;2:1} 3:3:2.0 -1
                         $peer crdt.counter rc6150 1 1000 1:3 4 4:2.0 
                         $peer crdt.del_rc rc6150 1 1000 1:4  1:1:2:1.0
                     }
@@ -89,7 +89,6 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
         $master peerof $peer_gid $peer_host $peer_port
         wait_for_peer_sync $peer
         wait_for_peer_sync $master
-        # after 5000
         # print_log_file  $peer_log
         test "after" {
             test "a" {
@@ -224,7 +223,6 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
         $master peerof $peer_gid $peer_host $peer_port
         wait_for_peer_sync $peer
         wait_for_peer_sync $master
-        # after 5000
         # print_log_file  $peer_log
         test "after" {
             test "b" {
@@ -313,7 +311,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                     # }
                 }
                 test "ad + b" {
-                    $master crdt.counter rc6320 1 1000 1:3 4 4:2.0
+                    $master crdt.counter rc6320 1 1000 1:13 4 4:2.0
                     $master crdt.del_rc rc6320 1 1000 1:2  1:1:2:1.0
                     $peer crdt.rc rc6320 1 1000 1:1 3:3:3.0 -1
                     
@@ -365,7 +363,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 test "ad + bad" {
                     test "ad + bad success" {
                         # 6
-                        $master crdt.counter rc6350 1 1000 1:5 4 4:7.0
+                        $master crdt.counter rc6350 1 1000 1:15 4 4:7.0
                         $master crdt.del_rc rc6350 1 1000 1:2  1:3:2:3.0
                         $peer crdt.rc rc6350 1 1000 1:4 3:3:2.0 -1
                         $peer crdt.counter rc6350 1 1000 1:2 4 4:2.0
@@ -375,7 +373,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         # 4
                         $master crdt.counter rc6351 1 1000 1:3 4 4:2.0
                         $master crdt.del_rc rc6351 1 1000 1:2  1:2:2:1.0
-                        $peer crdt.rc rc6351 1 1000 1:4 3:3:2.0 -1
+                        $peer crdt.rc rc6351 1 1000 {1:4;2:1} 3:3:2.0 -1
                         $peer crdt.counter rc6351 1 1000 1:4 4 4:3.0
                         $peer crdt.del_rc rc6351 1 1000 1:1  1:1:2:2.0
                     }
@@ -450,7 +448,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                     } {6}
                     test "ad + bad fail" {
                         
-                        $peer get  rc6351 
+                        $master get  rc6351 
                     } {4}
                     test "ad + bad d fail" {
                         $peer get  rc6352 
@@ -504,7 +502,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         # 3
                         $master crdt.rc rc6410 1 1000 1:10 3:3:1.0 -1
                         $master crdt.counter rc6410 1 1000 1:11 4 4:2.0
-                        $peer crdt.counter rc6410 1 1000 1:1 4 4:1.0
+                        $peer crdt.counter rc6410 2 1000 {2:1} 4 4:0.0
+                        $peer crdt.counter rc6410 1 1000 {1:1;2:1} 4 4:1.0
                          
                     }
                     # test "ba + fail" {
@@ -535,7 +534,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         # 4
                         $master crdt.rc rc6430 1 1000 1:5 3:3:2.0 -1
                         $master crdt.counter rc6430 1 1000 1:6 4 4:4.0
-                        $peer crdt.counter rc6430 1 1000 1:4 4 4:3.0
+                        $peer crdt.counter rc6430 2 1000 {2:1} 4 4:0.0
+                        $peer crdt.counter rc6430 1 1000 {1:4;2:1} 4 4:3.0
                         $peer crdt.del_rc rc6430 1 1000 1:3  1:2:2:2.0
                         
                     }
@@ -553,7 +553,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         # 13
                         $master crdt.rc rc6440 1 1000 1:11 3:3:4.0 -1
                         $master crdt.counter rc6440 1 1000 1:14 4 4:9.0
-                        $peer crdt.rc rc6440 1 1000 1:3 3:3:3.0 -1
+                        $peer crdt.rc rc6440 1 1000 {1:3;2:1} 3:3:3.0 -1
                         $peer crdt.counter rc6440 1 1000 1:2 4 4:2.0
                         
                     }
@@ -561,7 +561,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         # 12
                         $master crdt.rc rc6441 1 1000 1:3 3:3:4.0 -1
                         $master crdt.counter rc6441 1 1000 1:4 4 4:9.0
-                        $peer crdt.rc rc6441 1 1000 1:5 3:3:3.0 -1
+                        $peer crdt.rc rc6441 1 1000 {1:5;2:1} 3:3:3.0 -1
                         $peer crdt.counter rc6441 1 1000 1:2 4 4:2.0
                         
                         
@@ -570,7 +570,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         # 6
                         $master crdt.rc rc6442 1 1000 1:5 3:3:4.0 -1
                         $master crdt.counter rc6442 1 1000 1:4 4 4:9.0
-                        $peer crdt.rc rc6442 1 1000 1:3 3:3:3.0 -1
+                        $peer crdt.rc rc6442 1 1000 {1:3;2:1} 3:3:3.0 -1
                         $peer crdt.counter rc6442 1 1000 1:6 4 4:2.0
                         
                     }
@@ -578,7 +578,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         # 5
                         $master crdt.rc rc6443 1 1000 1:3 3:3:4.0 -1
                         $master crdt.counter rc6443 1 1000 1:4 4 4:9.0
-                        $peer crdt.rc rc6443 1 1000 1:5 3:3:3.0 -1
+                        $peer crdt.rc rc6443 1 1000 {1:5;2:1} 3:3:3.0 -1
                         $peer crdt.counter rc6443 1 1000 1:6 4 4:2.0
                     }
                 }
@@ -587,7 +587,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         # 12
                         $master crdt.rc rc6450 1 1000 1:5 3:3:4.0 -1
                         $master crdt.counter rc6450 1 1000 1:4 4 4:9.0
-                        $peer crdt.rc rc6450 1 1000 1:3 3:3:3.0 -1
+                        $peer crdt.rc rc6450 1 1000 {1:3;2:1} 3:3:3.0 -1
                         $peer crdt.counter rc6450 1 1000 1:2 4 4:2.0
                         $peer crdt.del_rc rc6450 1 1000 1:1  1:1:2:1.0
                         
@@ -596,7 +596,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         # 11
                         $master crdt.rc rc6451 1 1000 1:3 3:3:4.0 -1
                         $master crdt.counter rc6451 1 1000 1:4 4 4:9.0
-                        $peer crdt.rc rc6451 1 1000 1:5 3:3:3.0 -1
+                        $peer crdt.rc rc6451 1 1000 {1:5;2:1} 3:3:3.0 -1
                         $peer crdt.counter rc6451 1 1000 1:2 4 4:2.0
                         $peer crdt.del_rc rc6451 1 1000 1:1  1:1:2:1.0
                         
@@ -606,7 +606,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         # 5
                         $master crdt.rc rc6452 1 1000 1:5 3:3:4.0 -1
                         $master crdt.counter rc6452 1 1000 1:4 4 4:9.0
-                        $peer crdt.rc rc6452 1 1000 1:3 3:3:3.0 -1
+                        $peer crdt.rc rc6452 1 1000 {1:3;2:1} 3:3:3.0 -1
                         $peer crdt.counter rc6452 1 1000 1:6 4 4:2.0
                         $peer crdt.del_rc rc6452 1 1000 1:1  1:1:2:1.0
                         
@@ -616,7 +616,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         # 4
                         $master crdt.rc rc6453 1 1000 1:3 3:3:4.0 -1
                         $master crdt.counter rc6453 1 1000 1:4 4 4:9.0
-                        $peer crdt.rc rc6453 1 1000 1:5 3:3:3.0 -1
+                        $peer crdt.rc rc6453 1 1000 {1:5;2:1} 3:3:3.0 -1
                         $peer crdt.counter rc6453 1 1000 1:6 4 4:2.0
                         $peer crdt.del_rc rc6453 1 1000 1:1  1:1:2:1.0
                         # puts [$master crdt.datainfo rc6453]
@@ -629,8 +629,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
         $master peerof $peer_gid $peer_host $peer_port
         wait_for_peer_sync $peer
         wait_for_peer_sync $master
-        # after 5000
-        # print_log_file  $peer_log
+        print_log_file  $peer_log
         test "after" {
             test "ba" {
                 test "ba + null" {
@@ -658,7 +657,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 test "ba + ad" {
                     test "ba + ad success" {
                         
-                        $peer get  rc6430 
+                        $master get  rc6430 
                     } {4}
                     # test "ba + ad fail" {
                         
@@ -670,31 +669,31 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $peer get  rc6440 
                     } {13}
                     test "ba + ba b fail" {
-                        $peer get  rc6441 
+                        $master get  rc6441 
                     } {12}
                     test "ba + ba fail" {
-                        $peer get  rc6442 
+                        $master get  rc6442 
                     } {6}
                     test "ba + ba ba fail" {
                         
-                        $peer get  rc6443 
+                        $master get  rc6443 
                     } {5}
                 }
                 test "ba + bad" {
                    test "ba + bad success" {
                        
-                        $peer get  rc6450 
+                        $master get  rc6450 
                     } {12}
                     test "ba + bad b fail" {
                         
-                        $peer get  rc6451 
+                        $master get  rc6451 
                     } {11}
                     test "ba + bad fail" {
-                        $peer get  rc6452 
+                        $master get  rc6452 
                     } {5}
                     test "ba + bad ba fail" {
 
-                        $peer get  rc6453 
+                        $master get  rc6453 
                     } {4}
                 }
             }
@@ -733,7 +732,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
         test "before" {
             test "bad" {
                 test "bad + null" {
-                    $master crdt.rc rc6500 1 1000 1:3 3:3:4.0 -1
+                    $master crdt.rc rc6500 1 1000 1:13 3:3:4.0 -1
                     $master crdt.counter rc6500 1 1000 1:4 4 4:9.0
                     $master crdt.del_rc rc6500 1 1000 1:1  1:1:2:1.0
                 }
@@ -743,7 +742,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.rc rc6510 1 1000 1:3 3:3:4.0 -1
                         $master crdt.counter rc6510 1 1000 1:4 4 4:7.0
                         $master crdt.del_rc rc6510 1 1000 1:1  1:1:2:1.0
-                        $peer crdt.counter rc6510 1 1000 1:2 4 4:1.0
+                        $peer crdt.counter rc6510 1 1000 {1:2;2:1} 4 4:1.0
                         # puts [$master crdt.datainfo rc6510]
                         # puts [$peer crdt.datainfo rc6510]
                     }
@@ -752,7 +751,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.rc rc6511 1 1000 1:8 3:3:4.0 -1
                         $master crdt.counter rc6511 1 1000 1:4 4 4:9.0
                         $master crdt.del_rc rc6511 1 1000 1:1  1:1:2:1.0
-                        $peer crdt.counter rc6511 1 1000 1:7 4 4:1.0
+                        $peer crdt.counter rc6511 2 1000 {2:1} 4 4:0.0
+                        $peer crdt.counter rc6511 1 1000 {1:7;2:1} 4 4:1.0
                         
                     }
                 }
@@ -762,7 +762,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.rc rc6520 1 1000 1:3 3:3:4.0 -1
                         $master crdt.counter rc6520 1 1000 1:4 4 4:7.0
                         $master crdt.del_rc rc6520 1 1000 1:1  1:1:2:1.0
-                        $peer crdt.rc rc6520 1 1000 1:2 3:3:1.0 -1
+                        $peer crdt.rc rc6520 1 1000 {1:2;2:1} 3:3:1.0 -1
                         
                     }
                     test "bad + b fail" {
@@ -770,7 +770,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.rc rc6521 1 1000 1:8 3:3:4.0 -1
                         $master crdt.counter rc6521 1 1000 1:4 4 4:7.0
                         $master crdt.del_rc rc6521 1 1000 1:1  1:1:2:1.0
-                        $peer crdt.counter rc6521 1 1000 1:7 4 4:1.0
+                        $peer crdt.counter rc6521 2 1000 {2:1} 4 4:0.0
+                        $peer crdt.counter rc6521 1 1000 {1:7;2:1} 4 4:1.0
                         
                     }
                 }
@@ -780,7 +781,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.rc rc6530 1 1000 1:3 3:3:4.0 -1
                         $master crdt.counter rc6530 1 1000 1:4 4 4:7.0
                         $master crdt.del_rc rc6530 1 1000 1:2  1:2:2:2.0
-                        $peer crdt.counter rc6530 1 1000 1:2 4 4:4.0
+                        $peer crdt.counter rc6530 1 1000 {1:2;2:1} 4 4:4.0
                         $peer crdt.del_rc rc6530 1 1000 1:1  1:1:2:1.0
                         
                     }
@@ -789,7 +790,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.rc rc6531 1 1000 1:3 3:3:4.0 -1
                         $master crdt.counter rc6531 1 1000 1:4 4 4:7.0
                         $master crdt.del_rc rc6531 1 1000 1:1  1:3:2:2.0
-                        $peer crdt.counter rc6531 1 1000 1:5 4 4:4.0
+                        $peer crdt.counter rc6531 2 1000 {2:1} 4 4:0.0
+                        $peer crdt.counter rc6531 1 1000 {1:5;2:1} 4 4:4.0
                         $peer crdt.del_rc rc6531 1 1000 1:1  1:2:2:1.0
                         
                     }
@@ -798,7 +800,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.rc rc6532 1 1000 1:3 3:3:4.0 -1
                         $master crdt.counter rc6532 1 1000 1:4 4 4:7.0
                         $master crdt.del_rc rc6532 1 1000 1:1  1:1:2:2.0
-                        $peer crdt.counter rc6532 1 1000 1:3 4 4:4.0
+                        $peer crdt.counter rc6532 2 1000 {2:1} 4 4:0.0
+                        $peer crdt.counter rc6532 1 1000 {1:3;2:1} 4 4:4.0
                         $peer crdt.del_rc rc6532 1 1000 1:2  1:2:2:1.0
                         
                     }
@@ -807,7 +810,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.rc rc6533 1 1000 1:3 3:3:4.0 -1
                         $master crdt.counter rc6533 1 1000 1:4 4 4:7.0
                         $master crdt.del_rc rc6533 1 1000 1:1  1:1:2:2.0
-                        $peer crdt.counter rc6533 1 1000 1:5 4 4:4.0
+                        $peer crdt.counter rc6533 2 1000 {2:1} 4 4:0.0
+                        $peer crdt.counter rc6533 1 1000 {1:5;2:1} 4 4:4.0
                         $peer crdt.del_rc rc6533 1 1000 1:2  1:2:2:1.0
                     }
                 }
@@ -817,7 +821,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.rc rc6540 1 1000 1:3 3:3:4.0 -1
                         $master crdt.counter rc6540 1 1000 1:4 4 4:7.0
                         $master crdt.del_rc rc6540 1 1000 1:2  1:2:2:2.0
-                        $peer crdt.rc rc6540 1 1000 1:2 3:3:3.0 -1
+                        $peer crdt.rc rc6540 1 1000 {1:2;2:1} 3:3:3.0 -1
                         $peer crdt.counter rc6540 1 1000 1:3 4 4:6.0
                     }
                     test "bad + ba b fail" {
@@ -825,7 +829,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.rc rc6541 1 1000 1:3 3:3:4.0 -1
                         $master crdt.counter rc6541 1 1000 1:4 4 4:7.0
                         $master crdt.del_rc rc6541 1 1000 1:2  1:2:2:2.0
-                        $peer crdt.rc rc6541 1 1000 1:5 3:3:3.0 -1
+                        $peer crdt.rc rc6541 1 1000 {1:5;2:1} 3:3:3.0 -1
                         $peer crdt.counter rc6541 1 1000 1:3 4 4:5.0
                         
                     }
@@ -834,7 +838,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.rc rc6542 1 1000 1:6 3:3:4.0 -1
                         $master crdt.counter rc6542 1 1000 1:4 4 4:7.0
                         $master crdt.del_rc rc6542 1 1000 1:2  1:2:2:2.0
-                        $peer crdt.rc rc6542 1 1000 1:5 3:3:3.0 -1
+                        $peer crdt.rc rc6542 1 1000 {1:5;2:1} 3:3:3.0 -1
                         $peer crdt.counter rc6542 1 1000 1:5 4 4:5.0
                         
                     }
@@ -843,7 +847,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.rc rc6543 1 1000 1:3 3:3:4.0 -1
                         $master crdt.counter rc6543 1 1000 1:4 4 4:7.0
                         $master crdt.del_rc rc6543 1 1000 1:2  1:2:2:2.0
-                        $peer crdt.rc rc6543 1 1000 1:5 3:3:3.0 -1
+                        $peer crdt.rc rc6543 1 1000 {1:5;2:1} 3:3:3.0 -1
                         $peer crdt.counter rc6543 1 1000 1:6 4 4:5.0
                     }
                 }
@@ -853,7 +857,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.rc rc6550 1 1000 1:7 3:3:4.0 -1
                         $master crdt.counter rc6550 1 1000 1:5 4 4:7.0
                         $master crdt.del_rc rc6550 1 1000 1:4  1:4:2:2.0
-                        $peer crdt.rc rc6550 1 1000 1:2 3:3:3.0 -1
+                        $peer crdt.rc rc6550 1 1000 {1:2;2:1} 3:3:3.0 -1
                         $peer crdt.counter rc6550 1 1000 1:3 4 4:6.0
                         $peer crdt.del_rc rc6550 1 1000 1:2  1:2:2:1.0
                         
@@ -863,7 +867,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.rc rc6551 1 1000 1:7 3:3:4.0 -1
                         $master crdt.counter rc6551 1 1000 1:5 4 4:7.0
                         $master crdt.del_rc rc6551 1 1000 1:4  1:4:2:2.0
-                        $peer crdt.rc rc6551 1 1000 1:8 3:3:3.0 -1
+                        $peer crdt.rc rc6551 1 1000 {1:8;2:1} 3:3:3.0 -1
                         $peer crdt.counter rc6551 1 1000 1:3 4 4:6.0
                         $peer crdt.del_rc rc6551 1 1000 1:2  1:2:2:1.0
                     }
@@ -872,7 +876,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.rc rc6552 1 1000 1:7 3:3:4.0 -1
                         $master crdt.counter rc6552 1 1000 1:5 4 4:7.0
                         $master crdt.del_rc rc6552 1 1000 1:4  1:4:2:2.0
-                        $peer crdt.rc rc6552 1 1000 1:2 3:3:3.0 -1
+                        $peer crdt.rc rc6552 1 1000 {1:2;2:1} 3:3:3.0 -1
                         $peer crdt.counter rc6552 1 1000 1:7 4 4:5.0
                         $peer crdt.del_rc rc6552 1 1000 1:2  1:2:2:1.0
                         
@@ -882,7 +886,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.rc rc6553 1 1000 1:7 3:3:4.0 -1
                         $master crdt.counter rc6553 1 1000 1:5 4 4:7.0
                         $master crdt.del_rc rc6553 1 1000 1:3  1:2:2:2.0
-                        $peer crdt.rc rc6553 1 1000 1:6 3:3:3.0 -1
+                        $peer crdt.rc rc6553 1 1000 {1:6;2:1} 3:3:3.0 -1
                         $peer crdt.counter rc6553 1 1000 1:3 4 4:4.0
                         $peer crdt.del_rc rc6553 1 1000 1:4  1:3:2:4.0
                     }
@@ -891,7 +895,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.rc rc6554 1 1000 1:7 3:3:4.0 -1
                         $master crdt.counter rc6554 1 1000 1:5 4 4:7.0
                         $master crdt.del_rc rc6554 1 1000 1:4  1:4:2:2.0
-                        $peer crdt.rc rc6554 1 1000 1:4 3:3:3.0 -1
+                        $peer crdt.rc rc6554 1 1000 {1:4;2:1} 3:3:3.0 -1
                         $peer crdt.counter rc6554 1 1000 1:6 4 4:6.0
                         $peer crdt.del_rc rc6554 1 1000 1:2  1:2:2:2.0
 
@@ -901,7 +905,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.rc rc6555 1 1000 1:3 3:3:4.0 -1
                         $master crdt.counter rc6555 1 1000 1:5 4 4:7.0
                         $master crdt.del_rc rc6555 1 1000 1:2  1:2:2:2.0
-                        $peer crdt.rc rc6555 1 1000 1:8 3:3:3.0 -1
+                        $peer crdt.rc rc6555 1 1000 {1:8;2:1} 3:3:3.0 -1
                         $peer crdt.counter rc6555 1 1000 1:4 4 4:6.0
                         $peer crdt.del_rc rc6555 1 1000 1:3  1:3:2:4.0
                     }
@@ -910,7 +914,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.rc rc6556 1 1000 1:7 3:3:4.0 -1
                         $master crdt.counter rc6556 1 1000 1:5 4 4:7.0
                         $master crdt.del_rc rc6556 1 1000 1:4  1:3:2:2.0
-                        $peer crdt.rc rc6556 1 1000 1:2 3:3:3.0 -1
+                        $peer crdt.rc rc6556 1 1000 {1:2;2:1} 3:3:3.0 -1
                         $peer crdt.counter rc6556 1 1000 1:7 4 4:6.0
                         $peer crdt.del_rc rc6556 1 1000 1:5  1:4:2:4.0
                     }
@@ -932,7 +936,6 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
         $master peerof $peer_gid $peer_host $peer_port
         wait_for_peer_sync $peer
         wait_for_peer_sync $master
-        # after 5000
         # print_log_file  $peer_log
         test "after" {
             test "bad" {
@@ -941,69 +944,69 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 }
                 test "bad + a" {
                     test "bad + success" {
-                        $peer get  rc6510 
+                        $master get  rc6510 
                     } {10}
                     test "bad + fail" {
-                        $peer get  rc6511 
+                        $master get  rc6511 
                     } {4}
                 }
                 test "bad + b" {
                     test "bad + b success" {
-                        $peer get  rc6520 
+                        $master get  rc6520 
                     } {10}
                     test "bad + b fail" {
-                        $peer get  rc6521 
+                        $master get  rc6521 
                     } {4}
                 }
                 test "bad + ad" {
                     test "bad + ad success" {
-                        $peer get  rc6530 
+                        $master get  rc6530 
                     } {9}
                     test "bad + ad fail" {
-                        $peer get  rc6531 
+                        $master get  rc6531 
                     } {6}
                     test "bad + ad d fail" {
-                        $peer get  rc6532 
+                        $master get  rc6532 
                     } {10}
                     test "bad + ad ad fail" {
-                        $peer get  rc6533 
+                        $master get  rc6533 
                     } {7}
                 }
                 test "bad + ba" {
                     test "bad + ba success" {
-                        $peer get  rc6540 
+                        $master get  rc6540 
                     } {9}
                     test "bad + ba b fail" {
-                        $peer get  rc6541 
+                        $master get  rc6541 
                     } {8}
                     test "bad + ba fail" {
-                        $peer get  rc6542 
+                        $master get  rc6542 
                     } {7}
                     test "bad + ba ba fail" {
-                        $peer get  rc6543 
+                        $master get  rc6543 
                     } {6}
                 }
                 test "bad + bad" {
                     test "bad + bad success" {
-                        $peer get  rc6550 
+                        $master get  rc6550 
                     } {9}
                     test "bad + bad b fail" {
-                        $peer get  rc6551 
+                        $master get  rc6551 
                     } {8}
                     test "bad + bad  fail" {
-                        $peer get  rc6552 
+                        $master get  rc6552 
                     } {7}
                     test "bad + bad  d fail" {
-                        $peer get  rc6553 
+                        $master get  rc6553 
                     } {7}
                     test "bad + bad  ba fail" {
-                        $peer get  rc6554 
+                        $master get  rc6554 
                     } {8}
                     test "bad + bad  bd fail" {
-                        $peer get  rc6555 
+                        $master get  rc6555 
                     } {6}
                     test "bad + bad  ad fail" {
-                        $peer get  rc6556 
+                        $master get  rc6556 
                     } {6}
                     test "bad + bad  bad fail" {
                         puts [$peer crdt.datainfo rc6557]

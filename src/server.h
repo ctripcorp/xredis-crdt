@@ -308,12 +308,14 @@ typedef long long mstime_t; /* millisecond time type. */
 #define REPL_STATE_SEND_CRDT 17
 #define REPL_STATE_RECEIVE_CRDT 18
 #define REPL_STATE_RECEIVE_VC 19 /* Wait for Vector Clock reply */
-#define REPL_STATE_SEND_PSYNC 20 /* Send PSYNC */
-#define REPL_STATE_RECEIVE_PSYNC 21 /* Wait for PSYNC reply */
+#define REPL_STATE_SEND_BACKFLOW 20
+#define REPL_STATE_RECEIVE_BACKFLOW 21
+#define REPL_STATE_SEND_PSYNC 22 /* Send PSYNC */
+#define REPL_STATE_RECEIVE_PSYNC 23 /* Wait for PSYNC reply */
 
 /* --- End of handshake states --- */
-#define REPL_STATE_TRANSFER 22 /* Receiving .rdb from master */
-#define REPL_STATE_CONNECTED 23 /* Connected to master */
+#define REPL_STATE_TRANSFER 24 /* Receiving .rdb from master */
+#define REPL_STATE_CONNECTED 25 /* Connected to master */
 
 /* State of slaves from the POV of the master. Used in client->replstate.
  * In SEND_BULK and ONLINE state the slave receives new updates
@@ -329,6 +331,7 @@ typedef long long mstime_t; /* millisecond time type. */
 #define SLAVE_CAPA_EOF (1<<0)    /* Can parse the RDB EOF streaming format. */
 #define SLAVE_CAPA_PSYNC2 (1<<1) /* Supports PSYNC2 protocol. */
 #define SLAVE_CAPA_CRDT (1<<2)
+#define SLAVE_CAPA_BACKSTREAM (1<<3)
 /* Synchronous read timeout - slave side */
 #define CONFIG_REPL_SYNCIO_TIMEOUT 5
 
@@ -759,6 +762,7 @@ typedef struct client {
     // struct CRDT_Master_Instance* peer_master;
     int gid;
     long long pending_used_offset;
+    VectorClock filterVectorClock;
 } client;
 
 struct saveparam {
@@ -912,6 +916,7 @@ typedef struct CRDT_Master_Instance {
     
     VectorClock vectorClock;
     int dbid;
+    VectorClock backstream_vc;
 } CRDT_Master_Instance;
 
 /*-----------------------------------------------------------------------------
@@ -1009,6 +1014,7 @@ struct redisServer {
     double stat_fork_rate;          /* Fork rate in GB/sec. */
     long long stat_rejected_conn;   /* Clients rejected because of maxclients */
     long long stat_sync_full;       /* Number of full resyncs with slaves. */
+    long long stat_sync_backstream;   /* Number of backstream resyncs with peers. */
     long long stat_sync_partial_ok; /* Number of accepted PSYNC requests. */
     long long stat_sync_partial_err;/* Number of unaccepted PSYNC requests. */
     list *slowlog;                  /* SLOWLOG list of commands */
@@ -1279,6 +1285,7 @@ struct redisServer {
     long long crdt_set_del_conflict;
     long long local_clock;
     int peer_set;
+    long long start_time;
 }redisServer;
 
 typedef struct pubsubPattern {
@@ -1604,11 +1611,13 @@ void crdtMergeDelCommand(client *c);
 void crdtMergeStartCommand(client *c);
 void crdtMergeEndCommand(client *c);
 void peerofCommand(client *c);
+int peerBackStream();
+void cleanSlavePeerBackStream();
 void peerChangeCommand(client *c);
 void crdtReplicationSetMaster(int gid, char *ip, int port);
 void crdtReplicationCacheMaster(client *c);
 void crdtReplicationHandleMasterDisconnection(client *c);
-void incrLocalVcUnit(long delta);
+void incrLocalVcUnit(long long delta);
 void crdtPsyncCommand(client *c);
 CRDT_Master_Instance *getPeerMaster(int gid);
 void refreshVectorClock(client *c, sds vcStr);
@@ -2172,7 +2181,7 @@ void pfdebugCommand(client *c);
 void latencyCommand(client *c);
 void moduleCommand(client *c);
 void securityWarningCommand(client *c);
-
+void crdtVcCommand(client *c);
 #if defined(__GNUC__)
 void *calloc(size_t count, size_t size) __attribute__ ((deprecated));
 void free(void *ptr) __attribute__ ((deprecated));

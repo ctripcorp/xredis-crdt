@@ -88,15 +88,24 @@ proc load {check server_path dbfile} {
         [lindex $peers 0] config set repl-diskless-sync-delay 1
         [lindex $peers 0] debug set-crdt-ovc 0
         # log_file_matches [lindex $peer_stdouts 0]
-        run [replace_client $check {[lindex $peers 0]}]  1
+        test  "check" {
+            # run [] 2
+            replace_client $check {[lindex $peers 0]}
+        };
+
     }
 }
 array set checks ""
 set checks(0) {
-    assert_equal [$redis get key] value
+    assert_equal [$redis
+    get
+    key] value
 }
 set checks(1) {
-    assert_equal [$redis hget h k] v
+    assert_equal [$redis
+    hget
+    h
+    k] v
 }
 set checks(2) {
     assert_equal [$redis tombstonesize] 1

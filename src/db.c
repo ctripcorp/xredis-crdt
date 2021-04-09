@@ -431,6 +431,11 @@ void flushallCommand(client *c) {
         rdbSave(server.rdb_filename,rsiptr);
         server.dirty = saved_dirty;
     }
+    {
+        //crdt redis only debug use 
+        resetVectorClock(crdtServer.vectorClock);
+        resetVectorClock(crdtServer.gcVectorClock);
+    }
     server.dirty++;
 }
 

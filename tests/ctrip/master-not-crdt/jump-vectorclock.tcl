@@ -46,7 +46,7 @@ start_server [list overrides [list crdt-gid 1 loadmodule ./crdt.so  "dir"  $serv
     set master_stdout [srv 0 stdout]
     $master config set repl-diskless-sync-delay 1
     test "check value1" {
-        assert_equal [get_info_replication_attr_value $master crdt.info ovc] "1:10003"
+        assert_equal [get_info_replication_attr_value $master crdt.info ovc] "1:3"
     }
     start_server {tags {"crdt-slave"} config {crdt.conf} overrides {crdt-gid 1 repl-diskless-sync-delay 1} module {crdt.so}} {
         set slave [srv 0 client]
@@ -56,9 +56,12 @@ start_server [list overrides [list crdt-gid 1 loadmodule ./crdt.so  "dir"  $serv
         $slave slaveof $master_host $master_port
         wait $master 0 info $slave_stdout
         $slave slaveof no one 
-        assert_equal [get_info_replication_attr_value $slave crdt.info ovc] "1:20003"
-        after 5000
-        read_file_matches [srv 0 config_file] "*crdt-clockunit 20003*"
+        test "" {
+            assert_equal [get_info_replication_attr_value $slave crdt.info ovc] "1:1000003"
+            after 5000
+            read_file_matches [srv 0 config_file] "*crdt-clockunit 1000003*"
+        }
+        
     }
 }
 
