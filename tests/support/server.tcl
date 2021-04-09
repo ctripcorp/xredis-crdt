@@ -163,6 +163,7 @@ proc start_redis_server {server options {code undefined}} {
     set overrides {}
     set tags {}
     set namespace "default"
+    array set peers  ""
     # parse options
     foreach {option value} $options {
         switch $option {
@@ -178,6 +179,9 @@ proc start_redis_server {server options {code undefined}} {
             "namespace" {
                 set namespace $value
                 }
+            "peerof" {
+                set peers([array size peer]) $value 
+            }
             default {
                 error "Unknown option $option" }
         }
@@ -208,6 +212,8 @@ proc start_redis_server {server options {code undefined}} {
         dict set config loadmodule $module_path
     }
 
+   
+
     # use a different directory every time a server is started
     dict set config dir [tmpdir server]
 
@@ -219,7 +225,7 @@ proc start_redis_server {server options {code undefined}} {
     foreach {directive arguments} [concat $::global_overrides $overrides] {
         if {$directive eq "crdt-gid"} {
             dict set config $directive $namespace $arguments
-        } else {
+        }  else {
             dict set config $directive $arguments
         }
     }
@@ -230,6 +236,13 @@ proc start_redis_server {server options {code undefined}} {
     foreach directive [dict keys $config] {
         puts -nonewline $fp "$directive "
         puts $fp [dict get $config $directive]
+    }
+
+    if {[array size peers] != 0} {
+        for {set j 0} {$j < [array size peers]} {incr j} {
+            puts -nonewline $fp "peerof "
+            puts $fp $peers($j)
+        }
     }
     close $fp
 
@@ -362,4 +375,129 @@ proc start_redis {options {code undefined}} {
 proc start_server {options {code undefined}} {
     set server {src/redis-server}
     start_redis_server $server $options $code 
+}
+
+proc start_server_by_config {config_file config host port stdout stderr wait code} {
+    set server {src/redis-server}
+    # set pid [exec $server $config_file > $stdout 2> $stderr &]
+    if {$::valgrind} {
+        set pid [exec valgrind --track-origins=yes --suppressions=src/valgrind.sup --show-reachable=no --show-possibly-lost=no --leak-check=full $server $config_file > $stdout 2> $stderr &]
+    } elseif ($::stack_logging) {
+        set pid [exec /usr/bin/env MallocStackLogging=1 MallocLogFile=/tmp/malloc_log.txt $server $config_file > $stdout 2> $stderr &]
+    } else {
+        set pid [exec $server $config_file > $stdout 2> $stderr &]
+    }
+    set srv {}
+    dict set srv "pid" $pid
+    dict set srv "host" $host 
+    dict set srv "port" $port 
+    dict set srv "stdout" $stdout
+    dict set srv "stderr" $stderr
+    dict set srv "config" $config 
+
+    set tags {}
+    send_data_packet $::test_server_fd server-spawned $pid
+
+    # check that the server actually started
+    # ugly but tries to be as fast as possible...
+    if {$::valgrind} {set retrynum 1000} else {set retrynum 100}
+
+    if {$::verbose} {
+        puts -nonewline "=== ($tags) Starting server ${::host}:${::port} "
+    }
+    
+    if {$code ne "undefined"} {
+        if {$wait == 1} {
+            set serverisup [server_is_up $host $port $retrynum]
+        } else {
+            set serverisup 1
+        }
+    } else {
+        set serverisup 1
+    }
+    
+    
+
+    if {$::verbose} {
+        puts ""
+    }
+
+    if {!$serverisup} {
+        set err {}
+        append err [exec cat $stdout] "\n" [exec cat $stderr]
+        start_server_error $config_file $err
+        return
+    }
+    
+    # Wait for actual startup
+    while {![info exists _pid]} {
+        regexp {PID:\s(\d+)} [exec cat $stdout] _ _pid
+        after 100
+    }
+    
+    
+    
+    
+    
+    
+    
+    if {$code ne "undefined"} {
+        set line [exec head -n1 $stdout]
+        if {[string match {*already in use*} $line]} {
+            error_and_quit $config_file $line
+        }
+        if {$wait == 1} {
+            while 1 {
+                puts $stdout
+                # check that the server actually started and is ready for connections
+                if {[exec grep -i "Ready to accept" | wc -l < $stdout] > 0} {
+                    break
+                }
+                after 10
+            }
+        }
+        
+
+        # append the server to the stack
+        lappend ::servers $srv
+
+        # connect client (after server dict is put on the stack)
+        reconnect
+
+        # execute provided block
+        set num_tests $::num_tests
+        if {[catch { uplevel 1 $code } error]} {
+            set backtrace $::errorInfo
+
+            # Kill the server without checking for leaks
+            dict set srv "skipleaks" 1
+            kill_server $srv
+
+            # Print warnings from log
+            puts [format "\nLogged warnings (pid %d):" [dict get $srv "pid"]]
+            set warnings [warnings_from_file [dict get $srv "stdout"]]
+            if {[string length $warnings] > 0} {
+                puts "$warnings"
+            } else {
+                puts "(none)"
+            }
+            puts ""
+
+            error $error $backtrace
+        }
+
+        # Don't do the leak check when no tests were run
+        if {$num_tests == $::num_tests} {
+            dict set srv "skipleaks" 1
+        }
+
+        # pop the server object
+        set ::servers [lrange $::servers 0 end-1]
+
+        set ::tags [lrange $::tags 0 end-[llength $tags]]
+        kill_server $srv
+    } else {
+        set ::tags [lrange $::tags 0 end-[llength $tags]]
+        set _ $srv
+    }
 }

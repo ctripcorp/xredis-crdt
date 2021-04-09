@@ -160,7 +160,7 @@ int REDISMODULE_API_FUNC(RedisModule_GetApi)(const char *, void *);
 int REDISMODULE_API_FUNC(RedisModule_CreateCommand)(RedisModuleCtx *ctx, const char *name, RedisModuleCmdFunc cmdfunc, const char *strflags, int firstkey, int lastkey, int keystep);
 void REDISMODULE_API_FUNC(RedisModule_SetModuleAttribs)(RedisModuleCtx *ctx, const char *name, int ver, int apiver);
 void REDISMODULE_API_FUNC(RedisModule_SetOvc)(RedisModuleCtx *ctx, long long vc);
-void REDISMODULE_API_FUNC(RedisModule_UpdateOvc)(RedisModuleCtx *ctx, long long vc);
+void REDISMODULE_API_FUNC(RedisModule_UpdateOvc)(int gid, long long vc);
 long long REDISMODULE_API_FUNC(RedisModule_GetOvc)(RedisModuleCtx *ctx);
 int REDISMODULE_API_FUNC(RedisModule_IsModuleNameBusy)(const char *name);
 int REDISMODULE_API_FUNC(RedisModule_WrongArity)(RedisModuleCtx *ctx);

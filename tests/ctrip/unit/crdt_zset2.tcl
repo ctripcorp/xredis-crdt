@@ -72,7 +72,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 test "a + bad" {
                     test "before a + bad success" {
                         $master crdt.zincrby zset6150 1 1000 1:6 a 2:3.0 
-                        $peer crdt.zadd zset6150 1 1000 1:7 a 2:2.0 
+                        $peer crdt.zadd zset6150 1 1000 {1:7;2:1} a 2:2.0 
                         $peer crdt.zincrby zset6150 1 1000 1:3 a 2:2.0 
                         $peer crdt.zrem zset6150 1 1000 1:4 3:1:a,1:1:2:1.0
                     }
@@ -125,7 +125,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 } 
                 test "a + bad" {
                     test "before a + bad success" {
-                        $peer zscore zset6150 a
+                        $master zscore zset6150 a
                     } {4}
                     # test "before a + bad fail" {
                     #     $peer zscore zset6151 a
@@ -315,7 +315,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 test "ad + b" {
                     $master crdt.zincrby zset6320 1 1000 1:3 a 2:2.0
                     $master crdt.zrem zset6320 1 1000 1:2 3:1:a,1:1:2:1.0
-                    $peer crdt.zadd zset6320 1 1000 1:1 a 2:3.0
+                    $peer crdt.zadd zset6320 1 1000 {1:1;2:1} a 2:3.0
                     
                 }
                 test "ad + ba" {
@@ -367,7 +367,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         # 6
                         $master crdt.zincrby zset6350 1 1000 1:5 a 2:7.0
                         $master crdt.zrem zset6350 1 1000 1:2 3:1:a,1:3:2:3.0
-                        $peer crdt.zadd zset6350 1 1000 1:4 a 2:2.0
+                        $peer crdt.zadd zset6350 1 1000 {1:4;2:1} a 2:2.0
                         $peer crdt.zincrby zset6350 1 1000 1:2 a 2:2.0
                         $peer crdt.zrem zset6350 1 1000 1:1 3:1:a,1:1:2:1.0
                     }
@@ -375,7 +375,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         # 4
                         $master crdt.zincrby zset6351 1 1000 1:3 a 2:2.0
                         $master crdt.zrem zset6351 1 1000 1:2 3:1:a,1:2:2:1.0
-                        $peer crdt.zadd zset6351 1 1000 1:4 a 2:2.0
+                        $peer crdt.zadd zset6351 1 1000 {1:4;2:1} a 2:2.0
                         $peer crdt.zincrby zset6351 1 1000 1:4 a 2:3.0
                         $peer crdt.zrem zset6351 1 1000 1:1 3:1:a,1:1:2:2.0
                     }
@@ -420,7 +420,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                     # } {2}
                 }
                 test "ad + b" {
-                    $peer zscore zset6320 a
+                    $master zscore zset6320 a
                 } {1}
                 test "ad + ba" {
                     test "ad + ba success" {
@@ -446,11 +446,11 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 }
                 test "ad + bad" {
                     test "ad + bad success" {
-                        $peer zscore zset6350 a
+                        $master zscore zset6350 a
                     } {6}
                     test "ad + bad a fail" {
                         
-                        $peer zscore zset6351 a
+                        $master zscore zset6351 a
                     } {4}
                     test "ad + bad d fail" {
                         $peer zscore zset6352 a
@@ -535,7 +535,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         # 4
                         $master crdt.zadd zset6430 1 1000 1:5 a 2:2.0
                         $master crdt.zincrby zset6430 1 1000 1:6 a 2:4.0
-                        $peer crdt.zincrby zset6430 1 1000 1:4 a 2:3.0
+                        $peer crdt.zincrby zset6430 2 1000 {2:1} a 2:0.0
+                        $peer crdt.zincrby zset6430 1 1000 {1:4;2:1} a 2:3.0
                         $peer crdt.zrem zset6430 1 1000 1:3 3:1:a,1:2:2:2.0
                         
                     }
@@ -561,7 +562,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         # 12
                         $master crdt.zadd zset6441 1 1000 1:3 a 2:4.0
                         $master crdt.zincrby zset6441 1 1000 1:4 a 2:9.0
-                        $peer crdt.zadd zset6441 1 1000 1:5 a 2:3.0
+                        $peer crdt.zadd zset6441 1 1000 {1:5;2:1} a 2:3.0
                         $peer crdt.zincrby zset6441 1 1000 1:2 a 2:2.0
                         
                         
@@ -570,7 +571,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         # 6
                         $master crdt.zadd zset6442 1 1000 1:5 a 2:4.0
                         $master crdt.zincrby zset6442 1 1000 1:4 a 2:9.0
-                        $peer crdt.zadd zset6442 1 1000 1:3 a 2:3.0
+                        $peer crdt.zadd zset6442 1 1000 {1:3;2:1} a 2:3.0
                         $peer crdt.zincrby zset6442 1 1000 1:6 a 2:2.0
                         
                     }
@@ -587,7 +588,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         # 12
                         $master crdt.zadd zset6450 1 1000 1:5 a 2:4.0
                         $master crdt.zincrby zset6450 1 1000 1:4 a 2:9.0
-                        $peer crdt.zadd zset6450 1 1000 1:3 a 2:3.0
+                        $peer crdt.zadd zset6450 1 1000 {1:3;2:1} a 2:3.0
                         $peer crdt.zincrby zset6450 1 1000 1:2 a 2:2.0
                         $peer crdt.zrem zset6450 1 1000 1:1 3:1:a,1:1:2:1.0
                         
@@ -596,7 +597,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         # 11
                         $master crdt.zadd zset6451 1 1000 1:3 a 2:4.0
                         $master crdt.zincrby zset6451 1 1000 1:4 a 2:9.0
-                        $peer crdt.zadd zset6451 1 1000 1:5 a 2:3.0
+                        $peer crdt.zadd zset6451 1 1000 {1:5;2:1} a 2:3.0
                         $peer crdt.zincrby zset6451 1 1000 1:2 a 2:2.0
                         $peer crdt.zrem zset6451 1 1000 1:1 3:1:a,1:1:2:1.0
                         
@@ -606,7 +607,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         # 5
                         $master crdt.zadd zset6452 1 1000 1:5 a 2:4.0
                         $master crdt.zincrby zset6452 1 1000 1:4 a 2:9.0
-                        $peer crdt.zadd zset6452 1 1000 1:3 a 2:3.0
+                        $peer crdt.zadd zset6452 1 1000 {1:3;2:1} a 2:3.0
                         $peer crdt.zincrby zset6452 1 1000 1:6 a 2:2.0
                         $peer crdt.zrem zset6452 1 1000 1:1 3:1:a,1:1:2:1.0
                         
@@ -625,10 +626,11 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 }
             }
         }
-        $peer peerof $master_gid $master_host $master_port
         $master peerof $peer_gid $peer_host $peer_port
+         wait_for_peer_sync $master
+        $peer peerof $master_gid $master_host $master_port
         wait_for_peer_sync $peer
-        wait_for_peer_sync $master
+       
         # after 5000
         # print_log_file  $peer_log
         test "after" {
@@ -657,8 +659,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 }
                 test "ba + ad" {
                     test "ba + ad success" {
-                        
-                        $peer zscore zset6430 a
+                        puts [$master crdt.datainfo zset6430]
+                        $master zscore zset6430 a
                     } {4}
                     # test "ba + ad fail" {
                         
@@ -670,10 +672,10 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $peer zscore zset6440 a
                     } {13}
                     test "ba + ba b fail" {
-                        $peer zscore zset6441 a
+                        $master zscore zset6441 a
                     } {12}
                     test "ba + ba a fail" {
-                        $peer zscore zset6442 a
+                        $master zscore zset6442 a
                     } {6}
                     test "ba + ba ba fail" {
                         
@@ -683,14 +685,14 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 test "ba + bad" {
                    test "ba + bad success" {
                        
-                        $peer zscore zset6450 a
+                        $master zscore zset6450 a
                     } {12}
                     test "ba + bad b fail" {
                         
-                        $peer zscore zset6451 a
+                        $master zscore zset6451 a
                     } {11}
                     test "ba + bad a fail" {
-                        $peer zscore zset6452 a
+                        $master zscore zset6452 a
                     } {5}
                     test "ba + bad ba fail" {
 
@@ -733,7 +735,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
         test "before" {
             test "bad" {
                 test "bad + null" {
-                    $master crdt.zadd zset6500 1 1000 1:3 a 2:4.0
+                    $master crdt.zadd zset6500 1 1000 1:13 a 2:4.0
                     $master crdt.zincrby zset6500 1 1000 1:4 a 2:9.0
                     $master crdt.zrem zset6500 1 1000 1:1 3:1:a,1:1:2:1.0
                 }
@@ -743,7 +745,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.zadd zset6510 1 1000 1:3 a 2:4.0
                         $master crdt.zincrby zset6510 1 1000 1:4 a 2:7.0
                         $master crdt.zrem zset6510 1 1000 1:1 3:1:a,1:1:2:1.0
-                        $peer crdt.zincrby zset6510 1 1000 1:2 a 2:1.0
+                        $peer crdt.zincrby zset6510 2 1000 2:1 a 2:0
+                        $peer crdt.zincrby zset6510 1 1000 {1:2;2:1} a 2:1.0
                         # puts [$master crdt.datainfo zset6510]
                         # puts [$peer crdt.datainfo zset6510]
                     }
@@ -752,7 +755,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.zadd zset6511 1 1000 1:8 a 2:4.0
                         $master crdt.zincrby zset6511 1 1000 1:4 a 2:9.0
                         $master crdt.zrem zset6511 1 1000 1:1 3:1:a,1:1:2:1.0
-                        $peer crdt.zincrby zset6511 1 1000 1:7 a 2:1.0
+                        $peer crdt.zincrby zset6511 2 1000 {2:1} a 2:0.0
+                        $peer crdt.zincrby zset6511 1 1000 {1:7;2:2} a 2:1.0
                         
                     }
                 }
@@ -762,7 +766,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.zadd zset6520 1 1000 1:3 a 2:4.0
                         $master crdt.zincrby zset6520 1 1000 1:4 a 2:7.0
                         $master crdt.zrem zset6520 1 1000 1:1 3:1:a,1:1:2:1.0
-                        $peer crdt.zadd zset6520 1 1000 1:2 a 2:1.0
+                        $peer crdt.zadd zset6520 1 1000 {1:2;2:1} a 2:1.0
                         
                     }
                     test "bad + b fail" {
@@ -770,7 +774,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.zadd zset6521 1 1000 1:8 a 2:4.0
                         $master crdt.zincrby zset6521 1 1000 1:4 a 2:7.0
                         $master crdt.zrem zset6521 1 1000 1:1 3:1:a,1:1:2:1.0
-                        $peer crdt.zincrby zset6521 1 1000 1:7 a 2:1.0
+                        $peer crdt.zincrby zset6521 2 1000 2:1 a 2:0.0
+                        $peer crdt.zincrby zset6521 1 1000 {1:7;2:2} a 2:1.0
                         
                     }
                 }
@@ -780,7 +785,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.zadd zset6530 1 1000 1:3 a 2:4.0
                         $master crdt.zincrby zset6530 1 1000 1:4 a 2:7.0
                         $master crdt.zrem zset6530 1 1000 1:2 3:1:a,1:2:2:2.0
-                        $peer crdt.zincrby zset6530 1 1000 1:2 a 2:4.0
+                         $peer crdt.zincrby zset6530 2 1000 {2:1} a 2:0.0
+                        $peer crdt.zincrby zset6530 1 1000 {1:2;2:1} a 2:4.0
                         $peer crdt.zrem zset6530 1 1000 1:1 3:1:a,1:1:2:1.0
                         
                     }
@@ -789,7 +795,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.zadd zset6531 1 1000 1:3 a 2:4.0
                         $master crdt.zincrby zset6531 1 1000 1:4 a 2:7.0
                         $master crdt.zrem zset6531 1 1000 1:1 3:1:a,1:3:2:2.0
-                        $peer crdt.zincrby zset6531 1 1000 1:5 a 2:4.0
+                        $peer crdt.zincrby zset6531 2 1000 {2:1} a 2:0.0
+                        $peer crdt.zincrby zset6531 1 1000 {1:5;2:1} a 2:4.0
                         $peer crdt.zrem zset6531 1 1000 1:1 3:1:a,1:2:2:1.0
                         
                     }
@@ -798,7 +805,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.zadd zset6532 1 1000 1:3 a 2:4.0
                         $master crdt.zincrby zset6532 1 1000 1:4 a 2:7.0
                         $master crdt.zrem zset6532 1 1000 1:1 3:1:a,1:1:2:2.0
-                        $peer crdt.zincrby zset6532 1 1000 1:3 a 2:4.0
+                        $peer crdt.zincrby zset6532 2 1000 {2:1} a 2:0.0
+                        $peer crdt.zincrby zset6532 1 1000 {1:3;2:1} a 2:4.0
                         $peer crdt.zrem zset6532 1 1000 1:2 3:1:a,1:2:2:1.0
                         
                     }
@@ -807,7 +815,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.zadd zset6533 1 1000 1:3 a 2:4.0
                         $master crdt.zincrby zset6533 1 1000 1:4 a 2:7.0
                         $master crdt.zrem zset6533 1 1000 1:1 3:1:a,1:1:2:2.0
-                        $peer crdt.zincrby zset6533 1 1000 1:5 a 2:4.0
+                        $peer crdt.zincrby zset6533 2 1000 {2:1} a 2:0.0
+                        $peer crdt.zincrby zset6533 1 1000 {1:5;2:1} a 2:4.0
                         $peer crdt.zrem zset6533 1 1000 1:2 3:1:a,1:2:2:1.0
                     }
                 }
@@ -817,7 +826,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.zadd zset6540 1 1000 1:3 a 2:4.0
                         $master crdt.zincrby zset6540 1 1000 1:4 a 2:7.0
                         $master crdt.zrem zset6540 1 1000 1:2 3:1:a,1:2:2:2.0
-                        $peer crdt.zadd zset6540 1 1000 1:2 a 2:3.0
+                        $peer crdt.zadd zset6540 1 1000 {1:2;2:1} a 2:3.0
                         $peer crdt.zincrby zset6540 1 1000 1:3 a 2:6.0
                     }
                     test "bad + ba b fail" {
@@ -825,7 +834,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.zadd zset6541 1 1000 1:3 a 2:4.0
                         $master crdt.zincrby zset6541 1 1000 1:4 a 2:7.0
                         $master crdt.zrem zset6541 1 1000 1:2 3:1:a,1:2:2:2.0
-                        $peer crdt.zadd zset6541 1 1000 1:5 a 2:3.0
+                        $peer crdt.zadd zset6541 1 1000 {1:5;2:1} a 2:3.0
                         $peer crdt.zincrby zset6541 1 1000 1:3 a 2:5.0
                         
                     }
@@ -834,7 +843,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.zadd zset6542 1 1000 1:6 a 2:4.0
                         $master crdt.zincrby zset6542 1 1000 1:4 a 2:7.0
                         $master crdt.zrem zset6542 1 1000 1:2 3:1:a,1:2:2:2.0
-                        $peer crdt.zadd zset6542 1 1000 1:5 a 2:3.0
+                        $peer crdt.zadd zset6542 1 1000 {1:5;2:1} a 2:3.0
                         $peer crdt.zincrby zset6542 1 1000 1:5 a 2:5.0
                         
                     }
@@ -843,7 +852,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.zadd zset6543 1 1000 1:3 a 2:4.0
                         $master crdt.zincrby zset6543 1 1000 1:4 a 2:7.0
                         $master crdt.zrem zset6543 1 1000 1:2 3:1:a,1:2:2:2.0
-                        $peer crdt.zadd zset6543 1 1000 1:5 a 2:3.0
+                        $peer crdt.zadd zset6543 1 1000 {1:5;2:1} a 2:3.0
                         $peer crdt.zincrby zset6543 1 1000 1:6 a 2:5.0
                     }
                 }
@@ -853,7 +862,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.zadd zset6550 1 1000 1:7 a 2:4.0
                         $master crdt.zincrby zset6550 1 1000 1:5 a 2:7.0
                         $master crdt.zrem zset6550 1 1000 1:4 3:1:a,1:4:2:2.0
-                        $peer crdt.zadd zset6550 1 1000 1:2 a 2:3.0
+                        $peer crdt.zadd zset6550 1 1000 {1:2;2:1} a 2:3.0
                         $peer crdt.zincrby zset6550 1 1000 1:3 a 2:6.0
                         $peer crdt.zrem zset6550 1 1000 1:2 3:1:a,1:2:2:1.0
                         
@@ -863,7 +872,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.zadd zset6551 1 1000 1:7 a 2:4.0
                         $master crdt.zincrby zset6551 1 1000 1:5 a 2:7.0
                         $master crdt.zrem zset6551 1 1000 1:4 3:1:a,1:4:2:2.0
-                        $peer crdt.zadd zset6551 1 1000 1:8 a 2:3.0
+                        $peer crdt.zadd zset6551 1 1000 {1:8;2:1} a 2:3.0
                         $peer crdt.zincrby zset6551 1 1000 1:3 a 2:6.0
                         $peer crdt.zrem zset6551 1 1000 1:2 3:1:a,1:2:2:1.0
                     }
@@ -872,7 +881,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.zadd zset6552 1 1000 1:7 a 2:4.0
                         $master crdt.zincrby zset6552 1 1000 1:5 a 2:7.0
                         $master crdt.zrem zset6552 1 1000 1:4 3:1:a,1:4:2:2.0
-                        $peer crdt.zadd zset6552 1 1000 1:2 a 2:3.0
+                        $peer crdt.zadd zset6552 1 1000 {1:2;2:1} a 2:3.0
                         $peer crdt.zincrby zset6552 1 1000 1:7 a 2:5.0
                         $peer crdt.zrem zset6552 1 1000 1:2 3:1:a,1:2:2:1.0
                         
@@ -882,7 +891,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.zadd zset6553 1 1000 1:7 a 2:4.0
                         $master crdt.zincrby zset6553 1 1000 1:5 a 2:7.0
                         $master crdt.zrem zset6553 1 1000 1:3 3:1:a,1:2:2:2.0
-                        $peer crdt.zadd zset6553 1 1000 1:6 a 2:3.0
+                        $peer crdt.zadd zset6553 1 1000 {1:6;2:1} a 2:3.0
                         $peer crdt.zincrby zset6553 1 1000 1:3 a 2:4.0
                         $peer crdt.zrem zset6553 1 1000 1:4 3:1:a,1:3:2:4.0
                     }
@@ -891,7 +900,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.zadd zset6554 1 1000 1:7 a 2:4.0
                         $master crdt.zincrby zset6554 1 1000 1:5 a 2:7.0
                         $master crdt.zrem zset6554 1 1000 1:4 3:1:a,1:4:2:2.0
-                        $peer crdt.zadd zset6554 1 1000 1:4 a 2:3.0
+                        $peer crdt.zadd zset6554 1 1000 {1:4;2:1} a 2:3.0
                         $peer crdt.zincrby zset6554 1 1000 1:6 a 2:6.0
                         $peer crdt.zrem zset6554 1 1000 1:2 3:1:a,1:2:2:2.0
 
@@ -901,7 +910,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.zadd zset6555 1 1000 1:3 a 2:4.0
                         $master crdt.zincrby zset6555 1 1000 1:5 a 2:7.0
                         $master crdt.zrem zset6555 1 1000 1:2 3:1:a,1:2:2:2.0
-                        $peer crdt.zadd zset6555 1 1000 1:8 a 2:3.0
+                        $peer crdt.zadd zset6555 1 1000 {1:8;2:1} a 2:3.0
                         $peer crdt.zincrby zset6555 1 1000 1:4 a 2:6.0
                         $peer crdt.zrem zset6555 1 1000 1:3 3:1:a,1:3:2:4.0
                     }
@@ -910,7 +919,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.zadd zset6556 1 1000 1:7 a 2:4.0
                         $master crdt.zincrby zset6556 1 1000 1:5 a 2:7.0
                         $master crdt.zrem zset6556 1 1000 1:4 3:1:a,1:3:2:2.0
-                        $peer crdt.zadd zset6556 1 1000 1:2 a 2:3.0
+                        $peer crdt.zadd zset6556 1 1000 {1:2;2:1} a 2:3.0
                         $peer crdt.zincrby zset6556 1 1000 1:7 a 2:6.0
                         $peer crdt.zrem zset6556 1 1000 1:5 3:1:a,1:4:2:4.0
                     }
@@ -919,21 +928,21 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master crdt.zadd zset6557 1 1000 1:7 a 2:4.0
                         $master crdt.zincrby zset6557 1 1000 1:5 a 2:7.0
                         $master crdt.zrem zset6557 1 1000 1:4 3:1:a,1:4:2:2.0
-                        $peer crdt.zadd zset6557 1 1000 1:8 a 2:3.0
+                        $peer crdt.zadd zset6557 1 1000 {1:8;2:1} a 2:3.0
                         $peer crdt.zincrby zset6557 1 1000 1:6 a 2:6.0
                         $peer crdt.zrem zset6557 1 1000 1:5 3:1:a,1:5:2:2.0
-                        puts [$master crdt.datainfo zset6557]
-                        puts [$peer crdt.datainfo zset6557]
                     }
                 }
             }
         }
-        $peer peerof $master_gid $master_host $master_port
+        
         $master peerof $peer_gid $peer_host $peer_port
-        wait_for_peer_sync $peer
         wait_for_peer_sync $master
+       
+        $peer peerof $master_gid $master_host $master_port
+         wait_for_peer_sync $peer
         # after 5000
-        # print_log_file  $peer_log
+        print_log_file  $peer_log
         test "after" {
             test "bad" {
                 test "bad + null" {
@@ -941,76 +950,78 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 }
                 test "bad + a" {
                     test "bad + a success" {
-                        $peer zscore zset6510 a
+                        puts [$master crdt.datainfo zset6510]
+                        $master zscore zset6510 a
                     } {10}
                     test "bad + a fail" {
-                        $peer zscore zset6511 a
+                        puts [$peer crdt.datainfo zset6511]
+                        $master zscore zset6511 a
                     } {4}
                 }
                 test "bad + b" {
                     test "bad + b success" {
-                        $peer zscore zset6520 a
+                        $master zscore zset6520 a
                     } {10}
                     test "bad + b fail" {
-                        $peer zscore zset6521 a
+                        $master zscore zset6521 a
                     } {4}
                 }
                 test "bad + ad" {
                     test "bad + ad success" {
-                        $peer zscore zset6530 a
+                        $master zscore zset6530 a
                     } {9}
                     test "bad + ad a fail" {
-                        $peer zscore zset6531 a
+                        $master zscore zset6531 a
                     } {6}
                     test "bad + ad d fail" {
-                        $peer zscore zset6532 a
+                        $master zscore zset6532 a
                     } {10}
                     test "bad + ad ad fail" {
-                        $peer zscore zset6533 a
+                        $master zscore zset6533 a
                     } {7}
                 }
                 test "bad + ba" {
                     test "bad + ba success" {
-                        $peer zscore zset6540 a
+                        $master zscore zset6540 a
                     } {9}
                     test "bad + ba b fail" {
-                        $peer zscore zset6541 a
+                        $master zscore zset6541 a
                     } {8}
                     test "bad + ba a fail" {
-                        $peer zscore zset6542 a
+                        $master zscore zset6542 a
                     } {7}
                     test "bad + ba ba fail" {
-                        $peer zscore zset6543 a
+                        $master zscore zset6543 a
                     } {6}
                 }
                 test "bad + bad" {
                     test "bad + bad success" {
-                        $peer zscore zset6550 a
+                        $master zscore zset6550 a
                     } {9}
                     test "bad + bad b fail" {
-                        $peer zscore zset6551 a
+                        $master zscore zset6551 a
                     } {8}
                     test "bad + bad  a fail" {
-                        $peer zscore zset6552 a
+                        $master zscore zset6552 a
                     } {7}
                     test "bad + bad  d fail" {
-                        $peer zscore zset6553 a
+                        $master zscore zset6553 a
                     } {7}
                     test "bad + bad  ba fail" {
-                        $peer zscore zset6554 a
+                        $master zscore zset6554 a
                     } {8}
                     test "bad + bad  bd fail" {
-                        $peer zscore zset6555 a
+                        $master zscore zset6555 a
                     } {6}
                     test "bad + bad  ad fail" {
-                        $peer zscore zset6556 a
+                        $master zscore zset6556 a
                     } {6}
                     test "bad + bad  bad fail" {
-                        puts [$peer crdt.datainfo zset6557]
-                        $peer zscore zset6557 a
+                        $master zscore zset6557 a
                     } {7}
                 }
             }
         }
+        
     }
 }

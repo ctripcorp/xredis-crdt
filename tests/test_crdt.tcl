@@ -14,6 +14,9 @@ source tests/support/aof.tcl
 source tests/test_script/utils.tcl
 
 set ::all_tests {
+    ctrip/integration/composite/peer-offset-check
+    ctrip/unit/restart_backstream 
+    ctrip/unit/hash
     ctrip/unit/string
     ctrip/unit/expire
     ctrip/unit/rc1 
@@ -25,7 +28,7 @@ set ::all_tests {
     ctrip/master-not-crdt/convert-zset-on-load
     ctrip/master-not-crdt/slave-update-peer-repl-offset
     ctrip/integration/master-slave/slave-update-peer-offset-when-master-slave-add-sync
-    ctrip/integration/composite/peer-offset-check
+    
     ctrip/integration/bug/free-replication-blocklog
     ctrip/integration/bug/peerof_other_peer_when_master-peer_full_sync
     ctrip/unit/crdt_set
@@ -135,14 +138,15 @@ set ::all_tests {
     
     ctrip/unit/zset
     ctrip/master-not-crdt/convert-data-on-load
+
+    ctrip/unit/peerof_backstream
+    
+    
 }   
 
 set ::temp_tests { 
-
-
     
-
-
+    
     #
     test_script/peer_master
     test_script/change_master_slave

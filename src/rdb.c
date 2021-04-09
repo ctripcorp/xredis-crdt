@@ -858,7 +858,6 @@ int rdbSaveInfoAuxFields(rio *rdb, int flags, rdbSaveInfo *rsi) {
     if (rdbSaveAuxFieldStrInt(rdb,"redis-bits",redis_bits) == -1) return -1;
     if (rdbSaveAuxFieldStrInt(rdb,"ctime",time(NULL)) == -1) return -1;
     if (rdbSaveAuxFieldStrInt(rdb,"used-mem",zmalloc_used_memory()) == -1) return -1;
-
     /* Handle saving options that generate aux fields. */
     if (rsi) {
         if (rdbSaveAuxFieldStrInt(rdb,"repl-stream-db",rsi->repl_stream_db)
@@ -1585,7 +1584,7 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
     } 
 
     CRDT_Master_Instance *currentMasterInstance = NULL;
-    if (isCrdtRdb && crdt_enabled ) {
+    if (isCrdtRdb && crdt_enabled && iAmMaster() != C_OK ) {
         if(crdtServer.crdtMasters == NULL) {
             crdtServer.crdtMasters = zmalloc((MAX_PEERS + 1) * sizeof(void*));
             int i = 0;
@@ -1599,7 +1598,9 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                 freePeerMaster(crdtMaster);
             }
         }
-
+        if(crdtServer.loading) {
+            crdtServer.loading = 0;
+        }
     }
     client* fakeClient = createFakeClient();
     fakeClient->argv = zmalloc(sizeof(robj*)*MAX_FAKECLIENT_ARGV);
@@ -1715,29 +1716,73 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                         "Can't load peer-master-gid from RDB file! "
                         "BODY: %d", gid);
                 }
+                currentMasterInstance = NULL;
                 CRDT_Master_Instance *masterInstance = getPeerMaster(gid);
-                if(masterInstance == NULL) {
+                /**
+                 *  master 
+                 *      rdb < config
+                 *   slave  
+                 *      config > rdb
+                 */
+                if (masterInstance == NULL) {
                     masterInstance = createPeerMaster(NULL, gid);
                     crdtServer.crdtMasters[gid] = masterInstance;
+                } else if(iAmMaster()) {
+                    decrRefCount(auxkey);
+                    decrRefCount(auxval);
+                    continue;
                 }
-                addPeerSet(gid);
                 currentMasterInstance = masterInstance;
                 crdtReplicationCreateMasterClient(currentMasterInstance, createClient(-1), -1);
             } else if(!strcasecmp(auxkey->ptr,"peer-master-dbid")) {
+                if(currentMasterInstance == NULL) {
+                    decrRefCount(auxkey);
+                    decrRefCount(auxval);
+                    continue;
+                }
                 selectDb(currentMasterInstance->master, atoi(auxval->ptr));
                 currentMasterInstance->dbid = atoi(auxval->ptr);
             } else if (!strcasecmp(auxkey->ptr,"peer-master-host")) {
+                if(currentMasterInstance == NULL) {
+                    decrRefCount(auxkey);
+                    decrRefCount(auxval);
+                    continue;
+                }
                 sdsfree(currentMasterInstance->masterhost);
                 currentMasterInstance->masterhost = sdsdup(auxval->ptr);
             } else if (!strcasecmp(auxkey->ptr,"peer-master-port")) {
+                if(currentMasterInstance == NULL) {
+                    decrRefCount(auxkey);
+                    decrRefCount(auxval);
+                    continue;
+                }
                 currentMasterInstance->masterport = atoi(auxval->ptr);
             } else if (!strcasecmp(auxkey->ptr,"peer-master-repl-id")) {
+                if(currentMasterInstance == NULL) {
+                    decrRefCount(auxkey);
+                    decrRefCount(auxval);
+                    continue;
+                }
                 if (sdslen(auxval->ptr) == CONFIG_RUN_ID_SIZE) {
                     memcpy(currentMasterInstance->master->replid, auxval->ptr,CONFIG_RUN_ID_SIZE+1);
                 }
             } else if (!strcasecmp(auxkey->ptr,"peer-master-repl-offset")) {
+                if(currentMasterInstance == NULL) {
+                    decrRefCount(auxkey);
+                    decrRefCount(auxval);
+                    continue;
+                }
                 currentMasterInstance->master->reploff = strtoll(auxval->ptr,NULL,10); 
-            }else {
+            } 
+            // else if (!strcasecmp(auxkey->ptr, "peer-master-ovc")) {
+            //     if(currentMasterInstance == NULL) {
+            //         decrRefCount(auxkey);
+            //         decrRefCount(auxval);
+            //         continue;
+            //     }
+            //     currentMasterInstance->vectorClock = sdsToVectorClock(auxval->ptr);
+            // } 
+            else {
                 /* We ignore fields we don't understand, as by AUX field
                  * contract. */
                 serverLog(LL_DEBUG,"Unrecognized RDB AUX field: '%s'",

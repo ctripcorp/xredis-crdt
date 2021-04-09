@@ -355,7 +355,22 @@ void loadServerConfigFromString(char *config) {
             server.masterhost = sdsnew(argv[1]);
             server.masterport = atoi(argv[2]);
             server.repl_state = REPL_STATE_CONNECT;
-        } else if (!strcasecmp(argv[0],"repl-ping-slave-period") && argc == 2) {
+        } else if(!strcasecmp(argv[0], "peerof") && argc == 4) {
+            int gid = atoi(argv[1]);
+            CRDT_Master_Instance* iter = getPeerMaster(gid);
+            if(iter != NULL && server.masterhost) {
+
+            } else {
+                if(iter == NULL) {
+                    iter = createPeerMaster(NULL, gid);
+                } 
+                // crdtReplicationSetMaster(gid, c->argv[2]->ptr, (int)port);
+                iter->masterhost = sdsnew(argv[2]);
+                iter->masterport = atoi(argv[3]);
+                crdtServer.crdtMasters[gid] = iter;
+                serverLog(LL_WARNING, "load config peerof info: gid: %d, host: %s, port: %d", gid, iter->masterhost, iter->masterport);
+            } 
+        }else if (!strcasecmp(argv[0],"repl-ping-slave-period") && argc == 2) {
             server.repl_ping_slave_period = atoi(argv[1]);
             if (server.repl_ping_slave_period <= 0) {
                 err = "repl-ping-slave-period must be 1 or greater";
@@ -1447,6 +1462,28 @@ void configGetCommand(client *c, struct redisServer *srv) {
         addReplyBulkCString(c,buf);
         matches++;
     }
+    if (stringmatch(pattern,"peerof",1)) {
+        char buf[256];
+        int peer_num = 0;
+        for(int i = 0; i < (1 << GIDSIZE); i++) {
+            CRDT_Master_Instance* peer = getPeerMaster(i);
+            if(peer == NULL) { continue; }
+            addReplyBulkCString(c,"peerof");
+            snprintf(buf,sizeof(buf),"%d %s %d",
+                i, peer->masterhost, peer->masterport);
+            addReplyBulkCString(c,buf);
+            peer_num++;
+        }
+        if (peer_num == 0) {
+            addReplyBulkCString(c,"peerof");
+            buf[0] = '\0';
+            addReplyBulkCString(c,buf);
+            peer_num++;
+        }
+        matches += peer_num;
+    }
+
+
     if (stringmatch(pattern,"notify-keyspace-events",1)) {
         robj *flagsobj = createObject(OBJ_STRING,
             keyspaceEventsFlagsToString(srv->notify_keyspace_events));
@@ -1786,6 +1823,7 @@ void rewriteConfigVectorUnit(struct rewriteConfigState *state) {
         rewriteConfigNumericalOption(state, "local-clock", vcu, CONFIG_DEFAULT_VECTORCLOCK_UNIT);
     }
 }
+
 void rewriteConfigNameSpaceOption(struct rewriteConfigState *state) {
     char *option = "crdt-gid";
     sds line;
@@ -1793,6 +1831,7 @@ void rewriteConfigNameSpaceOption(struct rewriteConfigState *state) {
         crdtServer.crdt_namespace, crdtServer.crdt_gid);
     rewriteConfigRewriteLine(state,option,line,1);
 }
+
 /* Rewrite the dir option, always using absolute paths.*/
 void rewriteConfigDirOption(struct rewriteConfigState *state) {
     char cwd[1024];
@@ -1820,6 +1859,20 @@ void rewriteConfigSlaveofOption(struct rewriteConfigState *state) {
         server.masterhost, server.masterport);
     rewriteConfigRewriteLine(state,option,line,1);
 }
+
+/* Rewrite the peerof option. */
+void rewriteConfigPeerofOption(struct rewriteConfigState *state) {
+    char *option = "peerof";
+    sds line;
+
+    for(int i = 0; i < (1 << GIDSIZE); i++) {
+        CRDT_Master_Instance* peer = getPeerMaster(i);
+        if(peer == NULL) { continue; }
+        line = sdscatprintf(sdsempty(),"%s %lld %s %d", option, peer->gid,
+            peer->masterhost, peer->masterport);
+        rewriteConfigRewriteLine(state,option,line,1);
+    }
+} 
 
 /* Rewrite the notify-keyspace-events option. */
 void rewriteConfigNotifykeyspaceeventsOption(struct rewriteConfigState *state) {
@@ -2048,6 +2101,7 @@ int rewriteConfig(char *path) {
     rewriteConfigStringOption(state,"dbfilename",server.rdb_filename,CONFIG_DEFAULT_RDB_FILENAME);
     rewriteConfigDirOption(state);
     rewriteConfigSlaveofOption(state);
+    rewriteConfigPeerofOption(state);
     rewriteConfigStringOption(state,"slave-announce-ip",server.slave_announce_ip,CONFIG_DEFAULT_SLAVE_ANNOUNCE_IP);
     rewriteConfigStringOption(state,"masterauth",server.masterauth,NULL);
     rewriteConfigStringOption(state,"cluster-announce-ip",server.cluster_announce_ip,NULL);

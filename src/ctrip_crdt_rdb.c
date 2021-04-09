@@ -90,6 +90,16 @@ CrdtObject** dataFilter(CrdtObject* data, int gid, long long logic_time, long lo
     }
     return method->filterAndSplit(data, gid, logic_time, maxsize, length);
 }
+
+CrdtObject** dataFilter2(CrdtObject* data, int gid, VectorClock min_vc, long long maxsize, int* length) {
+    CrdtObjectMethod* method = getCrdtObjectMethod(data);
+    if(method == NULL) {
+        serverLog(LL_WARNING, "[CRDT][crdtRdbSaveRio][dataFilter] NOT FIND CRDT OBJECT FILTER METHOD");
+        return NULL;
+    }
+    return method->filterAndSplit2(data, gid, min_vc, maxsize, length);
+}
+
 void freeDataFilter(CrdtObject** data, int length) {
     if(length == 0) return;
     CrdtObjectMethod* method = getCrdtObjectMethod(data[0]);
@@ -108,6 +118,16 @@ CrdtObject** tombstoneFilter(CrdtObject* tombstone, int gid, long long logic_tim
     }
     return method->filterAndSplit(tombstone, gid, logic_time, maxsize, length);
 }
+
+CrdtObject** tombstoneFilter2(CrdtObject* tombstone, int gid, VectorClock min_vc, long long maxsize, int* length) {
+    CrdtTombstoneMethod* method = getCrdtTombstoneMethod(tombstone);
+    if(method == NULL) {
+        serverLog(LL_WARNING, "[CRDT][crdtRdbSaveRio][tombstoneFilter] NOT FIND CRDT TOMBSTONE FILTER METHOD");
+        return NULL;
+    }
+    return method->filterAndSplit2(tombstone, gid, min_vc, maxsize, length);
+}
+
 void freeTombstoneFilter(CrdtObject** tombstone, int length) {
     CrdtTombstoneMethod* method = getCrdtTombstoneMethod(tombstone[0]);
     if(method == NULL) {
@@ -194,6 +214,75 @@ error:
     return C_ERR;
 }
 
+
+int crdtSendMergeRequest2(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di, const char* cmdname, crdtFilterSplitFunc2 filterFun, crdtFreeFilterResultFunc freeFilterFunc, redisDb *db) {
+    dictEntry *de;
+    rio payload;
+    robj *result = NULL;
+    int num = 0;
+    /* Iterate this DB tombstone writing every entry that is locally changed, but not gc'ed*/
+    while((de = dictNext(di)) != NULL) {
+        sds keystr = dictGetKey(de);
+        robj key, *o = dictGetVal(de);
+        if(o->type != OBJ_MODULE || isModuleCrdt(o) != C_OK) {
+            serverLog(LL_NOTICE, "[CRDT][%s] key: %s,NOT CRDT MODULE OBJECT, SKIP", cmdname, keystr);
+            continue;
+        }
+        initStaticStringObject(key,keystr);
+        serverAssertWithInfo(NULL, &key, sdsEncodedObject((&key)));
+        long long expire = -1;
+        if(db != NULL) {
+            expire = getExpire(db,&key);    
+        }
+        /* Check if the crdt module's vector clock on local gid is avaiable for crdt merge */
+        CrdtObject *object = retrieveCrdtObject(o);
+        int length = 0;
+        CrdtObject **filter = filterFun(object, crdtServer.crdt_gid, rsi->min_vc, server.proto_max_bulk_len, &length);
+        if(length == -1) {
+            serverLog(LL_WARNING, "[CRDT][FILTER] key:{%s} ,value is too big", keystr);
+            goto error;
+        }
+        if(filter == NULL) {
+            continue;
+        }
+        if(length >= 2) {
+            serverLog(LL_WARNING, "[CRDT][SENDMERGE] key:{%s} %d splitted", keystr, length);
+        }
+        robj result;
+        moduleValue *mv = o->ptr;
+        moduleValue v = {
+            .type = mv->type
+        };
+        initStaticModuleObject(result, &v);
+        for(int i = 0; i < length; i++) {
+            v.value = filter[i];
+            //CRDT.Merge_Del <gid> <key> <val>
+            if(!rioWriteBulkCount(rdb, '*', 5)) goto error;
+            if(!rioWriteBulkString(rdb,cmdname,strlen(cmdname))) goto error;
+            if(!rioWriteBulkLongLong(rdb, crdtServer.crdt_gid)) goto error;
+            if(!rioWriteBulkString(rdb, (&key)->ptr,sdslen((&key)->ptr))) goto error;
+            
+            /* Emit the payload argument, that is the serialized object using
+            * * the DUMP format. */
+            createDumpPayload(&payload, &result);
+            if(!rioWriteBulkString(rdb, payload.io.buffer.ptr,
+                                                    sdslen(payload.io.buffer.ptr))) {
+                sdsfree(payload.io.buffer.ptr);
+                goto error;
+            }
+            sdsfree(payload.io.buffer.ptr);
+            if(!rioWriteBulkLongLong(rdb, expire)) return C_ERR;
+        }
+        freeFilterFunc(filter, length);
+        
+        num++;
+    }
+    return num;
+error:
+    if(result != NULL) {decrRefCount(result);}
+    return C_ERR;
+}
+
 //CRDT.Merge <src-gid> <key> <vc> <timestamp/-1> <ttl> <value>
 int
 crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
@@ -232,8 +321,9 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
         if (needDelete == C_OK) {
             decrRefCount(selectcmd);
         }
-        if (dictSize(d) != 0) {
-            int num = crdtSendMergeRequest(rdb, rsi, di, "CRDT.Merge", dataFilter, freeDataFilter,db);
+        if (dictSize(d) != 0) {           
+            // int num = crdtSendMergeRequest(rdb, rsi, di, "CRDT.Merge", dataFilter, freeDataFilter,db);
+            int num = crdtSendMergeRequest2(rdb, rsi, di, "CRDT.Merge", dataFilter2, freeDataFilter,db);
             if(num == C_ERR) {
                 goto werr;
             }
@@ -246,7 +336,8 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
         di = dictGetSafeIterator(d);
         if (!di) return C_ERR;
         if (dictSize(d) != 0) {
-            int num = crdtSendMergeRequest(rdb, rsi, di, "CRDT.Merge_Del", tombstoneFilter, freeTombstoneFilter ,NULL);
+            // int num = crdtSendMergeRequest(rdb, rsi, di, "CRDT.Merge_Del", tombstoneFilter, freeTombstoneFilter ,NULL);
+            int num = crdtSendMergeRequest2(rdb, rsi, di, "CRDT.Merge_Del", tombstoneFilter2, freeTombstoneFilter ,NULL);
             if(num == C_ERR) {
                 goto werr;
             }
@@ -642,6 +733,15 @@ int rdbSaveAuxFieldCrdt(rio *rdb) {
             == -1)  return C_ERR;
         if (rdbSaveAuxFieldStrInt(rdb, "peer-master-repl-offset", replid_offset)
             == -1)  return C_ERR;
+        // if(!isNullVectorClock( masterInstance->vectorClock)) {
+        //     sds ovc = vectorClockToSds(masterInstance->vectorClock);
+        //     if (rdbSaveAuxFieldStrStr(rdb, "peer-master-ovc", ovc) == -1) {
+        //         sdsfree(ovc);
+        //         return C_ERR;
+        //     }
+        //     sdsfree(ovc);   
+        // }
+        
     }
     return C_OK;
 }

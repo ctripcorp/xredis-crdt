@@ -408,7 +408,7 @@ void expireGenericCommand(client *c, long long basetime, int unit) {
      *
      * Instead we take the other branch of the IF statement setting an expire
      * (possibly in the past) and wait for an explicit DEL from the master. */
-    if (when <= mstime() && !server.loading && !server.masterhost) {
+    if (when <= mstime() && !server.loading && !crdtServer.loading && !server.masterhost) {
         robj *aux;
 
         int deleted = server.lazyfree_lazy_expire ? dbAsyncDelete(c->db,key) :
