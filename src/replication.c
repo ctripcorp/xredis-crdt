@@ -2885,7 +2885,9 @@ void replicationCron(void) {
      * In case of diskless replication, we make sure to wait the specified
      * number of seconds (according to configuration) so that other slaves
      * have the time to arrive before we start streaming. */
-    if (server.rdb_child_pid == -1 && server.aof_child_pid == -1) {
+    if (server.rdb_child_pid == -1 && server.aof_child_pid == -1 
+        && (server.multi_process_sync || crdtServer.rdb_child_pid == -1)
+    ) {
         time_t idle, max_idle = 0;
         int slaves_waiting = 0;
         int mincapa = -1;

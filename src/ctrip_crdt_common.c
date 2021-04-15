@@ -90,6 +90,15 @@ CrdtObject *retrieveCrdtObject(robj *obj) {
     return (CrdtObject*)getObjValue(obj);
 }
 
+long long get_vcu(VectorClock vc, int gid) {
+    clk unit = getVectorClockUnit(vc, gid);
+    if(isNullVectorClockUnit(unit)) {
+        return 0;
+    }
+    long long vcu = get_logic_clock(unit);
+    return vcu;
+}
+
 
 moduleType* getModuleType(robj *obj) {
     moduleValue *mv = obj->ptr;

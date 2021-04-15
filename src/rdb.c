@@ -1112,7 +1112,8 @@ int rdbSaveBackground(char *filename, rdbSaveInfo *rsi) {
     pid_t childpid;
     long long start;
 
-    if (server.aof_child_pid != -1 || server.rdb_child_pid != -1) return C_ERR;
+    if (server.aof_child_pid != -1 || server.rdb_child_pid != -1
+        || (!server.multi_process_sync && (crdtServer.aof_child_pid != -1 || crdtServer.rdb_child_pid != -1)) ) return C_ERR;
 
     server.dirty_before_bgsave = server.dirty;
     server.lastbgsave_try = time(NULL);

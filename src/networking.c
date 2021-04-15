@@ -212,6 +212,7 @@ int prepareClientToWrite(client *c) {
  * -------------------------------------------------------------------------- */
 
 int _addReplyToBuffer(client *c, const char *s, size_t len) {
+    // serverLog(LL_WARNING, "send :%s", s);
     size_t available = sizeof(c->buf)-c->bufpos;
 
     if (c->flags & CLIENT_CLOSE_AFTER_REPLY) return C_OK;
@@ -1384,7 +1385,7 @@ void printCommand(client *c) {
     }
 end:
     buf[len++] = '\0';
-    serverLog(LL_WARNING, "%s", buf);
+    serverLog(LL_DEBUG, "%s", buf);
 }
 
 /* This function is called every time, in the client structure 'c', there is
@@ -1431,9 +1432,9 @@ void processInputBuffer(client *c) {
             if (c->flags & CLIENT_MASTER && iAmMaster() != C_OK) {
                 c->gid = -1;
             }
-            #if defined(DEBUG) 
+            if (server.verbosity == LL_DEBUG) {
                 printCommand(c);
-            #endif
+            }
             /* Only reset the client when the command was executed. */
             if (processCommand(c) == C_OK) {
                 if (c->flags & CLIENT_MASTER && iAmMaster() != C_OK) {
@@ -2096,6 +2097,26 @@ void flushSlavesOutputBuffers(void) {
     listNode *ln;
 
     listRewind(server.slaves,&li);
+    while((ln = listNext(&li))) {
+        client *slave = listNodeValue(ln);
+        int events;
+
+        /* Note that the following will not flush output buffers of slaves
+         * in STATE_ONLINE but having put_online_on_ack set to true: in this
+         * case the writable event is never installed, since the purpose
+         * of put_online_on_ack is to postpone the moment it is installed.
+         * This is what we want since slaves in this state should not receive
+         * writes before the first ACK. */
+        events = aeGetFileEvents(server.el,slave->fd);
+        if (events & AE_WRITABLE &&
+            slave->replstate == SLAVE_STATE_ONLINE &&
+            clientHasPendingReplies(slave))
+        {
+            writeToClient(slave->fd,slave,0);
+        }
+    }
+
+    listRewind(crdtServer.slaves,&li);
     while((ln = listNext(&li))) {
         client *slave = listNodeValue(ln);
         int events;

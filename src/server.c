@@ -289,7 +289,7 @@ struct redisCommand redisCommandTable[] = {
 //    {"readonly",readonlyCommand,1,"F",0,NULL,0,0,0,0,0},
 //    {"readwrite",readwriteCommand,1,"F",0,NULL,0,0,0,0,0},
 //    {"dump",dumpCommand,2,"r",0,NULL,1,1,1,0,0},
-//    {"object",objectCommand,-2,"r",0,NULL,2,2,2,0,0},
+   {"object",objectCommand,-2,"r",0,NULL,2,2,2,0,0},
    {"memory",memoryCommand,-2,"r",0,NULL,0,0,0,0,0},
     {"client",clientCommand,-2,"as",0,NULL,0,0,0,0,0},
 //    {"eval",evalCommand,-3,"s",0,evalGetKeys,0,0,0,0,0},
@@ -333,7 +333,8 @@ struct redisCommand redisCommandTable[] = {
     {"expireSize",expireSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
     {"crdt.authGid", crdtAuthGidCommand,2,"rF", 0, NULL,0,0,0,0,0},
     {"crdt.auth", crdtAuthCommand, 3, "rF", 0,NULL,0,0,0,0,0},
-    {"crdt.replication", crdtReplicationCommand, 4, "rF", 0, NULL, 0,0,0,0,0}
+    {"crdt.replication", crdtReplicationCommand, 4, "rF", 0, NULL, 0,0,0,0,0},
+    {"CRDT.EVICTIONTOMBSTONE", evictionTombstoneCommand, 4, "rF", 0, NULL, 0,0,0,0,0}
 };
 
 /*============================ CRDT functions ============================ */
@@ -780,7 +781,9 @@ int incrementallyRehash(int dbid) {
  * for dict.c to resize the hash tables accordingly to the fact we have o not
  * running childs. */
 void updateDictResizePolicy(void) {
-    if (server.rdb_child_pid == -1 && server.aof_child_pid == -1 && crdtServer.rdb_child_pid == -1)
+    if (server.rdb_child_pid == -1 && server.aof_child_pid == -1
+     && crdtServer.rdb_child_pid == -1
+     )
         dictEnableResize();
     else
         dictDisableResize();
@@ -935,7 +938,9 @@ void databasesCron(void) {
     /* Perform hash tables rehashing if needed, but only if there are no
      * other processes saving the DB on disk. Otherwise rehashing is bad
      * as will cause a lot of copy-on-write of memory pages. */
-    if (server.rdb_child_pid == -1 && server.aof_child_pid == -1) {
+    if (server.rdb_child_pid == -1 && server.aof_child_pid == -1 
+    &&    crdtServer.rdb_child_pid == -1 
+        ) {
         /* We use global counters so if we stop the computation at a given
          * DB we'll be able to start from the successive in the next
          * cron loop iteration. */
@@ -1086,6 +1091,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     /* Start a scheduled AOF rewrite if this was requested by the user while
      * a BGSAVE was in progress. */
     if (server.rdb_child_pid == -1 && server.aof_child_pid == -1 &&
+       (server.multi_process_sync || crdtServer.rdb_child_pid == -1) &&
         server.aof_rewrite_scheduled)
     {
         rewriteAppendOnlyFileBackground();
@@ -1168,6 +1174,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
          if (server.aof_state == AOF_ON &&
              server.rdb_child_pid == -1 &&
              server.aof_child_pid == -1 &&
+             crdtServer.rdb_child_pid == -1 &&
              server.aof_rewrite_perc &&
              server.aof_current_size > server.aof_rewrite_min_size)
          {
@@ -1268,6 +1275,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
      * make sure when refactoring this file to keep this order. This is useful
      * because we want to give priority to RDB savings for replication. */
     if (server.rdb_child_pid == -1 && server.aof_child_pid == -1 &&
+        (server.multi_process_sync || crdtServer.rdb_child_pid == -1) &&
         server.rdb_bgsave_scheduled &&
         (server.unixtime-server.lastbgsave_try > CONFIG_BGSAVE_RETRY_DELAY ||
          server.lastbgsave_status == C_OK))
@@ -1434,6 +1442,7 @@ void createSharedObjects(void) {
     shared.hset = createStringObject("HSET", 4);
     shared.sadd = createStringObject("SADD", 4);
     shared.zadd = createStringObject("ZADD", 4);
+    shared.crdtevictiontombstone = createStringObject("CRDT.EVICTIONTOMBSTONE",22);
     shared.crdtexec = createStringObject("CRDT.EXEC", 9);
     shared.pexpireat = createStringObject("PEXPIREAt", 9);
     for (j = 0; j < OBJ_SHARED_INTEGERS; j++) {
@@ -1921,6 +1930,7 @@ void resetServerStats(struct redisServer *srv) {
     srv->stat_numconnections = 0;
     srv->stat_expiredkeys = 0;
     srv->stat_evictedkeys = 0;
+    srv->stat_evictedtombstones = 0;
     srv->stat_keyspace_misses = 0;
     srv->stat_keyspace_hits = 0;
     srv->stat_active_defrag_hits = 0;
@@ -2731,6 +2741,11 @@ int prepareForShutdown(int flags) {
         rdbRemoveTempFile(server.rdb_child_pid);
     }
 
+    if (crdtServer.rdb_child_pid != -1) {
+        serverLog(LL_WARNING,"[crdt]There is a child saving an .rdb. Killing it!");
+        kill(crdtServer.rdb_child_pid,SIGUSR1);
+    }
+
     if (server.aof_state != AOF_OFF) {
         /* Kill the AOF saving child as the AOF we already have may be longer
          * but contains the full dataset anyway. */
@@ -3187,7 +3202,7 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
     /* Persistence */
     if (allsections || defsections || !strcasecmp(section,"persistence")) {
         if (sections++) info = sdscat(info,"\r\n");
-        if (srv == &server) {
+        // if (srv == &server) {
             info = sdscatprintf(info,
                 "# Persistence\r\n"
                 "loading:%d\r\n"
@@ -3272,7 +3287,7 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                     (intmax_t)eta
                 );
             }
-        }
+        // }
     }
 
     /* Stats */
@@ -3471,7 +3486,8 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                             "sync_partial_err:%lld\r\n"
                             "latest_fork_usec:%lld\r\n"
                             "crdt_conflict:type=%lld,set=%lld,del=%lld,set_del=%lld\r\n"
-                            "crdt_conflict_op:modify=%lld,merge=%lld\r\n",
+                            "crdt_conflict_op:modify=%lld,merge=%lld\r\n"
+                            "evictedtombstones:%lld\r\n",
                             crdtServer.stat_sync_full,
                             crdtServer.stat_sync_backstream,
                             crdtServer.stat_sync_partial_ok,
@@ -3482,7 +3498,8 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                             crdtServer.crdt_del_conflict,
                             crdtServer.crdt_set_del_conflict,
                             crdtServer.crdt_modify_conflict,
-                            crdtServer.crdt_merge_conflict);
+                            crdtServer.crdt_merge_conflict,
+                            crdtServer.stat_evictedtombstones);
     }
 
     /* CRDT Replication */

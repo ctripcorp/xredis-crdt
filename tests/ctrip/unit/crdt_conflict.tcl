@@ -34,7 +34,7 @@ proc wait { client index type log }  {
     }
 }
 
-start_server {tags {"crdt-del"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
+start_server {tags {"crdt-del"}  overrides {crdt-gid 1 loglevel {debug}} config {crdt.conf} module {crdt.so}  } {
 
     set peers {}
     set hosts {}

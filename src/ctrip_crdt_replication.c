@@ -1954,7 +1954,9 @@ void crdtReplicationCron(void) {
      * In case of diskless replication, we make sure to wait the specified
      * number of seconds (according to configuration) so that other slaves
      * have the time to arrive before we start streaming. */
-    if (crdtServer.rdb_child_pid == -1 && crdtServer.aof_child_pid == -1) {
+    if (crdtServer.rdb_child_pid == -1 && crdtServer.aof_child_pid == -1
+        && (server.multi_process_sync || (server.rdb_child_pid == -1 && server.aof_child_pid == -1))
+        ) {
         time_t idle, max_idle = 0;
         int slaves_waiting = 0;
         listNode *ln = NULL;
@@ -2206,7 +2208,7 @@ int peerBackStream() {
         clk process_clk = getVectorClockUnit(crdtServer.vectorClock, crdtServer.crdt_gid);
         long long process_vcu = get_logic_clock(process_clk);
         serverLog(LL_WARNING, "[backstream] max vcu %lld , process_vcu %lld ", max_vcu, process_vcu);
-        if(max_vcu < process_vcu) {
+        if(max_vcu <= process_vcu) {
             cleanSlavePeerBackStream();
             //jumpVectorClock();
             return 0;
