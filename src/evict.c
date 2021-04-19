@@ -390,8 +390,6 @@ long long tombstoneGetIdle(VectorClock vc, VectorClock processVc) {
         long long vcu = get_logic_clock(*c);
         int gid = get_gid(*c);
         long long tvcu = get_vcu_from_vc(vc, gid, NULL);
-        // serverLog(LL_WARNING,"vcu: %lld  %lld", get_vcu_from_vc(vc, gid, NULL),
-        //     get_vcu_from_vc(crdtServer.vectorClock, gid, NULL) );
         long long weights = gid == server.crdt_gid? len: 1;
         idle += 1073741824  * weights  / ( vcu - tvcu > 0 ? vcu - tvcu + 1: 1) ;
     }
@@ -550,7 +548,6 @@ int freeMemoryIfNeeded(void) {
     if (server.maxmemory_policy == MAXMEMORY_NO_EVICTION)
         goto cant_free; /* We need to free memory, but policy forbids. */
     unsigned long total_tombstones = -1;
-    // serverLog(LL_WARNING, "mem_used:%lld, maxmemory:%lld, mem_freed %lld, mem_tofree: %lld, list: %d", mem_used , server.maxmemory, mem_freed, mem_tofree, slaves);
     while(mem_freed < mem_tofree && total_tombstones != 0) {
         //enforceGc
         int j, k, i, tombstones_freed = 0;
@@ -603,7 +600,6 @@ int freeMemoryIfNeeded(void) {
                 evictionTombstone(bestdbid, keyobj);
                 //only free tombstone
                 delta = (long long) zmalloc_used_memory();
-                // serverLog(LL_WARNING, "only free tombstone %s", bestkey);
                 assert(dictDelete(db->deleted_keys, bestkey) == DICT_OK);
                 delta -= (long long) zmalloc_used_memory();
                 mem_freed += delta;
@@ -623,7 +619,6 @@ int freeMemoryIfNeeded(void) {
         }
         
     }
-    // serverLog(LL_WARNING, "mem_freed: %lld, mem_tofree: %lld", mem_freed, mem_tofree);
     if(total_tombstones == 0 && mem_freed < mem_tofree) {
         latencyStartMonitor(latency);
         while (mem_freed < mem_tofree) {
@@ -712,7 +707,6 @@ int freeMemoryIfNeeded(void) {
             /* Finally remove the selected key. */
             if (bestkey) {
                 db = server.db+bestdbid;
-                // serverLog(LL_WARNING, "free key:%s", bestkey);
                 robj *keyobj = createStringObject(bestkey,sdslen(bestkey));
                 if(crdtPropagateExpire(db,keyobj,server.lazyfree_lazy_eviction, -1) == C_OK) {
                     /* We compute the amount of memory freed by db*Delete() alone.

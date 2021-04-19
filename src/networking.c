@@ -212,7 +212,6 @@ int prepareClientToWrite(client *c) {
  * -------------------------------------------------------------------------- */
 
 int _addReplyToBuffer(client *c, const char *s, size_t len) {
-    // serverLog(LL_WARNING, "send :%s", s);
     size_t available = sizeof(c->buf)-c->bufpos;
 
     if (c->flags & CLIENT_CLOSE_AFTER_REPLY) return C_OK;
