@@ -1,0 +1,14 @@
+stages:
+  - Deploy
+
+pages:
+  stage: Deploy
+  image: hub.cloud.ctripcorp.com/devops/centos7.2:0.0.1
+  script:
+    - cp -r doc public
+  only:
+    refs:
+      - feature/gitbook
+  artifacts:
+    paths:
+      - public
