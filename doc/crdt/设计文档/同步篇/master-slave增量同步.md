@@ -1,0 +1,2 @@
+Master-Slave的增量同步
+Master crdt命令同步时 如果gid和本身gid相等  同步给slave的2个缓存区, 如果不等的话只同步给redis原来的缓存
