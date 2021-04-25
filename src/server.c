@@ -3928,7 +3928,12 @@ void loadDataFromDisk(void) {
             serverLog(LL_NOTICE,"DB loaded from append only file: %.3f seconds",(float)(ustime()-start)/1000000);
     } else {
         rdbSaveInfo rsi = RDB_SAVE_INFO_INIT;
-        if (rdbLoad(server.rdb_filename,&rsi) == C_OK) {
+        /**
+         *  If the RDB that is not crdt is loaded （return RDB_VERSION_ERR）,
+         *  we just don't load RDB but redis still needs to be started
+         */
+        int retval = rdbLoad(server.rdb_filename,&rsi);
+        if ( retval == C_OK || retval == RDB_VERSION_ERR) {
             serverLog(LL_NOTICE,"DB loaded from disk: %.3f seconds",
                 (float)(ustime()-start)/1000000);
             

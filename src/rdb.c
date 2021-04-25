@@ -1581,9 +1581,9 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
     if(!isCrdtRdb && crdt_enabled && initedCrdtServer()) {
         serverLog(LL_WARNING,"Can't Load Redis RDB");
         errno = EINVAL;
-        return C_ERR;
+        return RDB_VERSION_ERR;
     } 
-
+    if(rsi != NULL) rsi->isCrdtRdb = isCrdtRdb;
     CRDT_Master_Instance *currentMasterInstance = NULL;
     if (isCrdtRdb && crdt_enabled && iAmMaster() != C_OK ) {
         if(crdtServer.crdtMasters == NULL) {

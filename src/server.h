@@ -78,6 +78,7 @@ typedef long long mstime_t; /* millisecond time type. */
 /* Error codes */
 #define C_OK                    0
 #define C_ERR                   -1
+#define RDB_VERSION_ERR         1
 
 /* Static server configuration */
 #define CONFIG_DEFAULT_HZ        10      /* Time interrupt calls/sec. */
@@ -890,6 +891,7 @@ typedef struct rdbSaveInfo {
     int repl_id_is_set;  /* True if repl_id field is set. */
     char repl_id[CONFIG_RUN_ID_SIZE+1];     /* Replication ID. */
     long long repl_offset;                  /* Replication offset. */
+    int isCrdtRdb;
 } rdbSaveInfo;
 
 #define RDB_SAVE_INFO_INIT {-1,0,"000000000000000000000000000000",-1}

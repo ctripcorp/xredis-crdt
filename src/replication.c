@@ -1386,7 +1386,12 @@ void readSyncBulkPayload(aeEventLoop *el, int fd, void *privdata, int mask) {
         aeDeleteFileEvent(server.el,server.repl_transfer_s,AE_READABLE);
         serverLog(LL_NOTICE, "MASTER <-> SLAVE sync: Loading DB in memory");
         rdbSaveInfo rsi = RDB_SAVE_INFO_INIT;
-        if (rdbLoad(server.rdb_filename,&rsi) != C_OK) {
+        int rel = rdbLoad(server.rdb_filename,&rsi);
+        if(!rsi.isCrdtRdb) {
+            /* load delete non-crdt rdb */
+            remove(server.rdb_filename);
+        }
+        if (rel != C_OK) {
             serverLog(LL_WARNING,"Failed trying to load the MASTER synchronization DB from disk");
             cancelReplicationHandshake();
             /* Re-enable the AOF if we disabled it earlier, in order to restore
@@ -1394,6 +1399,7 @@ void readSyncBulkPayload(aeEventLoop *el, int fd, void *privdata, int mask) {
             if (aof_is_enabled) restartAOF();
             return;
         }
+        
         /* Final setup of the connected slave <- master link */
         zfree(server.repl_transfer_tmpfile);
         close(server.repl_transfer_fd);

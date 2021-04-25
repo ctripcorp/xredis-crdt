@@ -16,6 +16,7 @@ Upgrade urgency LOW: Compared with the previous version, there are some improvem
 Major things: 
 * [feature] when the memory exceeds maxmemory, tombstone is removed first  
 * [feature] Master-slave and master-peer limit simultaneous execution of full synchronization
+* [fix] when restarting crdt-redis server, if the rdb of ordinary redis is loaded, the loading is skipped
 ================================================================================
 ================================================================================
 XRedis-CRDT 1.0.11 Released Thu Feb  4 14:31:37 CST 2021
