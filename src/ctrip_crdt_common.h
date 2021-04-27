@@ -69,6 +69,7 @@ typedef struct CrdtDataMethod {
 } CrdtDataMethod;
 #define PURGE_VAL 1
 #define PURGE_TOMBSTONE -1
+typedef VectorClock (*crdtGetVcFunc)(void* value);
 typedef struct CrdtTombstoneMethod {
     crdtMergeFunc merge;
     crdtFilterSplitFunc filterAndSplit;
@@ -76,6 +77,8 @@ typedef struct CrdtTombstoneMethod {
     crdtFreeFilterResultFunc freefilter;
     crdtGCFunc gc;
     crdtPurgeFunc purge;
+    crdtInfoFunc info;
+    crdtGetVcFunc getVc;
 } CrdtTombstoneMethod;
 
 CrdtDataMethod* getCrdtDataMethod(CrdtObject* expire);
@@ -84,4 +87,6 @@ CrdtTombstoneMethod* getCrdtTombstoneMethod(CrdtObject* tombstone);
 int getDataType(CrdtObject* data);
 int isData(CrdtObject* data);
 int isTombstone(CrdtObject* data);
+// long long tombstoneGetIdle(VectorClock vc, VectorClock currentVc);
+
 #endif //REDIS_CTRIP_CRDT_COMMON_H

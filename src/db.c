@@ -60,6 +60,7 @@ robj *lookupKey(redisDb *db, robj *key, int flags) {
          * a copy on write madness. */
         if (server.rdb_child_pid == -1 &&
             server.aof_child_pid == -1 &&
+            crdtServer.rdb_child_pid == -1 &&
             !(flags & LOOKUP_NOTOUCH))
         {
             if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
@@ -421,6 +422,10 @@ void flushallCommand(client *c) {
     if (server.rdb_child_pid != -1) {
         kill(server.rdb_child_pid,SIGUSR1);
         rdbRemoveTempFile(server.rdb_child_pid);
+    }
+    if (crdtServer.rdb_child_pid != -1) {
+        kill(crdtServer.rdb_child_pid, SIGUSR1);
+        // rdbRemoveTempFile(crdtServer.rdb_child_pid);
     }
     if (server.saveparamslen > 0) {
         /* Normally rdbSave() will reset dirty, but we don't want this here
@@ -1133,6 +1138,7 @@ int crdtPropagateExpire(redisDb *db, robj *key, int lazy, long long expireTime) 
                 if(mk != NULL) {
                     CrdtDataMethod* method = getCrdtDataMethod(obj);
                     if(method == NULL) {
+                        serverLog(LL_WARNING, "[crdtPropagateExpire]key %s can't find method", key->ptr);
                         return C_ERR;
                     }
                     method->propagateDel(db->id, key, mk, obj);
@@ -1140,13 +1146,14 @@ int crdtPropagateExpire(redisDb *db, robj *key, int lazy, long long expireTime) 
                 }
                 crdtServer.stat_expiredkeys++;
                 return C_OK;
-            }else{
+            } else {
                 propagateExpire(db, key, lazy);
                 server.stat_expiredkeys++;
                 return C_OK;
             }
         }
     }
+    serverLog(LL_WARNING, "[crdtPropagateExpire]key %s can't find value", key->ptr);
     return C_ERR;
 }
 

@@ -38,23 +38,27 @@ proc wait { client index type log}  {
     }
 }
 set server_path [tmpdir "load-redis-rdb"]
-exec cp tests/assets/redis/dump.rdb $server_path
+exec cp tests/assets/non-crdt.rdb $server_path/dump.rdb
 cp_crdt_so $server_path
-start_server [list overrides [list crdt-gid 1 loadmodule ./crdt.so  "dir"  $server_path ]]  {
+start_server [list overrides [list crdt-gid 1 loadmodule ./crdt.so  "dir"  $server_path]]  {
     set master [srv 0 client]
     set master_host [srv 0 host]
     set master_port [srv 0 port]
     set master_stdout [srv 0 stdout]
-    $master config set repl-diskless-sync-delay 1
-    test "check value1" {
-        $master select 0
-        assert_equal [$master ping] PONG
-        assert_equal [$master get key] value
-        assert_equal [$master hget hash k1] v1
-        assert_equal [$master hget hash k2] v2 
-        if {[clock seconds] < 4102416000} {
-            assert { [$master ttl ex] > -1 }
-        }
-    }
+    $master select 0
+    assert_equal [$master dbsize]  1
+    catch { $master shutdown } error
 }
+set server_path1 [tmpdir "load-redis-rdb1"]
+exec cp tests/assets/non-crdt.rdb $server_path1/dump.rdb
+cp_crdt_so $server_path1
+start_server [list overrides [list crdt-gid 1 loadmodule ./crdt.so  "dir"  $server_path1 local-clock 100]]  {
+    set master [srv 0 client]
+    set master_host [srv 0 host]
+    set master_port [srv 0 port]
+    set master_stdout [srv 0 stdout]
+    $master select 0
+    assert_equal [$master dbsize] 0
+}
+
 

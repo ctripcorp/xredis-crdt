@@ -129,10 +129,12 @@ start_server {tags {"load rdb master"} overrides {crdt-gid 1} config {crdt.conf}
         puts [dict get [srv 0 config] dir]
         # $peer crdt.set key v1 1 1000 1:1 
         $peer peerof $master_gid $master_host $master_port
-        $master peerof $peer_gid $peer_host $peer_port 
         wait_for_peer_sync $peer 
+        $master peerof $peer_gid $peer_host $peer_port 
         wait_for_peer_sync $master 
         $master set key v1
+        puts [$master info replication]
+        puts [$master crdt.info replication]
         $master bgsave 
         waitForBgsave $master 
         # puts [read_file $master_stdout]
@@ -410,6 +412,7 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt_no_save.conf} 
         $peer peerof $master_gid $master_host $master_port
         $peer crdt.set key v1 1 1000 1:1
         $master peerof 2 127.0.0.1 0 
+        puts "abc"
         $master bgsave 
         waitForBgrewriteaof $master
         $master peerof $peer_gid $peer_host $peer_port

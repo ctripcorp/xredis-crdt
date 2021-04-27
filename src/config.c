@@ -448,6 +448,10 @@ void loadServerConfigFromString(char *config) {
             if ((server.repl_slave_lazy_flush = yesnotoi(argv[1])) == -1) {
                 err = "argument must be 'yes' or 'no'"; goto loaderr;
             }
+        } else if (!strcasecmp(argv[0], "multi-process-sync") && argc == 2) {
+            if ((server.multi_process_sync = yesnotoi(argv[1])) == -1) {
+                err = "argument must be 'yes' or 'no'"; goto loaderr;
+            }
         } else if (!strcasecmp(argv[0],"activedefrag") && argc == 2) {
             if ((server.active_defrag_enabled = yesnotoi(argv[1])) == -1) {
                 err = "argument must be 'yes' or 'no'"; goto loaderr;
@@ -1091,6 +1095,8 @@ void configSetCommand(client *c, struct redisServer *srv) {
 
     /* Numerical fields.
      * config_set_numerical_field(name,var,min,max) */
+    } config_set_bool_field(
+        "multi-process-sync", srv->multi_process_sync) {
     } config_set_numerical_field(
       "tcp-keepalive",srv->tcpkeepalive,0,LLONG_MAX) {
     } config_set_numerical_field(
@@ -1379,6 +1385,8 @@ void configGetCommand(client *c, struct redisServer *srv) {
             srv->lazyfree_lazy_server_del);
     config_get_bool_field("slave-lazy-flush",
             srv->repl_slave_lazy_flush);
+    config_get_bool_field("multi-process-sync",
+            srv->multi_process_sync);
 
     /* Enum values */
     config_get_enum_field("maxmemory-policy",
@@ -2169,7 +2177,7 @@ int rewriteConfig(char *path) {
     rewriteConfigYesNoOption(state,"lazyfree-lazy-expire",server.lazyfree_lazy_expire,CONFIG_DEFAULT_LAZYFREE_LAZY_EXPIRE);
     rewriteConfigYesNoOption(state,"lazyfree-lazy-server-del",server.lazyfree_lazy_server_del,CONFIG_DEFAULT_LAZYFREE_LAZY_SERVER_DEL);
     rewriteConfigYesNoOption(state,"slave-lazy-flush",server.repl_slave_lazy_flush,CONFIG_DEFAULT_SLAVE_LAZY_FLUSH);
-
+    rewriteConfigYesNoOption(state, "multi-process-sync",server.multi_process_sync,CONFIG_DEFAULT_MULTI_PROCESS_SYNC);
     // rewriteConfigNumericalOption(state,"crdt-gid", crdtServer.crdt_gid, CONFIG_DEFAULT_GID);
     rewriteConfigNameSpaceOption(state);
     rewriteConfigVectorUnit(state);

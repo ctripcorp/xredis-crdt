@@ -107,6 +107,10 @@ proc load_redis_rdb {add check server_path dbfile} {
                     run [replace_client $check {$crdt_slave}]  1
                     # puts [log_file_matches $slave_stdout] 
                     check_peer_info $slave $crdt_slave 0
+                    set slave_dir [lindex [$slave config get dir] 1]
+                    # puts $server_path
+                    # puts [ exec sh -c {ls $server_path} ]
+                    assert_equal [file exists $slave_dir/dump.rdb] 0
                 } 
             }
         }
