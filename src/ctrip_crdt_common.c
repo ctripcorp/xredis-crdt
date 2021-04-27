@@ -90,7 +90,6 @@ CrdtObject *retrieveCrdtObject(robj *obj) {
     return (CrdtObject*)getObjValue(obj);
 }
 
-
 moduleType* getModuleType(robj *obj) {
     moduleValue *mv = obj->ptr;
     moduleType *mt = mv->type;

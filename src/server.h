@@ -78,6 +78,7 @@ typedef long long mstime_t; /* millisecond time type. */
 /* Error codes */
 #define C_OK                    0
 #define C_ERR                   -1
+#define RDB_VERSION_ERR         1
 
 /* Static server configuration */
 #define CONFIG_DEFAULT_HZ        10      /* Time interrupt calls/sec. */
@@ -153,6 +154,7 @@ typedef long long mstime_t; /* millisecond time type. */
 #define CONFIG_MIN_RESERVED_FDS 32
 #define CONFIG_DEFAULT_LATENCY_MONITOR_THRESHOLD 0
 #define CONFIG_DEFAULT_SLAVE_LAZY_FLUSH 0
+#define CONFIG_DEFAULT_MULTI_PROCESS_SYNC 0
 #define CONFIG_DEFAULT_LAZYFREE_LAZY_EVICTION 0
 #define CONFIG_DEFAULT_LAZYFREE_LAZY_EXPIRE 0
 #define CONFIG_DEFAULT_LAZYFREE_LAZY_SERVER_DEL 0
@@ -785,7 +787,7 @@ struct sharedObjectsStruct {
     *busykeyerr, *oomerr, *plus, *messagebulk, *pmessagebulk, *subscribebulk, *crdtsubscribebulk,
     *unsubscribebulk, *uncrdtsubscribebulk, *psubscribebulk, *crdtpsubscribebulk, *punsubscribebulk, *crdtpunsubscribebulk, *del, *unlink, *crdtdel,
     *rpop, *lpop, *lpush,*set,*hset,*pexpireat, *emptyscan, *crdtexec, *sadd, *zadd,
-    *crdtmergeerr,
+    *crdtmergeerr, *crdtevictiontombstone,
     *select[PROTO_SHARED_SELECT_CMDS],
     *integers[OBJ_SHARED_INTEGERS],
     *mbulkhdr[OBJ_SHARED_BULKHDR_LEN], /* "*<value>\r\n" */
@@ -889,6 +891,7 @@ typedef struct rdbSaveInfo {
     int repl_id_is_set;  /* True if repl_id field is set. */
     char repl_id[CONFIG_RUN_ID_SIZE+1];     /* Replication ID. */
     long long repl_offset;                  /* Replication offset. */
+    int isCrdtRdb;
 } rdbSaveInfo;
 
 #define RDB_SAVE_INFO_INIT {-1,0,"000000000000000000000000000000",-1}
@@ -1003,6 +1006,7 @@ struct redisServer {
     long long stat_numconnections;  /* Number of connections received */
     long long stat_expiredkeys;     /* Number of expired keys */
     long long stat_evictedkeys;     /* Number of evicted keys (maxmemory) */
+    long long stat_evictedtombstones; /* Number of evicted tombstones (maxmemory) */
     long long stat_keyspace_hits;   /* Number of successful lookups of keys */
     long long stat_keyspace_misses; /* Number of failed lookups of keys */
     long long stat_active_defrag_hits;      /* number of allocations moved */
@@ -1286,6 +1290,7 @@ struct redisServer {
     long long local_clock;
     int peer_set;
     long long start_time;
+    size_t multi_process_sync;
 }redisServer;
 
 typedef struct pubsubPattern {
@@ -1640,7 +1645,7 @@ void replicationFeedAllSlaves(int dictid, robj **argv, int argc);
 void replicationFeedStringToAllSlaves(int dictid, void* cmdbuf, size_t cmdlen);
 void replicationFeedRobjToAllSlaves(int dictid, robj* cmd);
 void crdtCancelReplicationHandshake(int gid);
-
+void evictionTombstoneCommand(client *c);
 /* CRDT Command */
 void crdtDelCommand(client *c);
 struct CrdtObject *retrieveCrdtObject(robj *obj);

@@ -10,6 +10,15 @@ HIGH:     There is a critical bug that may affect a subset of users. Upgrade!
 CRITICAL: There is a critical bug affecting MOST USERS. Upgrade ASAP.
 --------------------------------------------------------------------------------
 ================================================================================
+XRedis-CRDT 1.0.12 Released Mon Apr 19 11:46:48 CST 2021
+================================================================================
+Upgrade urgency LOW: Compared with the previous version, there are some improvements, mainly:
+Major things: 
+* [feature] when the memory exceeds maxmemory, tombstone is removed first  
+* [feature] Master-slave and master-peer limit simultaneous execution of full synchronization
+* [fix] when restarting crdt-redis server, if the rdb of ordinary redis is loaded, the loading is skipped
+================================================================================
+================================================================================
 XRedis-CRDT 1.0.11 Released Thu Feb  4 14:31:37 CST 2021
 ================================================================================
 Upgrade urgency LOW: Compared with the previous version, there are some improvements, mainly:

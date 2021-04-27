@@ -1575,7 +1575,7 @@ int RM_ReplicationFeedAllSlaves(int id, const char *cmdname, const char* fmt, ..
     
     for (j = 0; j < argc; j++) decrRefCount(argv[j]);
     zfree(argv);
-    server.dirty++;
+    // server.dirty++;
     return REDISMODULE_OK;
 
 }

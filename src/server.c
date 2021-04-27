@@ -289,7 +289,7 @@ struct redisCommand redisCommandTable[] = {
 //    {"readonly",readonlyCommand,1,"F",0,NULL,0,0,0,0,0},
 //    {"readwrite",readwriteCommand,1,"F",0,NULL,0,0,0,0,0},
 //    {"dump",dumpCommand,2,"r",0,NULL,1,1,1,0,0},
-//    {"object",objectCommand,-2,"r",0,NULL,2,2,2,0,0},
+   {"object",objectCommand,-2,"r",0,NULL,2,2,2,0,0},
    {"memory",memoryCommand,-2,"r",0,NULL,0,0,0,0,0},
     {"client",clientCommand,-2,"as",0,NULL,0,0,0,0,0},
 //    {"eval",evalCommand,-3,"s",0,evalGetKeys,0,0,0,0,0},
@@ -333,7 +333,8 @@ struct redisCommand redisCommandTable[] = {
     {"expireSize",expireSizeCommand,1,"rF",0,NULL,0,0,0,0,0},
     {"crdt.authGid", crdtAuthGidCommand,2,"rF", 0, NULL,0,0,0,0,0},
     {"crdt.auth", crdtAuthCommand, 3, "rF", 0,NULL,0,0,0,0,0},
-    {"crdt.replication", crdtReplicationCommand, 4, "rF", 0, NULL, 0,0,0,0,0}
+    {"crdt.replication", crdtReplicationCommand, 4, "rF", 0, NULL, 0,0,0,0,0},
+    {"crdt.evictiontombstone", evictionTombstoneCommand, 4, "rF", 0, NULL, 0,0,0,0,0}
 };
 
 /*============================ CRDT functions ============================ */
@@ -780,7 +781,9 @@ int incrementallyRehash(int dbid) {
  * for dict.c to resize the hash tables accordingly to the fact we have o not
  * running childs. */
 void updateDictResizePolicy(void) {
-    if (server.rdb_child_pid == -1 && server.aof_child_pid == -1 && crdtServer.rdb_child_pid == -1)
+    if (server.rdb_child_pid == -1 && server.aof_child_pid == -1
+     && crdtServer.rdb_child_pid == -1
+     )
         dictEnableResize();
     else
         dictDisableResize();
@@ -935,7 +938,9 @@ void databasesCron(void) {
     /* Perform hash tables rehashing if needed, but only if there are no
      * other processes saving the DB on disk. Otherwise rehashing is bad
      * as will cause a lot of copy-on-write of memory pages. */
-    if (server.rdb_child_pid == -1 && server.aof_child_pid == -1) {
+    if (server.rdb_child_pid == -1 && server.aof_child_pid == -1 
+    &&    crdtServer.rdb_child_pid == -1 
+        ) {
         /* We use global counters so if we stop the computation at a given
          * DB we'll be able to start from the successive in the next
          * cron loop iteration. */
@@ -1086,6 +1091,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     /* Start a scheduled AOF rewrite if this was requested by the user while
      * a BGSAVE was in progress. */
     if (server.rdb_child_pid == -1 && server.aof_child_pid == -1 &&
+       (server.multi_process_sync || crdtServer.rdb_child_pid == -1) &&
         server.aof_rewrite_scheduled)
     {
         rewriteAppendOnlyFileBackground();
@@ -1168,6 +1174,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
          if (server.aof_state == AOF_ON &&
              server.rdb_child_pid == -1 &&
              server.aof_child_pid == -1 &&
+             crdtServer.rdb_child_pid == -1 &&
              server.aof_rewrite_perc &&
              server.aof_current_size > server.aof_rewrite_min_size)
          {
@@ -1268,6 +1275,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
      * make sure when refactoring this file to keep this order. This is useful
      * because we want to give priority to RDB savings for replication. */
     if (server.rdb_child_pid == -1 && server.aof_child_pid == -1 &&
+        (server.multi_process_sync || crdtServer.rdb_child_pid == -1) &&
         server.rdb_bgsave_scheduled &&
         (server.unixtime-server.lastbgsave_try > CONFIG_BGSAVE_RETRY_DELAY ||
          server.lastbgsave_status == C_OK))
@@ -1434,6 +1442,7 @@ void createSharedObjects(void) {
     shared.hset = createStringObject("HSET", 4);
     shared.sadd = createStringObject("SADD", 4);
     shared.zadd = createStringObject("ZADD", 4);
+    shared.crdtevictiontombstone = createStringObject("CRDT.EVICTIONTOMBSTONE",22);
     shared.crdtexec = createStringObject("CRDT.EXEC", 9);
     shared.pexpireat = createStringObject("PEXPIREAt", 9);
     for (j = 0; j < OBJ_SHARED_INTEGERS; j++) {
@@ -1921,6 +1930,7 @@ void resetServerStats(struct redisServer *srv) {
     srv->stat_numconnections = 0;
     srv->stat_expiredkeys = 0;
     srv->stat_evictedkeys = 0;
+    srv->stat_evictedtombstones = 0;
     srv->stat_keyspace_misses = 0;
     srv->stat_keyspace_hits = 0;
     srv->stat_active_defrag_hits = 0;
@@ -2731,6 +2741,11 @@ int prepareForShutdown(int flags) {
         rdbRemoveTempFile(server.rdb_child_pid);
     }
 
+    if (crdtServer.rdb_child_pid != -1) {
+        serverLog(LL_WARNING,"[crdt]There is a child saving an .rdb. Killing it!");
+        kill(crdtServer.rdb_child_pid,SIGUSR1);
+    }
+
     if (server.aof_state != AOF_OFF) {
         /* Kill the AOF saving child as the AOF we already have may be longer
          * but contains the full dataset anyway. */
@@ -3187,92 +3202,91 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
     /* Persistence */
     if (allsections || defsections || !strcasecmp(section,"persistence")) {
         if (sections++) info = sdscat(info,"\r\n");
-        if (srv == &server) {
+        info = sdscatprintf(info,
+            "# Persistence\r\n"
+            "loading:%d\r\n"
+            "rdb_changes_since_last_save:%lld\r\n"
+            "rdb_bgsave_in_progress:%d\r\n"
+            "rdb_last_save_time:%jd\r\n"
+            "rdb_last_bgsave_status:%s\r\n"
+            "rdb_last_bgsave_time_sec:%jd\r\n"
+            "rdb_current_bgsave_time_sec:%jd\r\n"
+            "rdb_last_cow_size:%zu\r\n"
+            "aof_enabled:%d\r\n"
+            "aof_rewrite_in_progress:%d\r\n"
+            "aof_rewrite_scheduled:%d\r\n"
+            "aof_last_rewrite_time_sec:%jd\r\n"
+            "aof_current_rewrite_time_sec:%jd\r\n"
+            "aof_last_bgrewrite_status:%s\r\n"
+            "aof_last_write_status:%s\r\n"
+            "aof_last_cow_size:%zu\r\n",
+            srv->loading,
+            srv->dirty,
+            srv->rdb_child_pid != -1,
+            (intmax_t)srv->lastsave,
+            (srv->lastbgsave_status == C_OK) ? "ok" : "err",
+            (intmax_t)srv->rdb_save_time_last,
+            (intmax_t)((srv->rdb_child_pid == -1) ?
+                -1 : time(NULL)-srv->rdb_save_time_start),
+            srv->stat_rdb_cow_bytes,
+            srv->aof_state != AOF_OFF,
+            srv->aof_child_pid != -1,
+            srv->aof_rewrite_scheduled,
+            (intmax_t)srv->aof_rewrite_time_last,
+            (intmax_t)((srv->aof_child_pid == -1) ?
+                -1 : time(NULL)-srv->aof_rewrite_time_start),
+            (srv->aof_lastbgrewrite_status == C_OK) ? "ok" : "err",
+            (srv->aof_last_write_status == C_OK) ? "ok" : "err",
+            srv->stat_aof_cow_bytes);
+
+        if (server.aof_state != AOF_OFF) {
             info = sdscatprintf(info,
-                "# Persistence\r\n"
-                "loading:%d\r\n"
-                "rdb_changes_since_last_save:%lld\r\n"
-                "rdb_bgsave_in_progress:%d\r\n"
-                "rdb_last_save_time:%jd\r\n"
-                "rdb_last_bgsave_status:%s\r\n"
-                "rdb_last_bgsave_time_sec:%jd\r\n"
-                "rdb_current_bgsave_time_sec:%jd\r\n"
-                "rdb_last_cow_size:%zu\r\n"
-                "aof_enabled:%d\r\n"
-                "aof_rewrite_in_progress:%d\r\n"
-                "aof_rewrite_scheduled:%d\r\n"
-                "aof_last_rewrite_time_sec:%jd\r\n"
-                "aof_current_rewrite_time_sec:%jd\r\n"
-                "aof_last_bgrewrite_status:%s\r\n"
-                "aof_last_write_status:%s\r\n"
-                "aof_last_cow_size:%zu\r\n",
-                srv->loading,
-                srv->dirty,
-                srv->rdb_child_pid != -1,
-                (intmax_t)srv->lastsave,
-                (srv->lastbgsave_status == C_OK) ? "ok" : "err",
-                (intmax_t)srv->rdb_save_time_last,
-                (intmax_t)((srv->rdb_child_pid == -1) ?
-                    -1 : time(NULL)-srv->rdb_save_time_start),
-                srv->stat_rdb_cow_bytes,
-                srv->aof_state != AOF_OFF,
-                srv->aof_child_pid != -1,
-                srv->aof_rewrite_scheduled,
-                (intmax_t)srv->aof_rewrite_time_last,
-                (intmax_t)((srv->aof_child_pid == -1) ?
-                    -1 : time(NULL)-srv->aof_rewrite_time_start),
-                (srv->aof_lastbgrewrite_status == C_OK) ? "ok" : "err",
-                (srv->aof_last_write_status == C_OK) ? "ok" : "err",
-                srv->stat_aof_cow_bytes);
-
-            if (server.aof_state != AOF_OFF) {
-                info = sdscatprintf(info,
-                    "aof_current_size:%lld\r\n"
-                    "aof_base_size:%lld\r\n"
-                    "aof_pending_rewrite:%d\r\n"
-                    "aof_buffer_length:%zu\r\n"
-                    "aof_rewrite_buffer_length:%lu\r\n"
-                    "aof_pending_bio_fsync:%llu\r\n"
-                    "aof_delayed_fsync:%lu\r\n",
-                    (long long) server.aof_current_size,
-                    (long long) server.aof_rewrite_base_size,
-                    server.aof_rewrite_scheduled,
-                    sdslen(server.aof_buf),
-                    aofRewriteBufferSize(),
-                    bioPendingJobsOfType(BIO_AOF_FSYNC),
-                    server.aof_delayed_fsync);
-            }
-            if (server.loading) {
-                double perc;
-                time_t eta, elapsed;
-                off_t remaining_bytes = server.loading_total_bytes-
-                                        server.loading_loaded_bytes;
-
-                perc = ((double)server.loading_loaded_bytes /
-                    (server.loading_total_bytes+1)) * 100;
-
-                elapsed = time(NULL)-server.loading_start_time;
-                if (elapsed == 0) {
-                    eta = 1; /* A fake 1 second figure if we don't have
-                                enough info */
-                } else {
-                    eta = (elapsed*remaining_bytes)/(server.loading_loaded_bytes+1);
-                }
-
-                info = sdscatprintf(info,
-                    "loading_start_time:%jd\r\n"
-                    "loading_total_bytes:%llu\r\n"
-                    "loading_loaded_bytes:%llu\r\n"
-                    "loading_loaded_perc:%.2f\r\n"
-                    "loading_eta_seconds:%jd\r\n",
-                    (intmax_t) server.loading_start_time,
-                    (unsigned long long) server.loading_total_bytes,
-                    (unsigned long long) server.loading_loaded_bytes,
-                    perc,
-                    (intmax_t)eta
-                );
-            }
+                "aof_current_size:%lld\r\n"
+                "aof_base_size:%lld\r\n"
+                "aof_pending_rewrite:%d\r\n"
+                "aof_buffer_length:%zu\r\n"
+                "aof_rewrite_buffer_length:%lu\r\n"
+                "aof_pending_bio_fsync:%llu\r\n"
+                "aof_delayed_fsync:%lu\r\n",
+                (long long) server.aof_current_size,
+                (long long) server.aof_rewrite_base_size,
+                server.aof_rewrite_scheduled,
+                sdslen(server.aof_buf),
+                aofRewriteBufferSize(),
+                bioPendingJobsOfType(BIO_AOF_FSYNC),
+                server.aof_delayed_fsync);
         }
+        if (server.loading) {
+            double perc;
+            time_t eta, elapsed;
+            off_t remaining_bytes = server.loading_total_bytes-
+                                    server.loading_loaded_bytes;
+
+            perc = ((double)server.loading_loaded_bytes /
+                (server.loading_total_bytes+1)) * 100;
+
+            elapsed = time(NULL)-server.loading_start_time;
+            if (elapsed == 0) {
+                eta = 1; /* A fake 1 second figure if we don't have
+                            enough info */
+            } else {
+                eta = (elapsed*remaining_bytes)/(server.loading_loaded_bytes+1);
+            }
+
+            info = sdscatprintf(info,
+                "loading_start_time:%jd\r\n"
+                "loading_total_bytes:%llu\r\n"
+                "loading_loaded_bytes:%llu\r\n"
+                "loading_loaded_perc:%.2f\r\n"
+                "loading_eta_seconds:%jd\r\n",
+                (intmax_t) server.loading_start_time,
+                (unsigned long long) server.loading_total_bytes,
+                (unsigned long long) server.loading_loaded_bytes,
+                perc,
+                (intmax_t)eta
+            );
+        }
+       
     }
 
     /* Stats */
@@ -3471,7 +3485,8 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                             "sync_partial_err:%lld\r\n"
                             "latest_fork_usec:%lld\r\n"
                             "crdt_conflict:type=%lld,set=%lld,del=%lld,set_del=%lld\r\n"
-                            "crdt_conflict_op:modify=%lld,merge=%lld\r\n",
+                            "crdt_conflict_op:modify=%lld,merge=%lld\r\n"
+                            "evicted_tombstones:%lld\r\n",
                             crdtServer.stat_sync_full,
                             crdtServer.stat_sync_backstream,
                             crdtServer.stat_sync_partial_ok,
@@ -3482,7 +3497,8 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                             crdtServer.crdt_del_conflict,
                             crdtServer.crdt_set_del_conflict,
                             crdtServer.crdt_modify_conflict,
-                            crdtServer.crdt_merge_conflict);
+                            crdtServer.crdt_merge_conflict,
+                            crdtServer.stat_evictedtombstones);
     }
 
     /* CRDT Replication */
@@ -3912,7 +3928,12 @@ void loadDataFromDisk(void) {
             serverLog(LL_NOTICE,"DB loaded from append only file: %.3f seconds",(float)(ustime()-start)/1000000);
     } else {
         rdbSaveInfo rsi = RDB_SAVE_INFO_INIT;
-        if (rdbLoad(server.rdb_filename,&rsi) == C_OK) {
+        /**
+         *  If the RDB that is not crdt is loaded （return RDB_VERSION_ERR）,
+         *  we just don't load RDB but redis still needs to be started
+         */
+        int retval = rdbLoad(server.rdb_filename,&rsi);
+        if ( retval == C_OK || retval == RDB_VERSION_ERR) {
             serverLog(LL_NOTICE,"DB loaded from disk: %.3f seconds",
                 (float)(ustime()-start)/1000000);
             
