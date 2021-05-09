@@ -64,6 +64,7 @@ CRDT_Master_Instance *createPeerMaster(client *c, int gid) {
     masterInstance->repl_transfer_lastio = mstime();
     masterInstance->dbid = 0;
     masterInstance->backstream_vc = newVectorClock(0);
+    masterInstance->lazy_time = NO_LAZY_TIME;
     addPeerSet(gid);
     return masterInstance;
 }
@@ -152,6 +153,8 @@ void tryCleanCrdtServerLoading() {
     crdtServer.loading = 0;
 }
 
+#define PROXY_NONE 0
+#define PROXY_XPIPE 1
 
 // peerof <gid> <ip> <port> <backstream> <backstream_vc>
 //  0       1    2    3
@@ -190,25 +193,39 @@ void peerofCommand(client *c) {
     if ((getLongFromObjectOrReply(c, c->argv[3], &port, NULL) != C_OK))
         return;
     VectorClock backstream_vc = newVectorClock(0);
+    void* proxy = NULL;
+    int proxy_type = PROXY_NONE;
     if(c->argc > 4) {
-        if (strcasecmp(c->argv[4]->ptr,"backstream") == 0 ) {
-            long long vcu = 0;
-            if ((getLongLongFromObjectOrReply(c, c->argv[5], &vcu, NULL) != C_OK)) {
-                return;
-            }
-            backstream_vc = addVectorClockUnit(backstream_vc, crdtServer.crdt_gid, vcu);
-            crdtServer.loading = 1;
+        for(int i = 4; i < c->argc; i++) {
+            if(strcasecmp(c->argv[i]->ptr, "backstream") == 0) {
+                long long vcu = 0;
+                if ((getLongLongFromObjectOrReply(c, c->argv[++i], &vcu, NULL) != C_OK)) {
+                    return;
+                }
+                backstream_vc = addVectorClockUnit(backstream_vc, crdtServer.crdt_gid, vcu);
+                crdtServer.loading = 1;
+            } 
         }
     }
     /* Check if we are already attached to the specified master */
     CRDT_Master_Instance *peerMaster = getPeerMaster(gid);
     if(peerMaster && !strcasecmp(peerMaster->masterhost, c->argv[2]->ptr)
        && peerMaster->masterport == port && VectorClockEqual(peerMaster->backstream_vc, backstream_vc)) {
+        if(peerMaster->lazy_time != NO_LAZY_TIME) {
+            // peerMaster set lazy_time when restart redis
+            // exec peerof command can't set lazy_time
+            // peerof can clean lazy_time
+            sds client = catClientInfoString(sdsempty(), c);
+            serverLog(LL_NOTICE,"[CRDT]PEER OF  %lld %s:%d clean lazy_time enabled (user request from '%s')",
+                gid, peerMaster->masterhost, peerMaster->masterport, client);
+            sdsfree(client);
+            peerMaster->lazy_time = NO_LAZY_TIME;
+            addReplySds(c,sdsnew("+OK Clean lazy_time\r\n"));
+        }
         serverLog(LL_NOTICE,"[CRDT]PEER OF would result into synchronization with the master we are already connected with. No operation performed.");
         addReplySds(c,sdsnew("+OK Already connected to specified master\r\n"));
         return;
     }
-    
     /* There was no previous master or the user specified a different one,
      * we can continue. */
     crdtReplicationSetMaster(gid, c->argv[2]->ptr, (int)port);
@@ -257,6 +274,7 @@ void crdtReplicationSetMaster(int gid, char *ip, int port) {
     }
     peerMaster->masterhost = sdsnew(ip);
     peerMaster->masterport = port;
+    peerMaster->lazy_time = NO_LAZY_TIME;
     if(iAmMaster() == C_OK) {
         if (peerMaster->master) {
             freeClient(peerMaster->master);
@@ -1821,9 +1839,9 @@ void crdtReplicationCron(void) {
             }
 
             /* Check if we should connect to a MASTER */
-            if (crdtMaster->repl_state == REPL_STATE_CONNECT) {
-                serverLog(LL_NOTICE, "[CRDT] Connecting to MASTER %s:%d",
-                          crdtMaster->masterhost, crdtMaster->masterport);
+            if (crdtMaster->repl_state == REPL_STATE_CONNECT && ( crdtMaster->lazy_time == NO_LAZY_TIME || crdtMaster->lazy_time < mstime()) ) {
+                serverLog(LL_NOTICE, "[CRDT] Connecting to MASTER %s:%d %lld",
+                          crdtMaster->masterhost, crdtMaster->masterport, crdtMaster->lazy_time);
                 if (crdtConnectWithMaster(crdtMaster) == C_OK) {
                     serverLog(LL_NOTICE, "[CRDT]MASTER <-> SLAVE sync started, master(%s:%d)",
                               crdtMaster->masterhost, crdtMaster->masterport);
@@ -2181,6 +2199,33 @@ int isNullDb() {
     return 1;
 }
 
+long long get_min_backstream_vcu() {
+    long long min = LONG_MAX;
+    int loading = 0;
+    for(int i = 0; i < 16; i++) {
+        CRDT_Master_Instance* peer = getPeerMaster(i);
+        if(peer == NULL || isNullVectorClock(peer->backstream_vc)) continue;
+        long long vcu = get_vcu_from_vc(peer->backstream_vc, server.crdt_gid, NULL);
+        if(vcu < min) {
+            min = vcu;
+        }
+    }
+    if(min != LONG_MAX) {
+        return min;
+    }
+    return -1;
+}
+
+int lazyPeerof() {
+    serverLog(LL_WARNING, "lazyPeerof %d", server.restart_lazy_peerof_time );
+    long long current_time = mstime();
+    for(int i = 0; i < 16; i++) {
+        CRDT_Master_Instance* peer = getPeerMaster(i);
+        if(peer == NULL) continue;
+        peer->lazy_time = current_time + server.restart_lazy_peerof_time;
+    }   
+}
+
 int peerBackStream() {
     long long max_vcu = -1;
     int max_gid = -1;
@@ -2204,7 +2249,9 @@ int peerBackStream() {
      *  After loading RDB, when the clock is higher than the clock obtained in other computer rooms, use the data in RDB, otherwise perform reflow
      * 
      */
-    if( !isNullDb()) {
+    if( !isNullDb() 
+        && iAmMaster() == C_OK
+    ) {
         clk process_clk = getVectorClockUnit(crdtServer.vectorClock, crdtServer.crdt_gid);
         long long process_vcu = get_logic_clock(process_clk);
         serverLog(LL_WARNING, "[backstream] max vcu %lld , process_vcu %lld ", max_vcu, process_vcu);
@@ -2219,6 +2266,9 @@ int peerBackStream() {
             NULL);
         resetVectorClock(crdtServer.vectorClock);
         resetVectorClock(crdtServer.gcVectorClock);
+        changeReplicationId(&server);
+        clearReplicationId2(&server);
+        serverLog(LL_WARNING, "[backstream] clean data");
     } 
     crdtServer.loading = loading;
     if(max_gid == -1) {

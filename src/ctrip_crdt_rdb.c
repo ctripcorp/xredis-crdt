@@ -781,6 +781,7 @@ int iAmMaster() {
     }
     return C_ERR;
 }
+
 int isSameTypeWithMaster() {
     if(crdt_enabled && server.master_is_crdt) {
         return C_OK;

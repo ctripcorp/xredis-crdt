@@ -289,7 +289,7 @@ slave-peer-offset "1. master->slave full sync 2. peer -> master  partial sync" {
     $peer set k v 
     wait $peer 0 crdt.info $peer_log
     after 1000
-    puts [$peer crdt.info stats]
+    # puts [$peer crdt.info stats]
     # print_file_matches $master_log
     assert_equal [crdt_stats $peer sync_full] 0
     assert_equal [crdt_stats $peer sync_partial_ok] 1

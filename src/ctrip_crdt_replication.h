@@ -34,7 +34,7 @@
 #define REDIS_CRDT_REPLICATION_H
 
 #include "server.h"
-
+#define NO_LAZY_TIME 0
 void freePeerMaster(CRDT_Master_Instance *masterInstance);
 void crdtReplicationCacheAllMaster();
 void crdtReplicationCreateMasterClient(CRDT_Master_Instance *crdtMaster, client* c, int dbid);

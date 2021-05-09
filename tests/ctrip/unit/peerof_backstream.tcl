@@ -246,7 +246,7 @@ start_server {tags {"peerof + peerof backstream"} overrides {crdt-gid 1} config 
             catch {$master set test1 a} error 
             assert_match "*LOADING Redis is loading the dataset in memory*" $error 
             wait_for_peer_sync $master 
-            puts [print_log_file $master_stdout]
+            # puts [print_log_file $master_stdout]
             assert_equal [$master get key] v1
             
         }

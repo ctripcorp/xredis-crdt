@@ -2236,6 +2236,18 @@ void slaveofCommand(client *c) {
             serverLog(LL_NOTICE,"MASTER MODE enabled (user request from '%s')",
                 client);
             sdsfree(client);
+            long long min_backstream_vcu = get_min_backstream_vcu();
+            if(min_backstream_vcu == 0 && !isNullDb()) {
+                emptyDb(
+                    -1,
+                    server.repl_slave_lazy_flush ? EMPTYDB_ASYNC : EMPTYDB_NO_FLAGS,
+                    NULL);
+                resetVectorClock(crdtServer.vectorClock);
+                resetVectorClock(crdtServer.gcVectorClock);
+                changeReplicationId(&server);
+                clearReplicationId2(&server);
+                serverLog(LL_WARNING, "[CRDT] when slave -> master, because it will backstream");
+            }
         }
     } else {
         long port;

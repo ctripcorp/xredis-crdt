@@ -1577,7 +1577,8 @@ void initServerConfig(struct redisServer *srv) {
     srv->lazyfree_lazy_server_del = CONFIG_DEFAULT_LAZYFREE_LAZY_SERVER_DEL;
     srv->always_show_logo = CONFIG_DEFAULT_ALWAYS_SHOW_LOGO;
     srv->lua_time_limit = LUA_SCRIPT_TIME_LIMIT;
-
+    srv->local_clock = DEFAULT_LOCAL_CLOCK;
+    srv->restart_lazy_peerof_time = CONFIG_DEFAULT_RESTART_LAZY_PEEROF_TIME;
     unsigned int lruclock = getLRUClock();
     atomicSet(srv->lruclock,lruclock);
     resetServerSaveParams(srv);
@@ -2143,7 +2144,8 @@ void initServer(struct redisServer *srv) {
         srv->crdt_gid = server.crdt_gid;
     }
     VectorClock vc = newVectorClock(1);
-    set_clock_unit_by_index(&vc, 0, init_clock(crdtServer.crdt_gid, (long long)crdtServer.local_clock));
+    long long local_clock = (long long)crdtServer.local_clock;
+    set_clock_unit_by_index(&vc, 0, init_clock(crdtServer.crdt_gid,local_clock < 0? 0: local_clock));
     srv->vectorClock = vc;
     VectorClock gcVclock = newVectorClock(1);
     set_clock_unit_by_index(&gcVclock, 0, init_clock(crdtServer.crdt_gid, 0));
@@ -4078,6 +4080,12 @@ int redisIsSupervised(int mode) {
     return 0;
 }
 
+int iAmRestart() {
+    if(server.local_clock == DEFAULT_LOCAL_CLOCK) {
+        return 0;
+    }
+    return 1;
+}
 
 int main(int argc, char **argv) {
     struct timeval tv;
@@ -4233,7 +4241,6 @@ int main(int argc, char **argv) {
     server.supervised = redisIsSupervised(server.supervised_mode);
     int background = server.daemonize && !server.supervised;
     if (background) daemonize();
-
     initServer(&server);
     //init crdt server also
     initServer(&crdtServer);
@@ -4278,6 +4285,11 @@ int main(int argc, char **argv) {
     }
     server.start_time = ustime();
     peerBackStream();
+    if(!iAmRestart()) {
+        updateConfigFileVectorUnit(server.configfile);
+    } else {
+        lazyPeerof();
+    }
     aeSetBeforeSleepProc(server.el,beforeSleep);
     aeSetAfterSleepProc(server.el,afterSleep);
     aeMain(server.el);
