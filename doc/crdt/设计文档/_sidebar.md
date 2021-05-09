@@ -1,0 +1,66 @@
+- **expipe双向同步设计文档**
+    - **1.1 需求背景**
+      - [背景](需求背景.md)
+    - **1.2 项目目标**
+      - [目标](项目目标.md)
+    - **1.3 理论**
+      - [1.3.1 理论依据](理论/理论依据.md)
+      - [1.3.2 理论论证](理论/理论论证.md)
+    - **1.4 提纲挈领**
+      - ***1.4.1 内部机制篇***
+        - [Vector Clock](提纲挈领/内部机制篇/VectorClock/README.md)
+        <!-- - *** Vector Clock ***
+          - [简介](提纲挈领/内部机制篇/VectorClock/README.md)
+            - [定义](提纲挈领/内部机制篇/VectorClock/定义.md)
+            - [数据结构](提纲挈领/内部机制篇/VectorClock/数据结构.md)
+            - [对比大小](提纲挈领/内部机制篇/VectorClock/对比大小.md)
+            - [具体使用](提纲挈领/内部机制篇/VectorClock/具体使用.md) -->
+        - Tombstone
+          - [简介](提纲挈领/内部机制篇/Tombstone/简介.md)
+          - [具体实现](提纲挈领/内部机制篇/Tombstone/具体实现.md)
+          - [Gc](提纲挈领/内部机制篇/Tombstone/Gc.md)
+      - ***1.4.2 同步篇***
+        - [master-master全量同步](同步篇/master-master全量同步.md)
+        - [master-master增量同步](同步篇/master-master增量同步.md)
+        - [master-slave全量同步](同步篇/master-slave全量同步.md)
+        - [master-slave增量](同步篇/master-slave增量同步.md)
+      - ***1.4.3 数据结构***
+        - [String类型](数据结构/String类型/README.md)
+        - [MAP 类型](数据结构/Map类型/README.md)
+        - [Counter类型](数据结构/Counter类型/README.md)
+        - [Set类型](数据结构/Set类型/README.md)
+        - [Sorted Set类型](数据结构/Sorted_Set类型/README.md)
+      - ***1.4.4 通讯协议***
+        - [公共协议](通讯协议/公共协议.md)
+        - [全量同步](通讯协议/全量同步.md)
+        - [增量同步篇](通讯协议/增量同步.md) 
+        - [sub/pub机制](通讯协议/Sub_Pub机制.md)
+    - **1.5 部署文档**
+      - [打包](部署文档/打包.md)
+      - [编译](部署文档/编译.md)
+      - [Redis配置文件参数](部署文档/Redis配置文件.md)
+      - [日志分割配置参数](部署文档/日志分割配置.md)
+    - **1.6 开发规范**
+      - [内存使用](开发规范/内存使用.md)
+      - [冲突](开发规范/冲突.md)
+      - [Gc](开发规范/Gc.md)
+    - **1.7 设计与实现**
+      - [expire设计](设计与实现/expire设计.md)
+      - [事务设计](设计与实现/事务设计.md)
+      - [淘汰策略设计](设计与实现/淘汰策略设计.md)
+    - **1.8 测试和优化**
+      - [全量同步(打包/加载Rdb速度优化)](测试和优化/rdb.md)
+    - **1.9 问题**
+      - [tombstone](问题/tombstone.md)
+      - 冲突
+      - gc
+      - [数据恢复](问题/回流设计.md)
+    - **1.10 CRDT 协议统计**
+      - [master-master全量同步协议](协议/master-master全量同步协议.md)
+      - [master-master增量同步协议](协议/master-master增量同步协议.md)
+      - [master-master同步协议](协议/master-master同步协议.md)
+      - [crdt info命令](协议/crdt_info命令.md)
+      - [crdt debug命令](协议/crdt_debug命令.md)
+      - [crdt config命令](协议/crdt_config命令.md)
+    - **1.11 参考资料**
+      - [Redislabs官方文档](https://docs.redislabs.com/latest/rs/developing/crdbs/)
