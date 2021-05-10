@@ -153,8 +153,6 @@ void tryCleanCrdtServerLoading() {
     crdtServer.loading = 0;
 }
 
-#define PROXY_NONE 0
-#define PROXY_XPIPE 1
 
 // peerof <gid> <ip> <port> <backstream> <backstream_vc>
 //  0       1    2    3
@@ -193,6 +191,8 @@ void peerofCommand(client *c) {
     if ((getLongFromObjectOrReply(c, c->argv[3], &port, NULL) != C_OK))
         return;
     VectorClock backstream_vc = newVectorClock(0);
+    void* proxy = NULL;
+    int proxy_type = NONE_PROXY;
     if(c->argc > 4) {
         for(int i = 4; i < c->argc; i++) {
             if(strcasecmp(c->argv[i]->ptr, "backstream") == 0) {
@@ -202,13 +202,24 @@ void peerofCommand(client *c) {
                 }
                 backstream_vc = addVectorClockUnit(backstream_vc, crdtServer.crdt_gid, vcu);
                 crdtServer.loading = 1;
+            } else if (strcasecmp(c->argv[i]->ptr, "proxy-type") == 0) {
+                proxy_type = getProxyType(c->argv[++i]->ptr);
+                if(proxy_type == NONE_PROXY) {
+                    serverLog(LL_NOTICE, "[CRDT]peerof proxy unknow type : %s", c->argv[i]->ptr);
+                    addReplyError(c,"proxy unknow type");
+                    return;
+                }
+                if((proxy = parseProxyByRobjArray(proxy_type, c->argv, c->argc)) == NULL) {
+                    addReplyError(c,"proxy params error");
+                    return;
+                }
             } 
         }
     }
     /* Check if we are already attached to the specified master */
     CRDT_Master_Instance *peerMaster = getPeerMaster(gid);
     if(peerMaster && !strcasecmp(peerMaster->masterhost, c->argv[2]->ptr)
-       && peerMaster->masterport == port && VectorClockEqual(peerMaster->backstream_vc, backstream_vc)) {
+       && peerMaster->masterport == port && VectorClockEqual(peerMaster->backstream_vc, backstream_vc) && proxy_type == peerMaster->proxy_type && eqProxy(proxy_type, proxy, peerMaster->proxy)) {
         if(peerMaster->lazy_time != NO_LAZY_TIME) {
             // peerMaster set lazy_time when restart redis
             // exec peerof command can't set lazy_time
@@ -245,6 +256,14 @@ void peerofCommand(client *c) {
         sdsfree(now_backstream_vc);
         peerMaster->backstream_vc = backstream_vc;
     }
+
+    
+    if (peerMaster->proxy_type != NONE_PROXY) {
+        freeProxy(peerMaster->proxy_type, peerMaster->proxy);
+    }
+    peerMaster->proxy_type = proxy_type;
+    peerMaster->proxy = proxy;
+
     if (server.configfile != NULL && rewriteConfig(server.configfile) == -1) {
         crdtReplicationUnsetMaster(gid);
         serverLog(LL_WARNING,"CONFIG REWRITE failed, file: %s, error: %s", server.configfile, strerror(errno));
@@ -798,6 +817,13 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
 
     /* Send a PING to check the master is able to reply without errors. */
     if (crdtMaster->repl_state == REPL_STATE_CONNECTING) {
+        if(crdtMaster->proxy_type != NONE_PROXY) {
+            //test proxy 
+            if(!initProxy(fd, crdtMaster->proxy_type, crdtMaster->proxy, crdtMaster->masterhost, crdtMaster->masterport)) {
+                serverLog(LL_WARNING,"[CRDT] proxy init error");
+                goto error;
+            }   
+        }
         serverLog(LL_NOTICE,"[CRDT] Non blocking connect for SYNC fired the event.");
         /* Delete the writable event so that the readable event remains
          * registered and we can wait for the PONG reply. */
@@ -1116,15 +1142,22 @@ write_error: /* Handle sendSynchronousCommand(SYNC_CMD_WRITE) errors. */
 
 int crdtConnectWithMaster(CRDT_Master_Instance *masterInstance) {
     int fd;
-
-    fd = anetTcpNonBlockBestEffortBindConnect(NULL,
+    if(masterInstance->proxy_type == NONE_PROXY) {
+        fd = anetTcpNonBlockBestEffortBindConnect(NULL,
                                               masterInstance->masterhost,masterInstance->masterport,NET_FIRST_BIND_ADDR);
-    if (fd == -1) {
-        serverLog(LL_NOTICE, "[CRDT]Unable to connect to MASTER: %s",
-                  strerror(errno));
-        return C_ERR;
+        if (fd == -1) {
+            serverLog(LL_NOTICE, "[CRDT]Unable to connect to MASTER: %s",
+                    strerror(errno));
+            return C_ERR;
+        }
+    } else {
+        fd = proxyConnect(masterInstance->proxy_type, masterInstance->proxy, masterInstance->masterhost, masterInstance->masterport);
+        if (fd == -1) {
+            serverLog(LL_NOTICE, "[CRDT]Proxy Unable to connect to MASTER: %s",
+                    strerror(errno));
+            return C_ERR;
+        }
     }
-
     if (aeCreateFileEvent(server.el,fd,AE_READABLE|AE_WRITABLE,crdtSyncWithMaster,masterInstance) ==
         AE_ERR)
     {

@@ -3569,6 +3569,11 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                                     masterid, backstream_vc_str);
                 sdsfree(backstream_vc_str);
             }
+            if(masterInstance->proxy_type != NONE_PROXY) {
+                sds proxy_info = getProxyInfo(masterid, masterInstance->proxy_type, masterInstance->proxy);
+                info = sdscatprintf(info, proxy_info);
+                sdsfree(proxy_info);
+            }
             
 
             if (masterInstance->repl_state != REPL_STATE_CONNECTED) {

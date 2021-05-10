@@ -355,21 +355,44 @@ void loadServerConfigFromString(char *config) {
             server.masterhost = sdsnew(argv[1]);
             server.masterport = atoi(argv[2]);
             server.repl_state = REPL_STATE_CONNECT;
-        } else if(!strcasecmp(argv[0], "peerof") && argc == 4) {
+        } else if(!strcasecmp(argv[0], "peerof")) {
             int gid = atoi(argv[1]);
             CRDT_Master_Instance* iter = getPeerMaster(gid);
-            if(iter != NULL && server.masterhost) {
-
-            } else {
+            // if(iter != NULL && server.masterhost) {
+            //     //slave use rdb data
+            // } else {
                 if(iter == NULL) {
                     iter = createPeerMaster(NULL, gid);
                 } 
                 // crdtReplicationSetMaster(gid, c->argv[2]->ptr, (int)port);
                 iter->masterhost = sdsnew(argv[2]);
                 iter->masterport = atoi(argv[3]);
+                
+                if(argc == 4) {
+                    serverLog(LL_WARNING, "load config peerof info: gid: %d, host: %s, port: %d", gid, iter->masterhost, iter->masterport);
+                } else {
+                    for(int i = 4; i < argc; i++) {
+                        if(strcasecmp(argv[i], "proxy-type") == 0) {
+                            int proxy_type = getProxyType(argv[++i]);
+                            if(proxy_type == NONE_PROXY) {
+                                err = "peerof proxy type unknown";
+                                goto loaderr;
+                            }
+                            void* proxy = parseProxyBySdsArray(proxy_type, argv, argc);
+                            if(proxy == NULL) {
+                                err = "peerof proxy parse error";
+                                goto loaderr;
+                            }
+                            if(iter->proxy_type != NONE_PROXY) {
+                                freeProxy(iter->proxy_type, iter->proxy);
+                            }
+                            iter->proxy_type = proxy_type;
+                            iter->proxy = proxy;
+                        }
+                    }
+                }
                 crdtServer.crdtMasters[gid] = iter;
-                serverLog(LL_WARNING, "load config peerof info: gid: %d, host: %s, port: %d", gid, iter->masterhost, iter->masterport);
-            } 
+            // } 
         } else if(!strcasecmp(argv[0], "restart-lazy-peerof-time") && argc == 2) {
             server.restart_lazy_peerof_time = atoi(argv[1]);
             if (server.restart_lazy_peerof_time <= 0) {
@@ -1887,6 +1910,13 @@ void rewriteConfigPeerofOption(struct rewriteConfigState *state) {
         if(peer == NULL) { continue; }
         line = sdscatprintf(sdsempty(),"%s %lld %s %d", option, peer->gid,
             peer->masterhost, peer->masterport);
+        if(peer->proxy_type != NONE_PROXY) {
+            sds proxy_config = getProxyConfigInfo(peer->proxy_type, peer->proxy);
+            if(proxy_config != NULL) {
+                line = sdscatprintf(line, " %s", proxy_config);
+                sdsfree(proxy_config);
+            }
+        }
         rewriteConfigRewriteLine(state,option,line,1);
     }
     

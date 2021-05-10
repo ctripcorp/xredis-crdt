@@ -705,6 +705,17 @@ typedef struct readyList {
     robj *key;
 } readyList;
 struct CRDT_Master_Instance;
+#define NONE_PROXY 0
+#define XPIPE_PROXY 1
+int getProxyType(sds type);
+void* parseProxyByRobjArray(int proxy_type, robj** argv, int argc); 
+void* parseProxyBySdsArray(int proxy_type, sds* argv, int argc); 
+sds getProxyInfo(int peer_index, int proxy_type, void* proxy);
+void freeProxy(int proxy_type, void* proxy);
+sds getProxyConfigInfo(int proxy_type, void* proxy);
+int eqProxy(int proxy_type, void* p1, void* p2);
+int proxyConnect(int proxy_type, void* proxy, char* host, int port);
+int initProxy(int fd, int proxy_type, void* p, char* host, int port);
 /* With multiplexing we need to take per-client state.
  * Clients are taken in a linked list. */
 typedef struct client {
@@ -925,6 +936,8 @@ typedef struct CRDT_Master_Instance {
     int dbid;
     VectorClock backstream_vc;
     long long lazy_time; /*lazy_time*/
+    int proxy_type;
+    void* proxy;
 } CRDT_Master_Instance;
 
 /*-----------------------------------------------------------------------------
