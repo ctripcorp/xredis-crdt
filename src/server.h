@@ -88,7 +88,7 @@ long long get_min_backstream_vcu();
 #define CONFIG_DEFAULT_SERVER_PORT        6379    /* TCP port */
 #define CONFIG_DEFAULT_TCP_BACKLOG       511     /* TCP listen backlog */
 #define CONFIG_DEFAULT_CLIENT_TIMEOUT       0       /* default client timeout: infinite */
-#define CONFIG_DEFAULT_RESTART_LAZY_PEEROF_TIME  1000
+#define CONFIG_DEFAULT_RESTART_LAZY_PEEROF_TIME  11000 
 #define CONFIG_DEFAULT_DBNUM     16
 #define CONFIG_MAX_LINE    1024
 #define CRON_DBS_PER_CALL 16

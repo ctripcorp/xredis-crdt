@@ -193,8 +193,6 @@ void peerofCommand(client *c) {
     if ((getLongFromObjectOrReply(c, c->argv[3], &port, NULL) != C_OK))
         return;
     VectorClock backstream_vc = newVectorClock(0);
-    void* proxy = NULL;
-    int proxy_type = PROXY_NONE;
     if(c->argc > 4) {
         for(int i = 4; i < c->argc; i++) {
             if(strcasecmp(c->argv[i]->ptr, "backstream") == 0) {
@@ -2201,7 +2199,6 @@ int isNullDb() {
 
 long long get_min_backstream_vcu() {
     long long min = LONG_MAX;
-    int loading = 0;
     for(int i = 0; i < 16; i++) {
         CRDT_Master_Instance* peer = getPeerMaster(i);
         if(peer == NULL || isNullVectorClock(peer->backstream_vc)) continue;
@@ -2223,7 +2220,8 @@ int lazyPeerof() {
         CRDT_Master_Instance* peer = getPeerMaster(i);
         if(peer == NULL) continue;
         peer->lazy_time = current_time + server.restart_lazy_peerof_time;
-    }   
+    }  
+    return 1; 
 }
 
 int peerBackStream() {

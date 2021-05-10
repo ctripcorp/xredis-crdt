@@ -396,7 +396,7 @@ long long tombstoneGetIdle(VectorClock vc, VectorClock processVc) {
     return idle;
 }
 
-int evictionTombstonePoolPopulate(int dbid, dict *sampledict, dict *keydict, struct evictionPoolEntry *pool) {
+int evictionTombstonePoolPopulate(int dbid, dict *sampledict, struct evictionPoolEntry *pool) {
     int j, k, count;
     dictEntry *samples[server.maxmemory_samples];
 
@@ -467,6 +467,7 @@ int evictionTombstonePoolPopulate(int dbid, dict *sampledict, dict *keydict, str
         pool[k].idle = idle;
         pool[k].dbid = dbid;
     }
+    return C_OK;
 }
 
 void propagateGcTombstone(int index, robj* key, VectorClock vc) {
@@ -502,7 +503,8 @@ void evictionTombstoneCommand(client* c) {
     VectorClock vclock = sdsToVectorClock(c->argv[3]->ptr);
     dictEntry* de = dictFind(c->db->deleted_keys, key);
     if(de == NULL) {
-        return addReplyBulkLongLong(c, 0);
+        addReplyBulkLongLong(c, 0);
+        return;
     }
     robj* o = dictGetVal(de);
     CrdtObject *common = retrieveCrdtObject(o);
@@ -510,10 +512,10 @@ void evictionTombstoneCommand(client* c) {
     if(method->gc(common, vclock)) {
         assert(dictDelete(c->db->deleted_keys, key) == DICT_OK);
         crdtServer.stat_evictedtombstones++;
-        return addReplyBulkLongLong(c, 1);
+        addReplyBulkLongLong(c, 1);
+        return;
     } 
-    return addReplyBulkLongLong(c, 2);
-    
+    addReplyBulkLongLong(c, 2);
 }
 
 int freeMemoryIfNeeded(void) {
@@ -550,8 +552,8 @@ int freeMemoryIfNeeded(void) {
     unsigned long total_tombstones = -1;
     while(mem_freed < mem_tofree && total_tombstones != 0) {
         //enforceGc
-        int j, k, i, tombstones_freed = 0;
-        static int next_db = 0;
+        int k, i, tombstones_freed = 0;
+        // static int next_db = 0;
         sds bestkey = NULL;
         int bestdbid;
         redisDb *db;
@@ -568,7 +570,7 @@ int freeMemoryIfNeeded(void) {
                 db = server.db+i;
                 dict = db->deleted_keys;
                 if ((tombstone = dictSize(dict)) != 0) {
-                    evictionTombstonePoolPopulate(i, dict, dict, pool);
+                    evictionTombstonePoolPopulate(i, dict, pool);
                     total_tombstones += tombstone;
                 }
             }

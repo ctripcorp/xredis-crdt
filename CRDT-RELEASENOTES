@@ -10,6 +10,13 @@ HIGH:     There is a critical bug that may affect a subset of users. Upgrade!
 CRITICAL: There is a critical bug affecting MOST USERS. Upgrade ASAP.
 --------------------------------------------------------------------------------
 ================================================================================
+XRedis-CRDT 1.0.13 Released Mon May 10 14:02:54 CST 2021
+================================================================================
+Upgrade urgency HIGH: Compared with the previous version, there are some improvements, mainly:
+* [fix] When the slave restarts and performs incremental synchronization with the master, it may cause data loss
+* [feature] Peerof will be delayed after restarting redis
+================================================================================
+================================================================================
 XRedis-CRDT 1.0.12 Released Mon Apr 19 11:46:48 CST 2021
 ================================================================================
 Upgrade urgency LOW: Compared with the previous version, there are some improvements, mainly:
