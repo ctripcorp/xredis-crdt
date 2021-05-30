@@ -65,6 +65,8 @@ CRDT_Master_Instance *createPeerMaster(client *c, int gid) {
     masterInstance->dbid = 0;
     masterInstance->backstream_vc = newVectorClock(0);
     masterInstance->lazy_time = NO_LAZY_TIME;
+    masterInstance->proxy_type = NONE_PROXY;
+    masterInstance->proxy = NULL;
     addPeerSet(gid);
     return masterInstance;
 }
@@ -2184,18 +2186,36 @@ void crdtReplicationCommand(client *c) {
     sdsfree(s);
 }
 
-long long getSelfVcuFromPeer(char* host, int port) {
+redisContext* createReidsConnect(CRDT_Master_Instance* inter) {
+    if(inter->proxy_type != NONE_PROXY) {
+        return proxyHiRedis(inter->proxy_type, inter->proxy, inter->masterhost, inter->masterport);
+    } else {
+        redisContext* r = redisConnect(inter->masterhost, inter->masterport);
+        return r;
+    }
+    
+}
+
+long long getSelfVcuFromPeer(CRDT_Master_Instance* inter) {
     redisContext *c;
     redisReply *reply;
-
-    c = redisConnect(host, port);
+    c = createReidsConnect(inter);
+    if (c == NULL) {
+        serverLog(LL_WARNING,"[getMaxVcu]step1 %s:%d connect fail\n", inter->masterhost, inter->masterport);
+        if(inter->proxy_type != NONE_PROXY) {
+            sds proxyinfo = proxy2str(inter->proxy_type, inter->proxy);
+            serverLog(LL_WARNING,"[getMaxVcu]step2 use proxy fail %s \n", proxyinfo);
+            sdsfree(proxyinfo);
+        }
+        return -1;
+    }
     struct timeval tv;
     tv.tv_sec = 1;
     tv.tv_usec = 0;//μs
     redisSetTimeout(c, tv);
     reply = redisCommand(c,"crdt.vc");
     if(reply == NULL) {
-        serverLog(LL_WARNING,"[getMaxVcu] %s:%d connect fail\n", host, port);
+        serverLog(LL_WARNING,"[getMaxVcu] %s:%d connect fail\n", inter->masterhost, inter->masterport);
         redisFree(c);
         return -1;
     }
@@ -2265,7 +2285,7 @@ int peerBackStream() {
         CRDT_Master_Instance* peer = getPeerMaster(i);
         if(peer == NULL) continue;
         loading = 1;
-        long long vcu = getSelfVcuFromPeer(peer->masterhost, peer->masterport);
+        long long vcu = getSelfVcuFromPeer(peer);
         if(vcu == -1) {
             peer->backstream_vc = addVectorClockUnit(peer->backstream_vc, crdtServer.crdt_gid, 0);
         } else {

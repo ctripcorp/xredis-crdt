@@ -3571,7 +3571,7 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
             }
             if(masterInstance->proxy_type != NONE_PROXY) {
                 sds proxy_info = getProxyInfo(masterid, masterInstance->proxy_type, masterInstance->proxy);
-                info = sdscatprintf(info, proxy_info);
+                info = sdscatprintf(info, "%s", proxy_info);
                 sdsfree(proxy_info);
             }
             

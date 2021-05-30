@@ -6,13 +6,23 @@ package require Tcl 8.5
 
 set tcl_precision 17
 source tests/support/redis.tcl
+source tests/support/xpipe_proxy.tcl
 source tests/support/server.tcl
+source tests/support/proxy_server.tcl
 source tests/support/tmpfile.tcl
 source tests/support/test.tcl
 source tests/support/util.tcl
 source tests/support/aof.tcl
 source tests/test_script/utils.tcl
+
 set ::all_tests {
+    ctrip/proxy/config
+    ctrip/proxy/one_proxy_peerof
+    ctrip/proxy/two_proxy_peerof
+    ctrip/proxy/ping 
+    ctrip/proxy/rdb
+    ctrip/proxy/slave
+
     ctrip/integration/master-slave/rdb
     ctrip/backstream/lazy_peerof
     ctrip/backstream/some_data
@@ -234,6 +244,8 @@ set ::next_test 0
 
 set ::host 127.0.0.1
 set ::port 21111
+set ::proxy_tcp 31111
+set ::proxy_tls 41111
 set ::traceleaks 0
 set ::valgrind 0
 set ::stack_logging 1
@@ -363,12 +375,16 @@ proc test_server_main {} {
     # Start the client instances
     set ::clients_pids {}
     set start_port [expr {$::port+100}]
+    set proxy_tcp [expr {$::proxy_tcp+100}]
+    set proxy_tls [expr {$::proxy_tls+100}]
     for {set j 0} {$j < $::numclients} {incr j} {
         set start_port [find_available_port $start_port]
         set p [exec $tclsh [info script] {*}$::argv \
-            --client $port --port $start_port &]
+            --client $port --port $start_port --proxy_tcp $proxy_tcp --proxy_tls $proxy_tls &]
         lappend ::clients_pids $p
         incr start_port 10
+        incr proxy_tcp 10
+        incr proxy_tls 10
     }
 
     # Setup global state for the test server
@@ -608,6 +624,12 @@ for {set j 0} {$j < [llength $argv]} {incr j} {
         incr j
     } elseif {$opt eq {--port}} {
         set ::port $arg
+        incr j
+    } elseif {$opt eq {--proxy_tcp}} {
+        set ::proxy_tcp $arg
+        incr j
+    } elseif {$opt eq {--proxy_tls}} {
+        set ::proxy_tls $arg 
         incr j
     } elseif {$opt eq {--accurate}} {
         set ::accurate 1

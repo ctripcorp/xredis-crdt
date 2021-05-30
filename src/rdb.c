@@ -867,8 +867,9 @@ int rdbSaveInfoAuxFields(rio *rdb, int flags, rdbSaveInfo *rsi) {
         if (rdbSaveAuxFieldStrInt(rdb,"repl-offset",server.master_repl_offset)
             == -1) return -1;
         /**add crdt stuff*/
-        rdbSaveCrdtInfoAuxFields(rdb);
+        
     }
+    rdbSaveCrdtInfoAuxFields(rdb);
     if (rdbSaveAuxFieldStrInt(rdb,"aof-preamble",aof_preamble) == -1) return -1;
 
 
@@ -1777,15 +1778,28 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                     continue;
                 }
                 currentMasterInstance->master->reploff = strtoll(auxval->ptr,NULL,10); 
-            } 
-            // else if (!strcasecmp(auxkey->ptr, "peer-master-ovc")) {
-            //     if(currentMasterInstance == NULL) {
-            //         decrRefCount(auxkey);
-            //         decrRefCount(auxval);
-            //         continue;
-            //     }
-            //     currentMasterInstance->vectorClock = sdsToVectorClock(auxval->ptr);
-            // } 
+            } else if (!strcasecmp(auxkey->ptr, "peer-proxy-type")) {
+                if(currentMasterInstance == NULL) {
+                    decrRefCount(auxkey);
+                    decrRefCount(auxval);
+                    continue;
+                }
+                currentMasterInstance->proxy_type = atoi(auxval->ptr); 
+            } else if (!strcasecmp(auxkey->ptr, "peer-proxy")) {
+                if(currentMasterInstance == NULL) {
+                    decrRefCount(auxkey);
+                    decrRefCount(auxval);
+                    continue;
+                }
+                
+                void* proxy = str2proxy(currentMasterInstance->proxy_type,auxval->ptr);
+                if (proxy == NULL) {
+                    serverLog(LL_WARNING,"RDB Parse Proxy %s", auxval->ptr);
+                    rdbExitReportCorruptRDB("RDB Proxy error");
+                    return C_ERR;
+                }
+                currentMasterInstance->proxy =  proxy;
+            }
             else {
                 /* We ignore fields we don't understand, as by AUX field
                  * contract. */
