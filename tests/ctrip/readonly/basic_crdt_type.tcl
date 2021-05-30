@@ -109,9 +109,9 @@ proc basic_test { type create check delete} {
             test [format "%s-del2" $type] {
                 set argv1 {key-del field value 1 100000 "1:2"}
                 run [replace [replace_client $create {[lindex $peers 0]}] $argv1] 1
-                set argv2 {key-del field1 value 1 100000 "1:2"}
+                set argv2 {key-del field1 value 1 100000 "1:3"}
                 run [replace [replace_client $delete {[lindex $peers 0]}] $argv2] 1
-                set result {key-del field1 {} 1 100000 "1:2" }
+                set result {key-del field1 {} 1 100000 "1:3" }
                 run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
             }
 
@@ -135,10 +135,10 @@ proc basic_test { type create check delete} {
                     run [replace [replace_client $check {[lindex $peers 0]}] $argv2] 1
                 }
                 test [format "%s-peerof-del" $type] {
-                    set argv2 {key field value 1 100000 "1:2"}
+                    set argv2 {key field value 1 100000 "1:3"}
                     run [replace [replace_client $delete {[lindex $peers 0]}] $argv2] 1
                     after 100
-                    set result {key field {} 1 100000 "1:2" }
+                    set result {key field {} 1 100000 "1:3" }
                     run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
                 }
                 test [format "%s-time-order" $type] {

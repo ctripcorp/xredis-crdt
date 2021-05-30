@@ -6,13 +6,29 @@ package require Tcl 8.5
 
 set tcl_precision 17
 source tests/support/redis.tcl
+source tests/support/xpipe_proxy.tcl
 source tests/support/server.tcl
+source tests/support/proxy_server.tcl
 source tests/support/tmpfile.tcl
 source tests/support/test.tcl
 source tests/support/util.tcl
 source tests/support/aof.tcl
 source tests/test_script/utils.tcl
+
 set ::all_tests {
+    ctrip/proxy/config
+    ctrip/proxy/one_proxy_peerof
+    ctrip/proxy/two_proxy_peerof
+    ctrip/proxy/ping 
+    ctrip/proxy/rdb
+    ctrip/proxy/slave
+
+    ctrip/integration/master-slave/rdb
+    ctrip/backstream/lazy_peerof
+    ctrip/backstream/some_data
+    ctrip/backstream/config_rdb
+    ctrip/backstream/config
+    ctrip/backstream/rdb
     ctrip/master-not-crdt/load-redis-rdb
     ctrip/integration/master-slave/replication2
     ctrip/unit/memefficiency
@@ -30,7 +46,6 @@ set ::all_tests {
     ctrip/master-not-crdt/convert-zset-on-load
     ctrip/master-not-crdt/slave-update-peer-repl-offset
     ctrip/integration/master-slave/slave-update-peer-offset-when-master-slave-add-sync
-    
     ctrip/integration/bug/free-replication-blocklog
     ctrip/integration/bug/peerof_other_peer_when_master-peer_full_sync
     ctrip/unit/crdt_set
@@ -50,6 +65,7 @@ set ::all_tests {
     ctrip/basic/basic_type
     ctrip/master-not-crdt/slave-redis
     ctrip/unit/aof
+
     ctrip/unit/crdt_publish
     ctrip/integration/master-slave/rdb3
     ctrip/integration/bug/redis-unfree-client-when-master-to-slave
@@ -91,7 +107,6 @@ set ::all_tests {
     ctrip/integration/master-slave/more-write-db
     ctrip/integration/master-slave/slave-peer-offset
     ctrip/master-not-crdt/peerof
-
     ctrip/unit/namespace
     
     ctrip/master-not-crdt/crdt_replid_reuse
@@ -119,7 +134,7 @@ set ::all_tests {
     ctrip/integration/composite/master-slave-failover
     ctrip/unit/crdt_conflict
     ctrip/unit/crdt_del_conflict
-    ctrip/integration/master-slave/rdb
+    
     ctrip/integration/master-slave/rdb2
     ctrip/integration/master-slave/psync2
     ctrip/integration/master-slave/replication-psync
@@ -143,7 +158,7 @@ set ::all_tests {
 
     ctrip/unit/peerof_backstream
     
-    
+    ctrip/master-not-crdt/master-redis-slave-crdt
 }   
 
 set ::temp_tests { 
@@ -229,6 +244,8 @@ set ::next_test 0
 
 set ::host 127.0.0.1
 set ::port 21111
+set ::proxy_tcp 31111
+set ::proxy_tls 41111
 set ::traceleaks 0
 set ::valgrind 0
 set ::stack_logging 1
@@ -358,12 +375,16 @@ proc test_server_main {} {
     # Start the client instances
     set ::clients_pids {}
     set start_port [expr {$::port+100}]
+    set proxy_tcp [expr {$::proxy_tcp+100}]
+    set proxy_tls [expr {$::proxy_tls+100}]
     for {set j 0} {$j < $::numclients} {incr j} {
         set start_port [find_available_port $start_port]
         set p [exec $tclsh [info script] {*}$::argv \
-            --client $port --port $start_port &]
+            --client $port --port $start_port --proxy_tcp $proxy_tcp --proxy_tls $proxy_tls &]
         lappend ::clients_pids $p
         incr start_port 10
+        incr proxy_tcp 10
+        incr proxy_tls 10
     }
 
     # Setup global state for the test server
@@ -603,6 +624,12 @@ for {set j 0} {$j < [llength $argv]} {incr j} {
         incr j
     } elseif {$opt eq {--port}} {
         set ::port $arg
+        incr j
+    } elseif {$opt eq {--proxy_tcp}} {
+        set ::proxy_tcp $arg
+        incr j
+    } elseif {$opt eq {--proxy_tls}} {
+        set ::proxy_tls $arg 
         incr j
     } elseif {$opt eq {--accurate}} {
         set ::accurate 1

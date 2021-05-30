@@ -708,7 +708,7 @@ slave-peer-offset "maste-slave" {
         # puts [read_from_replication_stream $slave_slave_repl]
         # puts [read_from_replication_stream $slave_slave_repl]
         # puts [read_from_replication_stream $slave_slave_repl]
-        print_file_matches $master_log
+        # print_file_matches $master_log
         assert_replication_stream $slave_repl  {
             {select 9}
             {crdt.multi 2}

@@ -283,8 +283,11 @@ proc run_foreach {num len} {
     # puts $foreach_core
 }
 
-for {set i 1} {$i <= $len} {incr i} {
-    test [format "foreach-%s" $i] {
-        run_foreach $i $len
-    }
+# for {set i 1} {$i <= $len} {incr i} {
+#     test [format "foreach-%s" $i] {
+#         run_foreach $i $len
+#     }
+# }
+test [format "foreach-%s" $len] {
+    run_foreach $len $len
 }

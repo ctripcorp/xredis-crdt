@@ -153,12 +153,16 @@ proc test_server_main {} {
     # Start the client instances
     set ::clients_pids {}
     set start_port [expr {$::port+100}]
+    set proxy_tcp [expr {$::proxy_tcp+100}]
+    set proxy_tls [expr {$::proxy_tls+100}]
     for {set j 0} {$j < $::numclients} {incr j} {
         set start_port [find_available_port $start_port]
         set p [exec $tclsh [info script] {*}$::argv \
-            --client $port --port $start_port &]
+            --client $port --port $start_port --proxy_tcp $proxy_tcp --proxy_tls $proxy_tls &]
         lappend ::clients_pids $p
         incr start_port 10
+        incr proxy_tcp 10
+        incr proxy_tls 10
     }
 
     # Setup global state for the test server
@@ -398,6 +402,12 @@ for {set j 0} {$j < [llength $argv]} {incr j} {
         incr j
     } elseif {$opt eq {--port}} {
         set ::port $arg
+        incr j
+    } elseif {$opt eq {--proxy_tcp}} {
+        set ::proxy_tcp $arg
+        incr j
+    } else if {$opt eq {--proxy_tls}} {
+        set ::proxy_tls $arg 
         incr j
     } elseif {$opt eq {--accurate}} {
         set ::accurate 1

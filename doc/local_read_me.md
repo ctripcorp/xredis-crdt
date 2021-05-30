@@ -1,1 +1,2 @@
-node node_modules/docsify serve ./
+npm i docsify-cli 
+docsify serve ./
