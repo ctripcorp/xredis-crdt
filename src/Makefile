@@ -147,7 +147,7 @@ endif
 
 REDIS_SERVER_NAME=redis-server
 REDIS_SENTINEL_NAME=redis-sentinel
-REDIS_SERVER_OBJ=adlist.o quicklist.o ae.o anet.o dict.o server.o sds.o zmalloc.o lzf_c.o lzf_d.o pqsort.o zipmap.o sha1.o ziplist.o release.o networking.o util.o object.o db.o replication.o rdb.o t_string.o t_list.o t_set.o t_zset.o t_hash.o config.o aof.o pubsub.o multi.o debug.o sort.o intset.o syncio.o cluster.o crc16.o endianconv.o slowlog.o scripting.o bio.o rio.o rand.o memtest.o crc64.o bitops.o sentinel.o notify.o setproctitle.o blocked.o hyperloglog.o latency.o sparkline.o redis-check-rdb.o redis-check-aof.o geo.o lazyfree.o module.o evict.o expire.o geohash.o geohash_helper.o childinfo.o defrag.o siphash.o rax.o ctrip.o ctrip_vector_clock.o ctrip_crdt_replication.o ctrip_crdt_rdb.o ctrip_crdt_common.o crcspeed.o ctrip_crdt_gc.o
+REDIS_SERVER_OBJ=adlist.o quicklist.o ae.o anet.o dict.o server.o sds.o zmalloc.o lzf_c.o lzf_d.o pqsort.o zipmap.o sha1.o ziplist.o release.o networking.o util.o object.o db.o replication.o rdb.o t_string.o t_list.o t_set.o t_zset.o t_hash.o config.o aof.o pubsub.o multi.o debug.o sort.o intset.o syncio.o cluster.o crc16.o endianconv.o slowlog.o scripting.o bio.o rio.o rand.o memtest.o crc64.o bitops.o sentinel.o notify.o setproctitle.o blocked.o hyperloglog.o latency.o sparkline.o redis-check-rdb.o redis-check-aof.o geo.o lazyfree.o module.o evict.o expire.o geohash.o geohash_helper.o childinfo.o defrag.o siphash.o rax.o ctrip.o ctrip_vector_clock.o ctrip_crdt_replication.o ctrip_crdt_rdb.o ctrip_crdt_common.o crcspeed.o ctrip_crdt_gc.o proxy.o xpipe_proxy.o
 REDIS_CLI_NAME=redis-cli
 REDIS_CLI_OBJ=anet.o adlist.o redis-cli.o zmalloc.o release.o anet.o ae.o crcspeed.o crc64.o
 REDIS_BENCHMARK_NAME=redis-benchmark
@@ -272,6 +272,10 @@ test-vc: ctrip_vector_clock.c ctrip_vector_clock.h
 test-crdt-common: ctrip_crdt_common.c ctrip_crdt_common.h
 	$(REDIS_CC) ctrip_crdt_common.c zmalloc.c sds.c util.c sha1.c -DCRDT_COMMON_TEST_MAIN $(FINAL_LIBS) -o /tmp/vc_test
 	/tmp/vc_test
+
+test-conn: anet.c anet.h ae.o sds.o
+	$(REDIS_CC) ./anet.c ./zmalloc.c  -DCONN_TEST_MAIN $(FINAL_LIBS) -o  /tmp/conn_test  ./ae.o ./sds.o
+	/tmp/conn_test
 
 .PHONY: lcov
 

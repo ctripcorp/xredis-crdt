@@ -355,22 +355,51 @@ void loadServerConfigFromString(char *config) {
             server.masterhost = sdsnew(argv[1]);
             server.masterport = atoi(argv[2]);
             server.repl_state = REPL_STATE_CONNECT;
-        } else if(!strcasecmp(argv[0], "peerof") && argc == 4) {
+        } else if(!strcasecmp(argv[0], "peerof")) {
             int gid = atoi(argv[1]);
             CRDT_Master_Instance* iter = getPeerMaster(gid);
-            if(iter != NULL && server.masterhost) {
-
-            } else {
+            // if(iter != NULL && server.masterhost) {
+            //     //slave use rdb data
+            // } else {
                 if(iter == NULL) {
                     iter = createPeerMaster(NULL, gid);
                 } 
                 // crdtReplicationSetMaster(gid, c->argv[2]->ptr, (int)port);
                 iter->masterhost = sdsnew(argv[2]);
                 iter->masterport = atoi(argv[3]);
+                
+                if(argc == 4) {
+                    serverLog(LL_WARNING, "load config peerof info: gid: %d, host: %s, port: %d", gid, iter->masterhost, iter->masterport);
+                } else {
+                    for(int i = 4; i < argc; i++) {
+                        if(strcasecmp(argv[i], "proxy-type") == 0) {
+                            int proxy_type = getProxyType(argv[++i]);
+                            if(proxy_type == NONE_PROXY) {
+                                err = "peerof proxy type unknown";
+                                goto loaderr;
+                            }
+                            void* proxy = parseProxyBySdsArray(proxy_type, argv, argc);
+                            if(proxy == NULL) {
+                                err = "peerof proxy parse error";
+                                goto loaderr;
+                            }
+                            if(iter->proxy_type != NONE_PROXY) {
+                                freeProxy(iter->proxy_type, iter->proxy);
+                            }
+                            iter->proxy_type = proxy_type;
+                            iter->proxy = proxy;
+                        }
+                    }
+                }
                 crdtServer.crdtMasters[gid] = iter;
-                serverLog(LL_WARNING, "load config peerof info: gid: %d, host: %s, port: %d", gid, iter->masterhost, iter->masterport);
-            } 
-        }else if (!strcasecmp(argv[0],"repl-ping-slave-period") && argc == 2) {
+            // } 
+        } else if(!strcasecmp(argv[0], "restart-lazy-peerof-time") && argc == 2) {
+            server.restart_lazy_peerof_time = atoi(argv[1]);
+            if (server.restart_lazy_peerof_time <= 0) {
+                err = "restart_lazy_peerof_time must be 1 or greater";
+                goto loaderr;
+            }
+        } else if (!strcasecmp(argv[0],"repl-ping-slave-period") && argc == 2) {
             server.repl_ping_slave_period = atoi(argv[1]);
             if (server.repl_ping_slave_period <= 0) {
                 err = "repl-ping-slave-period must be 1 or greater";
@@ -1107,6 +1136,8 @@ void configSetCommand(client *c, struct redisServer *srv) {
       "lfu-decay-time",srv->lfu_decay_time,0,LLONG_MAX) {
     } config_set_numerical_field(
       "timeout",srv->maxidletime,0,LONG_MAX) {
+    } config_set_numerical_field (
+        "restart-lazy-peerof-time", srv->restart_lazy_peerof_time, 0, LONG_MAX) {
     } config_set_numerical_field(
       "active-defrag-threshold-lower",srv->active_defrag_threshold_lower,0,1000) {
     } config_set_numerical_field(
@@ -1293,6 +1324,7 @@ void configGetCommand(client *c, struct redisServer *srv) {
     config_get_numerical_field("lfu-log-factor",srv->lfu_log_factor);
     config_get_numerical_field("lfu-decay-time",srv->lfu_decay_time);
     config_get_numerical_field("timeout",srv->maxidletime);
+    config_get_numerical_field("restart-lazy-peerof-time",srv->restart_lazy_peerof_time);
     config_get_numerical_field("active-defrag-threshold-lower",srv->active_defrag_threshold_lower);
     config_get_numerical_field("active-defrag-threshold-upper",srv->active_defrag_threshold_upper);
     config_get_numerical_field("active-defrag-ignore-bytes",srv->active_defrag_ignore_bytes);
@@ -1826,10 +1858,10 @@ void rewriteConfigSaveOption(struct rewriteConfigState *state) {
 void rewriteConfigVectorUnit(struct rewriteConfigState *state) {
     VectorClockUnit unit = getVectorClockUnit(crdtServer.vectorClock,crdtServer.crdt_gid);
     
-    if(!isNullVectorClockUnit(unit)) {
+    // if(!isNullVectorClockUnit(unit)) {
         long long vcu = get_logic_clock(unit);
         rewriteConfigNumericalOption(state, "local-clock", vcu, CONFIG_DEFAULT_VECTORCLOCK_UNIT);
-    }
+    // }
 }
 
 void rewriteConfigNameSpaceOption(struct rewriteConfigState *state) {
@@ -1872,14 +1904,22 @@ void rewriteConfigSlaveofOption(struct rewriteConfigState *state) {
 void rewriteConfigPeerofOption(struct rewriteConfigState *state) {
     char *option = "peerof";
     sds line;
-
+    rewriteConfigMarkAsProcessed(state,"peerof");
     for(int i = 0; i < (1 << GIDSIZE); i++) {
         CRDT_Master_Instance* peer = getPeerMaster(i);
         if(peer == NULL) { continue; }
         line = sdscatprintf(sdsempty(),"%s %lld %s %d", option, peer->gid,
             peer->masterhost, peer->masterport);
+        if(peer->proxy_type != NONE_PROXY) {
+            sds proxy_config = getProxyConfigInfo(peer->proxy_type, peer->proxy);
+            if(proxy_config != NULL) {
+                line = sdscatprintf(line, " %s", proxy_config);
+                sdsfree(proxy_config);
+            }
+        }
         rewriteConfigRewriteLine(state,option,line,1);
     }
+    
 } 
 
 /* Rewrite the notify-keyspace-events option. */
@@ -2094,6 +2134,7 @@ int rewriteConfig(char *path) {
     rewriteConfigStringOption(state,"unixsocket",server.unixsocket,NULL);
     rewriteConfigOctalOption(state,"unixsocketperm",server.unixsocketperm,CONFIG_DEFAULT_UNIX_SOCKET_PERM);
     rewriteConfigNumericalOption(state,"timeout",server.maxidletime,CONFIG_DEFAULT_CLIENT_TIMEOUT);
+    rewriteConfigNumericalOption(state, "restart-lazy-peerof-time", server.restart_lazy_peerof_time, CONFIG_DEFAULT_RESTART_LAZY_PEEROF_TIME);
     rewriteConfigNumericalOption(state,"tcp-keepalive",server.tcpkeepalive,CONFIG_DEFAULT_TCP_KEEPALIVE);
     rewriteConfigNumericalOption(state,"slave-announce-port",server.slave_announce_port,CONFIG_DEFAULT_SLAVE_ANNOUNCE_PORT);
     rewriteConfigEnumOption(state,"loglevel",server.verbosity,loglevel_enum,CONFIG_DEFAULT_VERBOSITY);

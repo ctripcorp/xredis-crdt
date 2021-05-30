@@ -733,6 +733,14 @@ int rdbSaveAuxFieldCrdt(rio *rdb) {
             == -1)  return C_ERR;
         if (rdbSaveAuxFieldStrInt(rdb, "peer-master-repl-offset", replid_offset)
             == -1)  return C_ERR;
+        if (masterInstance->proxy_type != NONE_PROXY) {
+            if (rdbSaveAuxFieldStrInt(rdb, "peer-proxy-type", masterInstance->proxy_type)
+                == -1)  return C_ERR;
+            sds proxy_info = proxy2str(masterInstance->proxy_type, masterInstance->proxy);
+            if (rdbSaveAuxFieldStrStr(rdb, "peer-proxy", proxy_info)
+                == -1)  return C_ERR;
+            sdsfree(proxy_info);
+        }
         // if(!isNullVectorClock( masterInstance->vectorClock)) {
         //     sds ovc = vectorClockToSds(masterInstance->vectorClock);
         //     if (rdbSaveAuxFieldStrStr(rdb, "peer-master-ovc", ovc) == -1) {
@@ -781,6 +789,7 @@ int iAmMaster() {
     }
     return C_ERR;
 }
+
 int isSameTypeWithMaster() {
     if(crdt_enabled && server.master_is_crdt) {
         return C_OK;

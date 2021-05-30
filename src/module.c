@@ -1669,18 +1669,21 @@ long long RM_CurrentVectorClock() {
 long long RM_CurrentGid(void) {
     return crdtServer.crdt_gid;
 }
+
 int RM_CheckGid(int gid) {
     if(check_gid(gid)) {
         return REDISMODULE_OK;
     }
     return REDISMODULE_ERR;
 }
+
 void jumpVectorClock() {
     long long qps = getQps();
     long long jump_vcu = max(qps * 60 * 60 * 24 , 1000000);
     serverLog(LL_WARNING, "jump vcu:%lld", jump_vcu);
     incrLocalVcUnit(jump_vcu);
 }
+
 void RM_IncrLocalVectorClock (long long delta) {
     incrLocalVcUnit(delta);
 }

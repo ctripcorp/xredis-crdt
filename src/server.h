@@ -73,7 +73,8 @@ typedef long long mstime_t; /* millisecond time type. */
 #include "endianconv.h"
 #include "crc64.h"
 #include "ctrip_vector_clock.h"
-
+int isNullDb();
+long long get_min_backstream_vcu();
 
 /* Error codes */
 #define C_OK                    0
@@ -87,6 +88,7 @@ typedef long long mstime_t; /* millisecond time type. */
 #define CONFIG_DEFAULT_SERVER_PORT        6379    /* TCP port */
 #define CONFIG_DEFAULT_TCP_BACKLOG       511     /* TCP listen backlog */
 #define CONFIG_DEFAULT_CLIENT_TIMEOUT       0       /* default client timeout: infinite */
+#define CONFIG_DEFAULT_RESTART_LAZY_PEEROF_TIME  11000 
 #define CONFIG_DEFAULT_DBNUM     16
 #define CONFIG_MAX_LINE    1024
 #define CRON_DBS_PER_CALL 16
@@ -167,7 +169,7 @@ typedef long long mstime_t; /* millisecond time type. */
 #define CONFIG_DEFAULT_DEFRAG_CYCLE_MAX 75 /* 75% CPU max (at upper threshold) */
 #define CONFIG_DEFAULT_PROTO_MAX_BULK_LEN (512ll*1024*1024) /* Bulk request max size */
 #define CONFIG_DEFAULT_GID -1
-#define CONFIG_DEFAULT_VECTORCLOCK_UNIT 0
+#define CONFIG_DEFAULT_VECTORCLOCK_UNIT -1
 
 #define ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP 20 /* Loopkups per loop. */
 #define ACTIVE_EXPIRE_CYCLE_FAST_DURATION 1000 /* Microseconds */
@@ -411,6 +413,8 @@ typedef long long mstime_t; /* millisecond time type. */
 
 /* Scripting */
 #define LUA_SCRIPT_TIME_LIMIT 5000 /* milliseconds */
+/* CLOCK */
+#define DEFAULT_LOCAL_CLOCK -1
 
 /* Units */
 #define UNIT_SECONDS 0
@@ -701,6 +705,25 @@ typedef struct readyList {
     robj *key;
 } readyList;
 struct CRDT_Master_Instance;
+#define NONE_PROXY 0
+#define XPIPE_PROXY 1
+struct Point {
+    sds host;
+    long port;
+} Point;
+int getProxyType(sds type);
+void* parseProxyByRobjArray(int proxy_type, robj** argv, int argc); 
+void* parseProxyBySdsArray(int proxy_type, sds* argv, int argc); 
+sds getProxyInfo(int peer_index, int proxy_type, void* proxy);
+void freeProxy(int proxy_type, void* proxy);
+sds getProxyConfigInfo(int proxy_type, void* proxy);
+int eqProxy(int proxy_type, void* p1, void* p2);
+int proxyConnect(int proxy_type, void* proxy, char* host, int port);
+int initProxy(int fd, int proxy_type, void* p, char* host, int port);
+void* str2proxy(int proxy_type, sds str);
+sds proxy2str(int proxy_type, void* proxy);
+void* proxyHiRedis(int proxy_type, void* proxy, char* host, int port);
+
 /* With multiplexing we need to take per-client state.
  * Clients are taken in a linked list. */
 typedef struct client {
@@ -920,6 +943,9 @@ typedef struct CRDT_Master_Instance {
     VectorClock vectorClock;
     int dbid;
     VectorClock backstream_vc;
+    long long lazy_time; /*lazy_time*/
+    int proxy_type;
+    void* proxy;
 } CRDT_Master_Instance;
 
 /*-----------------------------------------------------------------------------
@@ -1291,6 +1317,7 @@ struct redisServer {
     int peer_set;
     long long start_time;
     size_t multi_process_sync;
+    int restart_lazy_peerof_time; 
 }redisServer;
 
 typedef struct pubsubPattern {
@@ -1608,6 +1635,7 @@ void createReplicationBacklog();
 void feedReplicationBacklogWithObject(struct redisServer *srv, robj *o);
 int isSameTypeWithMaster();
 int iAmMaster();
+int iAmReStart();
 
 /* CRDT Replications */
 void crdtReplicationCron(void);
@@ -1618,6 +1646,7 @@ void crdtMergeEndCommand(client *c);
 void peerofCommand(client *c);
 int peerBackStream();
 void cleanSlavePeerBackStream();
+int lazyPeerof();
 void peerChangeCommand(client *c);
 void crdtReplicationSetMaster(int gid, char *ip, int port);
 void crdtReplicationCacheMaster(client *c);
