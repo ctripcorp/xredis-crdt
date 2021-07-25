@@ -263,8 +263,8 @@ start_server {tags {"crdt-del"}  overrides {crdt-gid 1 loglevel {debug}} config 
             wait [lindex $peers 1] 0 crdt.info [lindex $stdouts 1]
             assert_equal [crdt_conflict [lindex $peers 0] type] 3
             assert_equal [crdt_conflict [lindex $peers 0] modify] 15
-            assert_equal [crdt_conflict [lindex $peers 0] merge] 2
-            assert_equal [crdt_conflict [lindex $peers 0] set] 5
+            assert_equal [crdt_conflict [lindex $peers 0] merge] 1
+            assert_equal [crdt_conflict [lindex $peers 0] set] 4
 
             set before1 [crdt_conflict [lindex $peers 1] del]
             set before0 [crdt_conflict [lindex $peers 0] del]
