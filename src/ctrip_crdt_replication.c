@@ -1284,33 +1284,37 @@ void crdtReplicationDiscardCachedMaster(CRDT_Master_Instance *crdtMaster) {
     freeClient(crdtMaster->cached_master);
     crdtMaster->cached_master = NULL;
 }
-void freezePeerClient(CRDT_Master_Instance* peerMaster) {
-    client *c = peerMaster->master;
-    client *nc =createClient(-1);
-    nc->db = c->db;
-    nc->flags = c->flags;
-    nc->reploff = c->reploff;
-    memcpy(nc->replid, c->replid, sizeof(c->replid));
-    nc->gid = c->gid;
-    c->flags &= ~CLIENT_CRDT_MASTER;
-    freeClient(c);
-    peerMaster->master = nc;
-}
+
 void crdtReplicationAllPeersStateReset() {
     for (int gid = 0; gid < (MAX_PEERS + 1); gid++) {
         CRDT_Master_Instance *crdtMaster = crdtServer.crdtMasters[gid];
         if(crdtMaster == NULL) continue;
+        client* c = createClient(-1);
+        c->gid = gid;
+        if(crdtMaster->master != NULL) {
+            //close fd
+            c->db = crdtMaster->master->db;
+            c->flags = crdtMaster->master->flags;
+            c->reploff = crdtMaster->master->reploff;
+            memcpy(c->replid, crdtMaster->master->replid, sizeof(c->replid));
+        } if(crdtMaster->cached_master != NULL) {
+            c->db = crdtMaster->cached_master->db;
+            c->flags = crdtMaster->cached_master->flags;
+            c->reploff = crdtMaster->cached_master->reploff;
+            memcpy(c->replid, crdtMaster->cached_master->replid, sizeof(c->replid));
+        } 
+
         crdtReplicationDiscardCachedMaster(crdtMaster);
         if(crdtMaster->repl_state == REPL_STATE_CONNECTED) {
             if(crdtMaster->master) {
-                // crdtReplicationCacheMaster(crdtMaster->master);
-                // crdtMaster->master = crdtMaster->cached_master;
-                // crdtMaster->cached_master = NULL;
-                freezePeerClient(crdtMaster);
+                crdtMaster->master->flags &= ~CLIENT_CRDT_MASTER;
+                freeClient(crdtMaster->master);
+                crdtMaster->master = NULL;
             }
         } else {
             crdtCancelReplicationHandshake(gid);
         }
+        crdtMaster->master = c;
         crdtMaster->repl_state = REPL_STATE_NONE;
     }
 }
