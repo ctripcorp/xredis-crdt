@@ -221,21 +221,33 @@ void peerofCommand(client *c) {
     /* Check if we are already attached to the specified master */
     CRDT_Master_Instance *peerMaster = getPeerMaster(gid);
     if(peerMaster && !strcasecmp(peerMaster->masterhost, c->argv[2]->ptr)
-       && peerMaster->masterport == port && VectorClockEqual(peerMaster->backstream_vc, backstream_vc) && proxy_type == peerMaster->proxy_type && eqProxy(proxy_type, proxy, peerMaster->proxy)) {
-        if(peerMaster->lazy_time != NO_LAZY_TIME) {
-            // peerMaster set lazy_time when restart redis
-            // exec peerof command can't set lazy_time
-            // peerof can clean lazy_time
-            sds client = catClientInfoString(sdsempty(), c);
-            serverLog(LL_NOTICE,"[CRDT]PEER OF  %lld %s:%d clean lazy_time enabled (user request from '%s')",
-                gid, peerMaster->masterhost, peerMaster->masterport, client);
-            sdsfree(client);
-            peerMaster->lazy_time = NO_LAZY_TIME;
-            addReplySds(c,sdsnew("+OK Clean lazy_time\r\n"));
+       && peerMaster->masterport == port ) {
+        
+        if(proxy_type == peerMaster->proxy_type && peerMaster->repl_state == REPL_STATE_CONNECTED && proxyIsKeepConnected(proxy_type, peerMaster->proxy, proxy) ) {
+            freeProxy(proxy_type, peerMaster->proxy);
+            peerMaster->proxy = proxy;
+            server.dirty ++;
+            addReply(c,shared.ok);
+            return;
         }
-        serverLog(LL_NOTICE,"[CRDT]PEER OF would result into synchronization with the master we are already connected with. No operation performed.");
-        addReplySds(c,sdsnew("+OK Already connected to specified master\r\n"));
-        return;
+        if(VectorClockEqual(peerMaster->backstream_vc, backstream_vc) && proxy_type == peerMaster->proxy_type && eqProxy(proxy_type, proxy, peerMaster->proxy)) {
+            if(peerMaster->lazy_time != NO_LAZY_TIME) {
+                // peerMaster set lazy_time when restart redis
+                // exec peerof command can't set lazy_time
+                // peerof can clean lazy_time
+                sds client = catClientInfoString(sdsempty(), c);
+                serverLog(LL_NOTICE,"[CRDT]PEER OF  %lld %s:%d clean lazy_time enabled (user request from '%s')",
+                    gid, peerMaster->masterhost, peerMaster->masterport, client);
+                sdsfree(client);
+                peerMaster->lazy_time = NO_LAZY_TIME;
+                addReplySds(c,sdsnew("+OK Clean lazy_time\r\n"));
+                return;
+            }
+            serverLog(LL_NOTICE,"[CRDT]PEER OF would result into synchronization with the master we are already connected with. No operation performed.");
+            addReplySds(c,sdsnew("+OK Already connected to specified master\r\n"));
+            return;
+        }
+        
     }
     /* There was no previous master or the user specified a different one,
      * we can continue. */
@@ -821,7 +833,9 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
     if (crdtMaster->repl_state == REPL_STATE_CONNECTING) {
         if(crdtMaster->proxy_type != NONE_PROXY) {
             //test proxy 
-            if(!initProxy(fd, crdtMaster->proxy_type, crdtMaster->proxy, crdtMaster->masterhost, crdtMaster->masterport)) {
+            char* slave_announce_ip = server.slave_announce_ip ? server.slave_announce_ip: NET_FIRST_BIND_ADDR;
+            int slave_announce_port = server.slave_announce_port? server.slave_announce_port: server.port;
+            if(!initProxy(fd, crdtMaster->proxy_type, crdtMaster->proxy, slave_announce_ip, slave_announce_port, crdtMaster->masterhost, crdtMaster->masterport)) {
                 serverLog(LL_WARNING,"[CRDT] proxy init error");
                 goto error;
             }   
@@ -2188,7 +2202,9 @@ void crdtReplicationCommand(client *c) {
 
 redisContext* createReidsConnect(CRDT_Master_Instance* inter) {
     if(inter->proxy_type != NONE_PROXY) {
-        return proxyHiRedis(inter->proxy_type, inter->proxy, inter->masterhost, inter->masterport);
+        char* slave_announce_ip = server.slave_announce_ip ? server.slave_announce_ip: NET_FIRST_BIND_ADDR;
+        int slave_announce_port = server.slave_announce_port? server.slave_announce_port: server.port;
+        return proxyHiRedis(inter->proxy_type, inter->proxy, slave_announce_ip, slave_announce_port, inter->masterhost, inter->masterport);
     } else {
         redisContext* r = redisConnect(inter->masterhost, inter->masterport);
         return r;

@@ -719,11 +719,11 @@ void freeProxy(int proxy_type, void* proxy);
 sds getProxyConfigInfo(int proxy_type, void* proxy);
 int eqProxy(int proxy_type, void* p1, void* p2);
 int proxyConnect(int proxy_type, void* proxy, char* host, int port);
-int initProxy(int fd, int proxy_type, void* p, char* host, int port);
+int initProxy(int fd, int proxy_type, void* p, char* src_host, int src_port, char* host, int port);
 void* str2proxy(int proxy_type, sds str);
 sds proxy2str(int proxy_type, void* proxy);
-void* proxyHiRedis(int proxy_type, void* proxy, char* host, int port);
-
+void* proxyHiRedis(int proxy_type, void* proxy, char* src_host, int src_port, char* host, int port);
+int proxyIsKeepConnected(int proxy_type, void* current, void* proxy);
 /* With multiplexing we need to take per-client state.
  * Clients are taken in a linked list. */
 typedef struct client {
