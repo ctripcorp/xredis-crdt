@@ -36,7 +36,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 assert_equal [$peer get k] v
             }
             test "master-peer2" {
-                $master peerof $peer_gid $peer_host $peer_port proxy-type XPIPE-PROXY proxy-server [format "%s:%d;%s:%d" {127.0.0.1} 0 $proxy_host $proxy_port]
+                $master peerof $peer_gid $peer_host $peer_port proxy-type XPIPE-PROXY proxy-server [format "%s:%d,%s:%d" {127.0.0.1} 0 $proxy_host $proxy_port]
                 wait_for_peer_sync $master
                 $peer set k v1 
                 after 1000

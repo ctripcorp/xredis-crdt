@@ -25,6 +25,33 @@ proc wait { client index type log}  {
         error "assertion: Master-Slave not correctly synchronized"
     }
 }
+
+start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
+    set master [srv 0 client]
+    set master_gid 1
+    set master_host [srv 0 host]
+    set master_port [srv 0 port]
+    set master_stdout [srv 0 stdout]
+    set master_stderr [srv 0 stderr]
+    start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
+        set slave [srv 0 client]
+        set slave_gid 2
+        set slave_host [srv 0 host]
+        set slave_port [srv 0 port]
+        set slave_log [srv 0 stdout]
+        $slave slaveof $master_host $master_port
+        wait_for_sync $slave 
+        set load_handle2 [start_write_load $master_host $master_port 3]
+        $master setex k 1 v 
+        after 1100
+        assert_equal [$slave exists k] 0
+        assert_equal [$slave get k]  ""
+        stop_write_load $load_handle2
+
+    }
+}
+
+
 start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskless-sync-delay 1} module {crdt.so}} {
     set peers {}
     set peer_hosts {}

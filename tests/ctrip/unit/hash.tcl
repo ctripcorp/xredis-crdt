@@ -252,6 +252,10 @@ start_server {tags {"hash"} overrides {crdt-gid 1} config {crdt.conf} module {cr
         lappend rv [r hexists bighash nokey]
     } {1 0 1 0}
 
+    test {HEXISTS2} {
+        assert_equal [r hexists ctrip_hash nokey] 0
+    } 
+
     # test {Is a ziplist encoded Hash promoted on big payload?} {
     #     r hset smallhash foo [string repeat a 1024]
     #     r debug object smallhash

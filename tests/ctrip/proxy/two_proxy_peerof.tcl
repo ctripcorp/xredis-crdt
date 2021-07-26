@@ -31,7 +31,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 # puts $proxy2_port
                 test "master-peer" {
                     $peer set test v
-                    $master peerof $peer_gid $peer_host $peer_port proxy-type XPIPE-PROXY proxy-server $proxy_host:$proxy_port proxy-proxytls PROXYTLS://$proxy2_host:$proxy2_tls_port
+                    $master peerof $peer_gid $peer_host $peer_port proxy-type XPIPE-PROXY proxy-server $proxy_host:$proxy_port proxy-params PROXYTLS://$proxy2_host:$proxy2_tls_port
                     wait_for_peer_sync $master
                     $peer set k v 
                     after 1000
@@ -39,7 +39,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                     assert_equal [$master get test] v
                 }
                 test "master-peer2" {
-                    $master peerof $peer_gid $peer_host $peer_port proxy-type XPIPE-PROXY proxy-server [format "%s:%d;%s:%d" {127.0.0.1} 0 $proxy_host $proxy_port] PROXYTLS://$proxy2_host:$proxy2_tls_port
+                    $master peerof $peer_gid $peer_host $peer_port proxy-type XPIPE-PROXY proxy-server [format "%s:%d,%s:%d" {127.0.0.1} 0 $proxy_host $proxy_port] PROXYTLS://$proxy2_host:$proxy2_tls_port
                     wait_for_peer_sync $master
                     $peer set k v1 
                     after 1000
