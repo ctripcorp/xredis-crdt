@@ -15,7 +15,18 @@ source tests/support/util.tcl
 source tests/support/aof.tcl
 source tests/test_script/utils.tcl
 
+
 set ::all_tests {
+  
+    ctrip/proxy/config
+    ctrip/proxy/one_proxy_peerof
+    ctrip/proxy/two_proxy_peerof
+    ctrip/proxy/ping 
+    ctrip/proxy/rdb
+    ctrip/proxy/slave
+    
+}
+set ::all_tests1 {
     ctrip/proxy/config
     ctrip/proxy/one_proxy_peerof
     ctrip/proxy/two_proxy_peerof
@@ -59,7 +70,6 @@ set ::all_tests {
     ctrip/unit/crdt_command
     ctrip/basic/set
     ctrip/unit/gc
-    ctrip/integration/master-master/replication
     ctrip/readonly/basic_crdt_type_del
     ctrip/basic/basic_crdt_type_del
     ctrip/basic/basic_type
@@ -142,7 +152,6 @@ set ::all_tests {
     ctrip/unit/crdt_del
     ctrip/unit/merge_different_type
     ctrip/unit/crdt_hdel_mem_leak
-    ctrip/unit/gc
     ctrip/unit/pubsub
     ctrip/integration/bug/redis-crash-when-full-sync-hash-merge
     ctrip/integration/bug/redis-when-full-sync-mater-timeout-vectorclock-update

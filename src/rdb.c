@@ -1731,7 +1731,7 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                 if (masterInstance == NULL) {
                     masterInstance = createPeerMaster(NULL, gid);
                     crdtServer.crdtMasters[gid] = masterInstance;
-                } else if(iAmMaster()) {
+                } else if(iAmMaster() == C_OK) {
                     decrRefCount(auxkey);
                     decrRefCount(auxval);
                     continue;
