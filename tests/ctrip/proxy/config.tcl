@@ -13,6 +13,7 @@ proc wait_backstream {r} {
         }
     }
 }
+
 start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
     set master [srv 0 client]
     set master_gid 1
@@ -41,6 +42,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                     $peer set test v
                     $master peerof $peer_gid $peer_host $peer_port proxy-type XPIPE-PROXY proxy-server $proxy_host:$proxy_port proxy-params PROXYTLS://$proxy2_host:$proxy2_tls_port
                     wait_for_peer_sync $master
+                    assert_equal [crdt_status $master peer0_proxy_params] PROXYTLS://$proxy2_host:$proxy2_tls_port
                     test "v" {
                         $peer set k v 
                         after 1000
@@ -52,12 +54,16 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                     $master peerof $peer_gid $peer_host $peer_port proxy-type XPIPE-PROXY proxy-server 127.0.0.1:0,$proxy_host:$proxy_port proxy-params PROXYTLS://$proxy2_host:$proxy2_tls_port
                     set sync_partial_ok_num [crdt_stats $peer sync_partial_ok]
                     wait_for_peer_sync $master
+                    assert_equal [crdt_status $master peer0_proxy_params] PROXYTLS://$proxy2_host:$proxy2_tls_port
                     assert_equal $sync_partial_ok_num [crdt_stats $peer sync_partial_ok]
+                    assert_equal [crdt_status $master peer0_proxy_server] $proxy_host:$proxy_port
 
-                    $master peerof $peer_gid $peer_host $peer_port proxy-type XPIPE-PROXY proxy-server 127.0.0.1:0,$proxy_host:$proxy_port proxy-params [format "PROXYTLS://%s:%d;FORWARD_FOR 127.0.0.1:1111;" $proxy2_host $proxy2_tls_port ]
+                    set params [format "PROXYTLS://%s:%d;FORWARD_FOR 127.0.0.1:1111;" $proxy2_host $proxy2_tls_port ]
+                    $master peerof $peer_gid $peer_host $peer_port proxy-type XPIPE-PROXY proxy-server 127.0.0.1:0,$proxy_host:$proxy_port proxy-params $params
                     wait_for_peer_sync $master
+                    assert_equal [crdt_status $master peer0_proxy_params] $params
+                    assert_equal [crdt_status $master peer0_proxy_server] $proxy_host:$proxy_port
 
-                    
                     #reset peerof
                     $master peerof $peer_gid $peer_host $peer_port proxy-type XPIPE-PROXY proxy-server 127.0.0.1:0,$proxy_host:$proxy_port proxy-params PROXYTLS://$proxy2_host:$proxy2_tls_port
                     wait_for_peer_sync $master
