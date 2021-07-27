@@ -80,7 +80,7 @@ sds getXpipeProxyInfo(int peer_index, void* p) {
         "peer%d_proxy_type:%s\r\n"
         "peer%d_proxy_servers:%s\r\n"
         "peer%d_proxy_server:%s\r\n"
-        "peer%d_proxy_options:%s\r\n", 
+        "peer%d_proxy_params:%s\r\n", 
         peer_index, "xpipe_proxy",
         peer_index, servers_str,
         peer_index, server_info,
