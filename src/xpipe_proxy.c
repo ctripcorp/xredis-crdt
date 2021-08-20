@@ -2,26 +2,67 @@
 #include "xpipe_proxy.h"
 #include "hiredis.h"
 
+#define XPIPE_PROXY_NONE 0
+#define XPIPE_PROXY_TCP 1
+#define XPIPE_PROXY_TLS 2
+const char* PROXYTCP = "PROXYTCP";
+const char* PROXYTLS = "PROXYTLS";
+
+// sds parseProxyType(sds value, int* type) {
+//     printf("parse type : %s \n", value);
+//     if(strcmp(value, PROXYTCP) == 0) {
+//         *type = XPIPE_PROXY_TCP;
+//         sdsrange(value, strlen(PROXYTCP), -1);
+//         return value;
+//     }
+//     if(strcmp(value, PROXYTLS) == 0) {
+//         // *type = XPIPE_PROXY_TLS;
+//         // sdsrange(value, strlen(PROXYTLS), -1);
+//         // return value;
+//         return NULL;
+//     }
+//     //default
+//     *type = XPIPE_PROXY_NONE;
+//     return value;
+// }
+
 struct Point* parsePoint(sds str) {
     struct Point* point = zmalloc(sizeof(struct Point));
+    point->host = NULL;
     int len = 0;
-    sds *vcUnits = sdssplitlen(str, sdslen(str), ":", 1, &len);
+    sds *protocolUnits = sdssplitlen(str, sdslen(str), ":", 1, &len);
+    point->type = XPIPE_PROXY_NONE;
+    sds port_str = NULL;
     if(len == 2) {
-        point->host = sdsdup(vcUnits[0]);
-        long port = 0;
-        if(string2l(vcUnits[1], sdslen(vcUnits[1]), &port)) {
-            point->port = port;
+        point->host = sdsdup(protocolUnits[0]);
+        port_str = protocolUnits[1];
+    } else if(len == 3) {
+        //only parse PROXYTCP
+        if(strcmp(PROXYTCP, protocolUnits[0]) == 0) {
+            point->type = XPIPE_PROXY_TCP;
+            sds host = sdsdup(protocolUnits[1]);
+            sdsrange(host, 2, -1);
+            point->host = host;
+            port_str = protocolUnits[2];
         } else {
-            sdsfree(point->host);
-            zfree(point);
-            point = NULL;
-        }   
+            goto error;
+        } 
     } else {
-        zfree(point);
-        point = NULL;
+        goto error; 
     }
-    sdsfreesplitres(vcUnits, len);
+    long port = 0;
+    if(string2l(port_str, sdslen(port_str), &port)) {
+        point->port = port;
+    } else {
+        goto error;
+    }  
+    sdsfreesplitres(protocolUnits, len);
     return point;
+error:
+    if(point->host != NULL) sdsfree(point->host);
+    zfree(point);
+    sdsfreesplitres(protocolUnits, len);
+    return NULL;
 }
 
 void freePoint(struct Point* point) {
@@ -58,7 +99,18 @@ void* createXpipeProxy() {
 }
 
 sds getPointInfo(struct Point* point) {
-    return sdscatprintf(sdsempty(), "%s:%ld", point->host, point->port);
+    char* type = "";
+    switch (point->type)
+    {
+    case XPIPE_PROXY_TCP:
+        type = "PROXTCP://";
+        break;
+    case XPIPE_PROXY_TLS:
+        type = "PROXYTLS://";
+    default:
+        break;
+    }
+    return sdscatprintf(sdsempty(), "%s%s:%d", type, point->host, point->port);
 }
 
 sds getProxyServersInfo(struct XpipeProxy* proxy) {
@@ -79,13 +131,16 @@ sds getXpipeProxyInfo(int peer_index, void* p) {
     sds result = sdscatprintf(sdsempty(), 
         "peer%d_proxy_type:%s\r\n"
         "peer%d_proxy_servers:%s\r\n"
-        "peer%d_proxy_server:%s\r\n"
-        "peer%d_proxy_params:%s\r\n", 
-        peer_index, "xpipe_proxy",
+        "peer%d_proxy_server:%s\r\n",
+        peer_index, "XPIPE-PROXY",
         peer_index, servers_str,
-        peer_index, server_info,
-        peer_index, proxy->params
+        peer_index, server_info
     );
+    if (proxy->params != NULL) {
+        result = sdscatprintf(result, 
+        "peer%d_proxy_params:%s\r\n", 
+        peer_index, proxy->params);
+    }
     sdsfree(server_info);
     sdsfree(servers_str);
     return result;
@@ -95,7 +150,7 @@ void* parseXpipeProxyByArray(void** argv, int argc, getSdsByIter get) {
     struct XpipeProxy* proxy = createXpipeProxy();
     for(int i = 4; i < argc; i++) {
         serverLog(LL_WARNING, "%s", get(argv[i]));
-        if(strcasecmp(get(argv[i]), "proxy-server") == 0) {
+        if(strcasecmp(get(argv[i]), "proxy-servers") == 0) {
             int len = 0;
             struct Point** server = parseServers(get(argv[++i]), &len);
             serverLog(LL_WARNING, "%s len: %d", get(argv[i]), len);

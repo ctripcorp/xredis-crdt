@@ -709,7 +709,8 @@ struct CRDT_Master_Instance;
 #define XPIPE_PROXY 1
 struct Point {
     sds host;
-    long port;
+    int port;
+    int type;
 } Point;
 int getProxyType(sds type);
 void* parseProxyByRobjArray(int proxy_type, robj** argv, int argc); 
