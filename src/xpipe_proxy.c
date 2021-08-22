@@ -103,7 +103,7 @@ sds getPointInfo(struct Point* point) {
     switch (point->type)
     {
     case XPIPE_PROXY_TCP:
-        type = "PROXTCP://";
+        type = "PROXYTCP://";
         break;
     case XPIPE_PROXY_TLS:
         type = "PROXYTLS://";
@@ -149,13 +149,10 @@ typedef char* getSdsByIter(void* value);
 void* parseXpipeProxyByArray(void** argv, int argc, getSdsByIter get) {
     struct XpipeProxy* proxy = createXpipeProxy();
     for(int i = 4; i < argc; i++) {
-        serverLog(LL_WARNING, "%s", get(argv[i]));
         if(strcasecmp(get(argv[i]), "proxy-servers") == 0) {
             int len = 0;
             struct Point** server = parseServers(get(argv[++i]), &len);
-            serverLog(LL_WARNING, "%s len: %d", get(argv[i]), len);
             if( server != NULL) {
-                serverLog(LL_WARNING, "w");
                 proxy->servers = server;
                 proxy->servers_len = len;
                 proxy->servers_index = 0;
@@ -206,7 +203,7 @@ void freeXpipeProxy(void* p) {
 sds getXpipeProxyConfigInfo(void* p) {
     struct XpipeProxy* proxy = (struct XpipeProxy*)p;
     sds servers = getProxyServersInfo(proxy);
-    sds result = sdscatprintf(sdsempty(), "proxy-type XPIPE-PROXY proxy-server %s", servers);
+    sds result = sdscatprintf(sdsempty(), "proxy-type XPIPE-PROXY proxy-servers %s", servers);
     if(proxy->params != NULL) {
         result = sdscatprintf(result, " proxy-params '%s'", proxy->params);
     } 
@@ -312,12 +309,12 @@ int initXpipeProxy(int fd, void* p, char* src_host, int src_port, char* dst_host
     UNUSED(src_host);
     UNUSED(src_port);
     struct XpipeProxy* proxy = (struct XpipeProxy*)p;
-    sds cmd = sdscatfmt(sdsempty(), "+PROXY ROUTE TCP://%s:%i ", dst_host, dst_port);
+    sds cmd = sdsnew("+PROXY ROUTE");
     if(proxy->params != NULL) {
         cmd = sdscatfmt(cmd, " %s", proxy->params);
     }
     //add src info
-    cmd = sdscat(cmd, "\r\n");
+    cmd = sdscatfmt(cmd, " TCP://%s:%i\r\n", dst_host, dst_port);
     if (syncWrite(fd,cmd,sdslen(cmd),crdtServer.repl_syncio_timeout*1000)
             == -1)
     {
