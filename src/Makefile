@@ -29,7 +29,7 @@ INSTALL_BIN=$(PREFIX)/bin
 INSTALL=install
 
 # Default allocator defaults to Jemalloc if it's not an ARM
-MALLOC=jemalloc
+MALLOC=libc
 ifneq ($(uname_M),armv6l)
 ifneq ($(uname_M),armv7l)
 ifeq ($(uname_S),Linux)
