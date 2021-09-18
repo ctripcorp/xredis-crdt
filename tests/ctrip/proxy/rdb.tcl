@@ -36,7 +36,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                     test "full sync" {
                         $slave slaveof $master_host $master_port
                         wait_for_sync $slave 
-                        $master peerof $peer_gid $peer_host $peer_port proxy-type XPIPE-PROXY proxy-server $proxy_host:$proxy_port proxy-params PROXYTLS://$proxy2_host:$proxy2_tls_port
+                        $master peerof $peer_gid $peer_host $peer_port proxy-type XPIPE-PROXY proxy-servers PROXYTCP://$proxy_host:$proxy_port proxy-params PROXYTLS://$proxy2_host:$proxy2_tls_port
                         wait_for_peer_sync $master 
                         $peer set k v
                         after 2000
@@ -85,7 +85,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                     set proxy2_tls_port [srv 0 "tls_port"]
                     set proxy2 [srv 0 "client"]
                     test "full sync" {
-                        $master peerof $peer_gid $peer_host $peer_port proxy-type XPIPE-PROXY proxy-server $proxy_host:$proxy_port proxy-params PROXYTLS://$proxy2_host:$proxy2_tls_port
+                        $master peerof $peer_gid $peer_host $peer_port proxy-type XPIPE-PROXY proxy-servers PROXYTCP://$proxy_host:$proxy_port proxy-params PROXYTLS://$proxy2_host:$proxy2_tls_port
                         wait_for_peer_sync $master 
                         $peer set k v
                         $slave slaveof $master_host $master_port
@@ -142,7 +142,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                     test "full sync" {
                         $slave slaveof $master_host $master_port
                         wait_for_sync $slave 
-                        $master peerof $peer_gid $peer_host $peer_port proxy-type XPIPE-PROXY proxy-server $proxy_host:$proxy_port 
+                        $master peerof $peer_gid $peer_host $peer_port proxy-type XPIPE-PROXY proxy-servers PROXYTCP://$proxy_host:$proxy_port 
                         wait_for_peer_sync $master 
                         $peer set k v
                         after 2000
@@ -191,7 +191,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                     set proxy2_tls_port [srv 0 "tls_port"]
                     set proxy2 [srv 0 "client"]
                     test "full sync" {
-                        $master peerof $peer_gid $peer_host $peer_port proxy-type XPIPE-PROXY proxy-server $proxy_host:$proxy_port 
+                        $master peerof $peer_gid $peer_host $peer_port proxy-type XPIPE-PROXY proxy-servers PROXYTCP://$proxy_host:$proxy_port 
                         wait_for_peer_sync $master 
                         $peer set k v
                         $slave slaveof $master_host $master_port
