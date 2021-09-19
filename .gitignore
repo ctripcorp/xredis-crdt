@@ -53,4 +53,5 @@ venv/
 .DS_Store
  tests/.cache/
 cmake-build-debug/
+crdt-module/
 
