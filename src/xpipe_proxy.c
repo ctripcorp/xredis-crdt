@@ -8,24 +8,6 @@
 const char* PROXYTCP = "PROXYTCP";
 const char* PROXYTLS = "PROXYTLS";
 
-// sds parseProxyType(sds value, int* type) {
-//     printf("parse type : %s \n", value);
-//     if(strcmp(value, PROXYTCP) == 0) {
-//         *type = XPIPE_PROXY_TCP;
-//         sdsrange(value, strlen(PROXYTCP), -1);
-//         return value;
-//     }
-//     if(strcmp(value, PROXYTLS) == 0) {
-//         // *type = XPIPE_PROXY_TLS;
-//         // sdsrange(value, strlen(PROXYTLS), -1);
-//         // return value;
-//         return NULL;
-//     }
-//     //default
-//     *type = XPIPE_PROXY_NONE;
-//     return value;
-// }
-
 struct Point* parsePoint(sds str) {
     struct Point* point = zmalloc(sizeof(struct Point));
     point->host = NULL;
@@ -279,6 +261,17 @@ int xpipeProxyConnect(void* p, char* host, int port) {
     return fd;
 }
 
+int xpipeProxyConnectFail(void* p) {
+    struct XpipeProxy* proxy = (struct XpipeProxy*)p;
+    struct Point* point = proxy->servers[proxy->servers_index];
+    sds point_info = getPointInfo(point) ;
+    serverLog(LL_WARNING, "[XPIPE-PROXY] connect %s fail", point_info);
+    sdsfree(point_info);
+
+    proxy->servers_index = (proxy->servers_index + 1) % proxy->servers_len;
+    return 1;
+}
+
 int ramdonIndex(int start, int end){
     int dis = end - start;
     return rand() % dis + start;
@@ -305,7 +298,7 @@ int xpipeProxyConnect2(void* p, char* host, int port) {
     return fd;
 }
 
-int initXpipeProxy(int fd, void* p, char* src_host, int src_port, char* dst_host, int dst_port) {
+int xipieProxyConnectedAfter(int fd, void* p, char* src_host, int src_port, char* dst_host, int dst_port) {
     UNUSED(src_host);
     UNUSED(src_port);
     struct XpipeProxy* proxy = (struct XpipeProxy*)p;
@@ -380,7 +373,7 @@ void* xpipeProxyHiRedis(void* p, char* src_host, int src_port, char* dst_host, i
         struct Point* point = proxy->servers[i];
 
         c = redisConnect(point->host,point->port);
-        if (initXpipeProxy(c->fd, p, src_host, src_port, dst_host, dst_port)) {
+        if (xipieProxyConnectedAfter(c->fd, p, src_host, src_port, dst_host, dst_port)) {
             return c;
         }
         redisFree(c);

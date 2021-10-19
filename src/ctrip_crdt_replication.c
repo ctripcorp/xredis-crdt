@@ -826,6 +826,9 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
     if (sockerr) {
         serverLog(LL_WARNING,"[CRDT] Error condition on socket for SYNC: %s",
                   strerror(sockerr));
+        if(crdtMaster->proxy_type != NONE_PROXY) {
+            proxyConnectFail(crdtMaster->proxy_type, crdtMaster->proxy);
+        }
         goto error;
     }
 
@@ -835,7 +838,7 @@ void crdtSyncWithMaster(aeEventLoop *el, int fd, void *privdata, int mask) {
             //test proxy 
             char* slave_announce_ip = server.slave_announce_ip ? server.slave_announce_ip: NET_FIRST_BIND_ADDR;
             int slave_announce_port = server.slave_announce_port? server.slave_announce_port: server.port;
-            if(!initProxy(fd, crdtMaster->proxy_type, crdtMaster->proxy, slave_announce_ip, slave_announce_port, crdtMaster->masterhost, crdtMaster->masterport)) {
+            if(!proxyConnectedAfter(fd, crdtMaster->proxy_type, crdtMaster->proxy, slave_announce_ip, slave_announce_port, crdtMaster->masterhost, crdtMaster->masterport)) {
                 serverLog(LL_WARNING,"[CRDT] proxy init error");
                 goto error;
             }   
