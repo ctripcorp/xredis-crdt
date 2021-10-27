@@ -1874,6 +1874,9 @@ void crdtReplicationCron(void) {
                 (crdtMaster->repl_state == REPL_STATE_CONNECTING || crdtSlaveIsInHandshakeState(crdtMaster)) &&
                 (time(NULL) - crdtMaster->repl_transfer_lastio) > crdtServer.repl_timeout) {
                 serverLog(LL_NOTICE, "[CRDT]Timeout connecting to the MASTER...");
+                if(crdtMaster->proxy_type != NONE_PROXY) {
+                    proxyConnectFail(crdtMaster->proxy_type, crdtMaster->proxy);
+                }
                 crdtCancelReplicationHandshake(gid);
             }
 
