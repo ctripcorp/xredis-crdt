@@ -67,9 +67,16 @@ int proxyConnect(int proxy_type, void* proxy, char* host, int port) {
     return -1;
 }
 
-int initProxy(int fd, int proxy_type, void* p, char* src_host, int src_port, char* dst_host, int dst_port) {
+int proxyConnectFail(int proxy_type, void* proxy) {
     if(proxy_type == XPIPE_PROXY) {
-        return initXpipeProxy(fd, p, src_host, src_port, dst_host, dst_port);
+        return xpipeProxyConnectFail(proxy);
+    }
+    return -1;
+}
+
+int proxyConnectedAfter(int fd, int proxy_type, void* p, char* src_host, int src_port, char* dst_host, int dst_port) {
+    if(proxy_type == XPIPE_PROXY) {
+        return xipieProxyConnectedAfter(fd, p, src_host, src_port, dst_host, dst_port);
     }
     return 0;
 }
