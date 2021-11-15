@@ -1,5 +1,4 @@
-/*
- * Copyright (c) 2009-2012, Salvatore Sanfilippo <antirez at gmail dot com>
+/* Copyright (c) 2021, ctrip.com
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,33 +26,20 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef __REDIS_UTIL_H
-#define __REDIS_UTIL_H
+#include "server.h"
 
-#include <stdint.h>
-#include "sds.h"
-/* The maximum number of characters needed to represent a long double
- * as a string (long double has a huge range).
- * This should be the size of the buffer given to ld2string */
-#define MAX_LONG_DOUBLE_CHARS 5*1024
-int stringmatchlen(const char *p, int plen, const char *s, int slen, int nocase);
-int stringmatch(const char *p, const char *s, int nocase);
-long long memtoll(const char *p, int *err);
-uint32_t digits10(uint64_t v);
-uint32_t sdigits10(int64_t v);
-int ll2string(char *s, size_t len, long long value);
-int string2ll(const char *s, size_t slen, long long *value);
-int string2l(const char *s, size_t slen, long *value);
-int string2ld(const char *s, size_t slen, long double *dp);
-int d2string(char *buf, size_t len, double value);
-int ld2string(char *buf, size_t len, long double value, int humanfriendly);
-sds getAbsolutePath(char *filename);
-int pathIsBaseName(char *path);
-int encodeVarint(char *buf, uint64_t x);
-uint64_t decodeVarint(const char *buf, int *n);
+#define RKS_TYPE_STRING     'K'
 
-#ifdef REDIS_TEST
-int utilTest(int argc, char **argv);
-#endif
+int stringSwapAna(client *c, robj *key, robj *subkey, int *action, char **rawkey,
+        char **rawval, moduleSwapFinishedCallback *cb, void **pd) {
+    UNUSED(c);
+    UNUSED(key);
+    UNUSED(subkey);
+    UNUSED(action);
+    UNUSED(rawkey);
+    UNUSED(rawval);
+    UNUSED(cb);
+    UNUSED(pd);
+    return 0;
+}
 
-#endif

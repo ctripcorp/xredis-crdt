@@ -39,6 +39,9 @@
 /* Spawn an RDB child that writes the RDB to the sockets of the slaves
  * that are currently in SLAVE_STATE_WAIT_BGSAVE_START state. */
 
+#define SEND_MERGE_REQUEST_DICT         0
+#define SEND_MERGE_REQUEST_TOMBSTONE    1
+#define SEND_MERGE_REQUEST_EVICT        2
 
 //CRDT.MERGE_START <local-gid> <vector-clock> <repl_id>
 //CRDT.Merge <src-gid> <key> <vc> <timestamp/-1> <expire> <value>
@@ -214,8 +217,175 @@ error:
     return C_ERR;
 }
 
+int crdtSendMergeRequestKeyValuePair(crdtRdbSaveInfo* rsi,
+        crdtFilterSplitFunc2 filterFun, crdtFreeFilterResultFunc freeFilterFunc, 
+        rio *rdb, robj *key, robj *o, long long expire, const char *cmdname) {
+    int length = 0;
+    rio payload;
+    /* Check if the crdt module's vector clock on local gid is avaiable for crdt merge */
+    CrdtObject *object = retrieveCrdtObject(o);
+    CrdtObject **filter = filterFun(object, crdtServer.crdt_gid, rsi->min_vc, server.proto_max_bulk_len, &length);
+    if(length == -1) {
+        serverLog(LL_WARNING, "[CRDT][FILTER] key:{%s} ,value is too big", (sds)key->ptr);
+        return C_ERR;
+    }
+    if(filter == NULL) {
+        return C_OK;
+    }
+    if(length >= 2) {
+        serverLog(LL_WARNING, "[CRDT][SENDMERGE] key:{%s} %d splitted", (sds)key->ptr, length);
+    }
+    robj result;
+    moduleValue *mv = o->ptr;
+    moduleValue v = {
+        .type = mv->type
+    };
+    initStaticModuleObject(result, &v);
+    for(int i = 0; i < length; i++) {
+        v.value = filter[i];
+        //CRDT.Merge_Del <gid> <key> <val>
+        if(!rioWriteBulkCount(rdb, '*', 5)) goto error;
+        if(!rioWriteBulkString(rdb,cmdname,strlen(cmdname))) goto error;
+        if(!rioWriteBulkLongLong(rdb, crdtServer.crdt_gid)) goto error;
+        if(!rioWriteBulkString(rdb, key->ptr,sdslen(key->ptr))) goto error;
 
-int crdtSendMergeRequest2(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di, const char* cmdname, crdtFilterSplitFunc2 filterFun, crdtFreeFilterResultFunc freeFilterFunc, redisDb *db) {
+        /* Emit the payload argument, that is the serialized object using
+         * * the DUMP format. */
+        createDumpPayload(&payload, &result);
+        if(!rioWriteBulkString(rdb, payload.io.buffer.ptr,
+                    sdslen(payload.io.buffer.ptr))) {
+            sdsfree(payload.io.buffer.ptr);
+            goto error;
+        }
+        sdsfree(payload.io.buffer.ptr);
+        if(!rioWriteBulkLongLong(rdb, expire)) return C_ERR;
+    }
+    freeFilterFunc(filter, length);
+    return C_OK;
+
+error:
+    return C_ERR;
+}
+
+typedef struct {
+    crdtRdbSaveInfo *rsi;
+    crdtFilterSplitFunc2 filterFunc;
+    crdtFreeFilterResultFunc freeFilterFunc;
+    rio *rdb;               /* rdb stream */
+    robj *key;              /* key object */
+    robj *dup;              /* val object */
+    int totalswap;          /* # of needed swaps */
+    int numswapped;         /* # of finished swaps */
+    long long expire;       /* expire time */
+    complementObjectFunc comp;  /* function to complent val with rocksdb swap result */
+    void *pd;               /* comp function private data  */
+    const char* cmdname;    /* CRDT.MERGE */
+} keyCrdtMergeCtx;
+
+keyCrdtMergeCtx *keyCrdtMergeCtxNew(crdtRdbSaveInfo *rsi, crdtFilterSplitFunc2 filterFunc,
+        crdtFreeFilterResultFunc freeFilterfunc, rio *rdb, robj *key, robj *dup,
+        int totalswap, long long expire, const char *cmdname,
+        complementObjectFunc comp, void *pd) {
+    keyCrdtMergeCtx *ctx = zmalloc(sizeof(keyCrdtMergeCtx));
+    ctx->rsi = rsi;
+    ctx->filterFunc = filterFunc;
+    ctx->freeFilterFunc = freeFilterfunc;
+    ctx->rdb = rdb;
+    ctx->key = key;
+    ctx->dup = dup;
+    ctx->expire = expire;
+    ctx->totalswap = totalswap;
+    ctx->numswapped = 0;
+    ctx->comp = comp;
+    ctx->pd = pd;
+    ctx->cmdname = cmdname;
+    return ctx;
+}
+
+int complementObject(robj *dup, sds rawkey, sds rawval, complementObjectFunc comp, void *pd);
+int crdtMergeSwapFinished(sds rawkey, sds rawval, void *_kvp) {
+    keyCrdtMergeCtx *kvp = _kvp;
+
+    if (complementObject(kvp->dup, rawkey, rawval, kvp->comp, kvp->pd)) {
+        serverLog(LL_WARNING, "[crdtMerge] comp object failed:%.*s %.*s",
+                (int)sdslen(rawkey), rawkey, (int)sdslen(rawval), rawval);
+        return C_ERR;
+    }
+
+    kvp->numswapped++;
+    if (kvp->numswapped == kvp->totalswap) {
+        if (crdtSendMergeRequestKeyValuePair(kvp->rsi, kvp->filterFunc,
+                    kvp->freeFilterFunc, kvp->rdb, kvp->key, kvp->dup,
+                    kvp->expire, kvp->cmdname) == -1) {
+            return C_ERR;
+        }
+    }
+    return C_OK;
+}
+
+robj *getComplementSwaps(redisDb *db, robj *key, getSwapsResult *result, complementObjectFunc *comp, void **pd);
+int crdtSendEvictMergeRequest2(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di, const char* cmdname, crdtFilterSplitFunc2 filterFunc, crdtFreeFilterResultFunc freeFilterFunc, redisDb *db) {
+    dictEntry *de;
+    int num = 0;
+
+    parallelSwap *ps = parallelSwapNew(16);
+    /* Iterate this DB tombstone writing every entry that is locally changed, but not gc'ed*/
+    while((de = dictNext(di)) != NULL) {
+        int i;
+        long long expire;
+        sds keystr = dictGetKey(de);
+        robj *key, *dup, *val = dictGetVal(de);
+        complementObjectFunc comp;
+        void *pd;
+        keyCrdtMergeCtx *kvp;
+        getSwapsResult result = GETSWAPS_RESULT_INIT;
+
+        key = createStringObject(keystr, sdslen(keystr));
+        expire = getExpire(db,key);    
+
+        if(val->type != OBJ_MODULE || isModuleCrdt(val) != C_OK) {
+            serverLog(LL_NOTICE, "[CRDT][%s] key: %s,NOT CRDT MODULE OBJECT, SKIP", cmdname, keystr);
+            decrRefCount(key);
+            continue;
+        }
+
+        /* swap result will be merged into duplicated object, to avoid messing
+         * up keyspace and causing drastic COW. */
+        dup = getComplementSwaps(db, key, &result, &comp, &pd);
+
+        /* no need to swap, normally it should not happend, we'are just being
+         * protective here. */
+        if (result.numswaps == 0) {
+            decrRefCount(key);
+            if (dup) decrRefCount(dup);
+            crdtSendMergeRequestKeyValuePair(rsi, filterFunc, freeFilterFunc,
+                    rdb, key, val, expire, cmdname);
+            continue;
+        }
+
+        kvp = keyCrdtMergeCtxNew(rsi, filterFunc, freeFilterFunc, rdb, key, dup,
+                result.numswaps, expire, cmdname,  comp, pd);
+
+        for (i = 0; i < result.numswaps; i++) {
+            swap *s = &result.swaps[i];
+            if (parallelSwapSubmit(ps, (sds)s->key, crdtMergeSwapFinished, kvp)) {
+                goto error;
+            }
+        }
+        num++;
+    }
+
+    if (parallelSwapDrain(ps)) goto error;
+    parallelSwapFree(ps);
+    return num;
+
+error:
+    parallelSwapFree(ps);
+    return C_ERR;
+}
+
+//TODO may be refactor a bit ?
+int crdtSendMergeRequest2(int mode, rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di, const char* cmdname, crdtFilterSplitFunc2 filterFun, crdtFreeFilterResultFunc freeFilterFunc, redisDb *db) {
     dictEntry *de;
     rio payload;
     robj *result = NULL;
@@ -223,13 +393,21 @@ int crdtSendMergeRequest2(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di, cons
     /* Iterate this DB tombstone writing every entry that is locally changed, but not gc'ed*/
     while((de = dictNext(di)) != NULL) {
         sds keystr = dictGetKey(de);
-        robj key, *o = dictGetVal(de);
+        robj key, *o = dictGetVal(de), *e;
         if(o->type != OBJ_MODULE || isModuleCrdt(o) != C_OK) {
             serverLog(LL_NOTICE, "[CRDT][%s] key: %s,NOT CRDT MODULE OBJECT, SKIP", cmdname, keystr);
             continue;
         }
         initStaticStringObject(key,keystr);
         serverAssertWithInfo(NULL, &key, sdsEncodedObject((&key)));
+
+        if (mode == SEND_MERGE_REQUEST_DICT) {
+            if ((e = lookupEvictKey(db,&key))) {
+                /* key evicted, will be processed later. */
+                continue;
+            }
+        }
+
         long long expire = -1;
         if(db != NULL) {
             expire = getExpire(db,&key);    
@@ -294,7 +472,7 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
         redisDb *db = server.db+j;
         dict *d = db->dict;
         if (
-            dictSize(d) == 0 && 
+            dictSize(d) == 0 && dictSize(db->evict) == 0 &&
             dictSize(db->deleted_keys) == 0 
         ) continue;
         di = dictGetSafeIterator(d);
@@ -321,9 +499,10 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
         if (needDelete == C_OK) {
             decrRefCount(selectcmd);
         }
-        if (dictSize(d) != 0) {           
+        if (dictSize(d) != 0) {
             // int num = crdtSendMergeRequest(rdb, rsi, di, "CRDT.Merge", dataFilter, freeDataFilter,db);
-            int num = crdtSendMergeRequest2(rdb, rsi, di, "CRDT.Merge", dataFilter2, freeDataFilter,db);
+            int num = crdtSendMergeRequest2(SEND_MERGE_REQUEST_DICT,
+                    rdb, rsi, di, "CRDT.Merge", dataFilter2, freeDataFilter, db);
             if(num == C_ERR) {
                 goto werr;
             }
@@ -331,13 +510,24 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
         }
         dictReleaseIterator(di);
 
+        d = db->evict;
+        di = dictGetSafeIterator(d);
+        if (dictSize(d) != 0) {
+            int num = crdtSendEvictMergeRequest2(rdb, rsi, di, "CRDT.Merge", dataFilter2, freeDataFilter, db);
+            if(num == C_ERR) {
+                goto werr;
+            }
+            serverLog(LL_WARNING, "db :%d ,send crdt evict num: %d", j, num);
+        }
+        dictReleaseIterator(di);        
+
         d = db->deleted_keys;
-       
         di = dictGetSafeIterator(d);
         if (!di) return C_ERR;
         if (dictSize(d) != 0) {
             // int num = crdtSendMergeRequest(rdb, rsi, di, "CRDT.Merge_Del", tombstoneFilter, freeTombstoneFilter ,NULL);
-            int num = crdtSendMergeRequest2(rdb, rsi, di, "CRDT.Merge_Del", tombstoneFilter2, freeTombstoneFilter ,NULL);
+            int num = crdtSendMergeRequest2(SEND_MERGE_REQUEST_TOMBSTONE,
+                    rdb, rsi, di, "CRDT.Merge_Del", tombstoneFilter2, freeTombstoneFilter ,NULL);
             if(num == C_ERR) {
                 goto werr;
             }
@@ -469,12 +659,12 @@ int checkTombstoneType(void* current, void* other, robj* key) {
     CrdtObject* o = (CrdtObject*)other;
     if(!isTombstone(c)) {
         serverLog(LL_WARNING, "[INCONSIS][MERGE TOMBSTONE TYPE] key: %s, tombstone type: %d",
-                key->ptr, c->type);
+                (char*)key->ptr, c->type);
         return C_ERR;
     }
     if(c->type != o->type) {
         serverLog(LL_WARNING, "[INCONSIS][MERGE TOMBSTONE] key: %s, tombstone type: %d, merge type %d",
-                key->ptr, c->type, o->type);
+                (char*)key->ptr, c->type, o->type);
         incrCrdtConflict(MERGECONFLICT | TYPECONFLICT);
         return C_ERR;
     }
@@ -486,17 +676,17 @@ int checkTombstoneDataType(void* current, void* other, robj* key) {
     CrdtObject* o = (CrdtObject*)other;
     if(!isTombstone(c)) {
         serverLog(LL_WARNING, "[INCONSIS][TOMBSTONE DATA] TOMBSTONE TYPE key: %s, tombstone type: %d",
-                key->ptr, c->type);
+                (char*)key->ptr, c->type);
         return C_ERR;
     }
     if(!isData(other)) {
         serverLog(LL_WARNING, "[INCONSIS][TOMBSTONE DATA] DATA TYPE key: %s, data type: %d",
-                key->ptr, c->type);
+                (char*)key->ptr, c->type);
         return C_ERR;
     }
     if(getDataType(c)!= getDataType(o)) {
         serverLog(LL_WARNING, "[INCONSIS][TOMBSTONE DATA] key: %s, tombstone type: %d, data type %d",
-                key->ptr, c->type, o->type);
+                (char*)key->ptr, c->type, o->type);
         incrCrdtConflict(MERGECONFLICT | TYPECONFLICT);
         return C_ERR;
     }
@@ -624,12 +814,12 @@ int checkDataType(void* current, void* other, robj* key) {
     CrdtObject* o = (CrdtObject*)other;
     if(!(isData(c))) {
         serverLog(LL_WARNING, "[INCONSIS][MERGE DATA TYPE ERROR] key: %s, local type: %d",
-                key->ptr, c->type);
+                (char*)key->ptr, c->type);
         return C_ERR;
     }
     if (c->type != o->type) {
         serverLog(LL_WARNING, "[INCONSIS][MERGE DATA] key: %s, local type: %d, merge type %d, type: %d != %d",
-                key->ptr, getDataType(c), getDataType(o), c->type, o->type);
+                (char*)key->ptr, getDataType(c), getDataType(o), c->type, o->type);
         incrCrdtConflict(MERGECONFLICT | TYPECONFLICT);
         return C_ERR;
     }
@@ -670,7 +860,7 @@ int rdbLoadCrdtData(rio* rdb, redisDb* db, long long current_expire_time, LoadCr
     int result = C_ERR;
     if ((key = rdbLoadStringObject(rdb)) == NULL) goto eoferr;
     // assert(dictFind(db->dict,key->ptr) == NULL);
-    moduleKey = createModuleKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE | REDISMODULE_NO_TOUCH_KEY, NULL, NULL);
+    moduleKey = createModuleKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE | REDISMODULE_OPEN_KEY_NOTOUCH, NULL, NULL, NULL);
     if(load(db, key, rdb, moduleKey) == C_ERR) goto eoferr;
     //use dictFind function for compatibility(version1.0.3) when rdb has expire but no data
     if(dictFind(db->dict,key->ptr) != NULL && current_expire_time != -1) {
@@ -836,7 +1026,7 @@ robj* reverseHashToArgv(hashTypeIterator* hi, int type) {
 int processInputRdb(client* fakeClient) {
     struct redisCommand* cmd = lookupCommand(fakeClient->argv[0]->ptr);
     if (!cmd) {
-        serverLog(LL_WARNING,"Unknown command '%s' reading the append only file", fakeClient->argv[0]->ptr);
+        serverLog(LL_WARNING,"Unknown command '%s' reading the append only file", (sds)fakeClient->argv[0]->ptr);
         freeClientArgv(fakeClient);
         fakeClient->cmd = NULL;
         return C_ERR;

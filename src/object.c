@@ -44,6 +44,8 @@ robj *createObject(int type, void *ptr) {
     o->encoding = OBJ_ENCODING_RAW;
     o->ptr = ptr;
     o->refcount = 1;
+    o->scs = 0;
+    o->evicted = 0;
 
     /* Set the LRU to the current lruclock (minutes resolution), or
      * alternatively the LFU counter. */
@@ -300,7 +302,7 @@ void freeHashObject(robj *o) {
 
 void freeModuleObject(robj *o) {
     moduleValue *mv = o->ptr;
-    mv->type->free(mv->value);
+    if (mv->value) mv->type->free(mv->value);
     zfree(mv);
 }
 
@@ -310,6 +312,7 @@ void incrRefCount(robj *o) {
 
 void decrRefCount(robj *o) {
     if (o->refcount == 1) {
+        o->refcount--;
         switch(o->type) {
         case OBJ_STRING: freeStringObject(o); break;
         case OBJ_LIST: freeListObject(o); break;
@@ -814,7 +817,7 @@ void freeMemoryOverheadData(struct redisMemOverhead *mh) {
  * structure pointer should be freed calling freeMemoryOverheadData(). */
 struct redisMemOverhead *getMemoryOverheadData(void) {
     int j;
-    size_t mem_total = 0;
+    size_t mem_total = 0, rocks_total = 0;
     size_t mem = 0;
     size_t zmalloc_used = zmalloc_used_memory();
     struct redisMemOverhead *mh = zcalloc(sizeof(*mh));
@@ -822,8 +825,8 @@ struct redisMemOverhead *getMemoryOverheadData(void) {
     mh->total_allocated = zmalloc_used;
     mh->startup_allocated = server.initial_memory_usage;
     mh->peak_allocated = server.stat_peak_memory;
-    mh->fragmentation =
-        zmalloc_get_fragmentation_ratio(server.resident_set_size);
+    /* mh->fragmentation = */
+        /* zmalloc_get_fragmentation_ratio(server.resident_set_size); */
     mem_total += server.initial_memory_usage;
 
     mem = 0;
@@ -907,7 +910,7 @@ struct redisMemOverhead *getMemoryOverheadData(void) {
     mem_total+=mem;
     for (j = 0; j < server.dbnum; j++) {
         redisDb *db = server.db+j;
-        long long keyscount = dictSize(db->dict);
+        long long keyscount = dictSize(db->dict) + dictSize(db->evict);
         if (keyscount==0) continue;
 
         mh->total_keys += keyscount;
@@ -930,10 +933,47 @@ struct redisMemOverhead *getMemoryOverheadData(void) {
         mh->db[mh->num_dbs].overhead_ht_tombstone = mem;
         mem_total+=mem;
 
+        mem = dictSize(db->evict) * sizeof(dictEntry)  +
+            dictSlots(db->evict) * sizeof(dictEntry*) + 
+            dictSize(db->evict) * sizeof(robj);
+        mh->db[mh->num_dbs].overhead_ht_evict = mem;
+        mem_total+=mem;
+
         mh->num_dbs++;
     }
 
-    mh->overhead_total = mem_total;
+    /* rocksdb stats */
+    if (!rocksdb_property_int(rocksGetDb(server.rocks), "rocksdb.cur-size-all-mem-tables", &mem)) {
+        mh->rocks_memtable = mem;
+        rocks_total += mem;
+    } else {
+        mh->rocks_memtable = -1;
+    }
+
+    if (!rocksdb_property_int(rocksGetDb(server.rocks), "rocksdb.block-cache-usage", &mem)) {
+        mh->rocks_block_cache = mem;
+        rocks_total += mem;
+    } else {
+        mh->rocks_block_cache = -1;
+    }
+
+    if (!rocksdb_property_int(rocksGetDb(server.rocks), "rocksdb.estimate-table-readers-mem", &mem)) {
+        mh->rocks_index_and_filter = mem;
+        rocks_total += mem;
+    } else {
+        mh->rocks_index_and_filter = -1;
+    }
+
+    if (!rocksdb_property_int(rocksGetDb(server.rocks), "rocksdb.block-cache-pinned-usage", &mem)) {
+        mh->rocks_pinned_blocks = mem;
+        rocks_total += mem;
+    } else {
+        mh->rocks_pinned_blocks = -1;
+    }
+    
+    mh->rocks_total = rocks_total;
+
+    mh->overhead_total = mem_total + rocks_total;
     mh->dataset = zmalloc_used - mem_total;
     mh->peak_perc = (float)zmalloc_used*100/mh->peak_allocated;
 
@@ -944,6 +984,8 @@ struct redisMemOverhead *getMemoryOverheadData(void) {
         net_usage = zmalloc_used - mh->startup_allocated;
     mh->dataset_perc = (float)mh->dataset*100/net_usage;
     mh->bytes_per_key = mh->total_keys ? (net_usage / mh->total_keys) : 0;
+
+    mh->fragmentation = (float)server.resident_set_size / (zmalloc_used_memory() + rocks_total);
 
     return mh;
 }
@@ -1136,7 +1178,7 @@ void memoryCommand(client *c) {
     } else if (!strcasecmp(c->argv[1]->ptr,"stats") && c->argc == 2) {
         struct redisMemOverhead *mh = getMemoryOverheadData();
 
-        addReplyMultiBulkLen(c,(14+mh->num_dbs)*2);
+        addReplyMultiBulkLen(c,(19+mh->num_dbs)*2);
 
         addReplyBulkCString(c,"peak.allocated");
         addReplyLongLong(c,mh->peak_allocated);
@@ -1163,7 +1205,7 @@ void memoryCommand(client *c) {
             char dbname[32];
             snprintf(dbname,sizeof(dbname),"db.%zd",mh->db[j].dbid);
             addReplyBulkCString(c,dbname);
-            addReplyMultiBulkLen(c,6);
+            addReplyMultiBulkLen(c,8);
 
             addReplyBulkCString(c,"overhead.hashtable.main");
             addReplyLongLong(c,mh->db[j].overhead_ht_main);
@@ -1173,7 +1215,24 @@ void memoryCommand(client *c) {
 
             addReplyBulkCString(c,"overhead.hashtable.tombstone");
             addReplyLongLong(c,mh->db[j].overhead_ht_tombstone);
+
+            addReplyBulkCString(c,"overhead.hashtable.evict");
+            addReplyLongLong(c,mh->db[j].overhead_ht_evict);
         }
+        addReplyBulkCString(c,"rocks.total");
+        addReplyLongLong(c,mh->rocks_total);
+
+        addReplyBulkCString(c,"rocks.memtable");
+        addReplyLongLong(c,mh->rocks_memtable);
+
+        addReplyBulkCString(c,"rocks.block_cache");
+        addReplyLongLong(c,mh->rocks_block_cache);
+
+        addReplyBulkCString(c,"rocks.index_and_filter");
+        addReplyLongLong(c,mh->rocks_index_and_filter);
+
+        addReplyBulkCString(c,"rocks.pinned_blocks");
+        addReplyLongLong(c,mh->rocks_pinned_blocks);
 
         addReplyBulkCString(c,"overhead.total");
         addReplyLongLong(c,mh->overhead_total);

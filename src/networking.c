@@ -138,6 +138,10 @@ client *createClient(int fd) {
     c->peerid = NULL;
     c->vectorClock = newVectorClock(0);
     c->filterVectorClock = newVectorClock(0);
+    c->swapping_count = 0;
+    c->swap_result = 0;
+    c->hold_keys = dictCreate(&objectKeyObjectValueDictType, NULL);
+    c->CLIENT_DEFERED_CLOSING = 0;
     listSetFreeMethod(c->pubsub_patterns,decrRefCountVoid);
     listSetMatchMethod(c->pubsub_patterns,listMatchObjects);
     listSetFreeMethod(c->crdt_pubsub_patterns,decrRefCountVoid);
@@ -787,9 +791,36 @@ void unlinkClient(client *c) {
     }
 }
 
+static void deferFreeClient(client *c) {
+    serverAssert(c->swapping_count);
+
+    c->CLIENT_DEFERED_CLOSING = 1;
+    /* unlink so that client would read no more query */
+    unlinkClient(c);
+    /* client to be freed in server cron */
+    listAddNodeTail(server.clients_to_free, c);
+}
+
+void freeClientsInDerferedQueue(void) {
+    while (listLength(server.clients_to_free)) {
+        listNode *ln = listFirst(server.clients_to_free);
+        client *c = listNodeValue(ln);
+        if (!c->swapping_count) {
+            c->CLIENT_DEFERED_CLOSING = 0;
+            freeClient(c);
+            listDelNode(server.clients_to_free,ln);
+        }
+    }
+}
+
+void swappingClientsRelease(swappingClients *scs);
 void freeClient(client *c) {
     listNode *ln;
 
+    if (c->swapping_count) {
+        deferFreeClient(c);
+        return;
+    }
     /* If it is our master that's beging disconnected we should make sure
      * to cache the state to try a partial resynchronization later.
      *
@@ -926,6 +957,7 @@ void freeClient(client *c) {
         freeVectorClock(c->filterVectorClock);
         c->filterVectorClock = newVectorClock(0);
     }
+    dictRelease(c->hold_keys);
     zfree(c->argv);
     freeClientMultiState(c);
     sdsfree(c->peerid);
@@ -1291,7 +1323,8 @@ int processMultibulkBuffer(client *c) {
                 serverLog(LL_WARNING, "Protocol error: expected '$',  buf: %s",
                     c->querybuf);
                 if(c->argc > 0) {
-                    serverLog(LL_WARNING, "Protocol error: expected '$' ,command %s", c->argv[0]->ptr);
+                    serverLog(LL_WARNING,"Protocol error: expected '$', command %s",
+                            (char*)c->argv[0]->ptr);
                 }
                 return C_ERR;
             }
@@ -1303,7 +1336,8 @@ int processMultibulkBuffer(client *c) {
                 serverLog(LL_WARNING, "Protocol error: invalid bulk length,  buf: %s",
                     c->querybuf);
                 if(c->argc > 0) {
-                    serverLog(LL_WARNING, "Protocol error: invalid bulk length, command %s", c->argv[0]->ptr);
+                    serverLog(LL_WARNING, "Protocol error: invalid bulk length, command %s",
+                            (char*)c->argv[0]->ptr);
                 }
                 return C_ERR;
             }
@@ -1379,7 +1413,7 @@ void printCommand(client *c) {
         if((len + sdslen(c->argv[i]->ptr) + 10) > max_buf) {
             goto end;
         } else {
-            len += sprintf(buf + len, " %s", c->argv[i]->ptr);
+            len += sprintf(buf + len, " %s", (char*)c->argv[i]->ptr);
         }
     }
 end:
@@ -1387,11 +1421,50 @@ end:
     serverLog(LL_DEBUG, "%s", buf);
 }
 
+void commandProcessed(client *c) {
+    if ((c->flags & CLIENT_MASTER) && iAmMaster() != C_OK) {
+        if(c->gid == crdtServer.crdt_gid) {
+            /* Recover peer-backlog from repl-stream so that when this slave
+             * promoted as new master, other peers could PSYNC, Note that
+             * we only recover peer-stream created by current gid. */
+            feedReplicationBacklog(&crdtServer, c->pending_querybuf + c->pending_used_offset,
+                    c->read_reploff - c->reploff- sdslen(c->querybuf));
+        } else if(c->gid != -1) {
+            CRDT_Master_Instance* peer = getPeerMaster(c->gid);
+            if(peer) { 
+                if(peer->master != NULL) {
+                    peer->master->reploff += c->read_reploff - sdslen(c->querybuf) - c->reploff;
+                } else {
+                    serverLog(LL_WARNING, "peer client is null, gid:%d", c->gid);
+                }
+            }
+        }
+    }
+    if (((c->flags & CLIENT_MASTER)
+                || ((c->flags & CLIENT_CRDT_MASTER) &&
+                    getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED))
+            && !(c->flags & CLIENT_MULTI)) {
+        /* Update the applied replication offset of our master. */
+        c->pending_used_offset += c->read_reploff - sdslen(c->querybuf) - c->reploff;
+        c->reploff = c->read_reploff - sdslen(c->querybuf);
+
+    }
+
+    /* Don't reset the client structure for clients blocked in a
+     * module blocking command, so that the reply callback will
+     * still be able to access the client argv and argc field.
+     * The client will be reset in unblockClientFromModule(). */
+    if ((!(c->flags & CLIENT_BLOCKED) || c->btype != BLOCKED_MODULE) &&
+            !(c->flags & CLIENT_SWAPPING)) {
+        resetClient(c);
+    }
+}
+
 /* This function is called every time, in the client structure 'c', there is
  * more query buffer to process, because we read more data from the socket
  * or because a client was blocked and later reactivated, so there could be
  * pending query buffer, already representing a full command, to process. */
-void processInputBuffer(client *c) {           
+void processInputBuffer(client *c) {
     server.current_client = c;
     /* Keep processing while there is something in the input buffer */
     while(sdslen(c->querybuf)) {
@@ -1400,6 +1473,9 @@ void processInputBuffer(client *c) {
 
         /* Immediately abort if the client is in the middle of something. */
         if (c->flags & CLIENT_BLOCKED) break;
+
+        /* Also abort if the client is swapping. */
+        if (c->flags & CLIENT_SWAPPING) break;
 
         /* CLIENT_CLOSE_AFTER_REPLY closes the connection once the reply is
          * written to the client. Make sure to not let the reply grow after
@@ -1436,35 +1512,7 @@ void processInputBuffer(client *c) {
             }
             /* Only reset the client when the command was executed. */
             if (processCommand(c) == C_OK) {
-                if (c->flags & CLIENT_MASTER && iAmMaster() != C_OK) {
-                    if(c->gid == crdtServer.crdt_gid) {
-                        feedReplicationBacklog(&crdtServer, c->pending_querybuf + c->pending_used_offset, c->read_reploff - c->reploff- sdslen(c->querybuf));
-                    } else if(c->gid != -1) {
-                        CRDT_Master_Instance* peer = getPeerMaster(c->gid);
-                        if(peer) { 
-                            if(peer->master != NULL) {
-                                peer->master->reploff += c->read_reploff - sdslen(c->querybuf) - c->reploff;
-                            } else {
-                                serverLog(LL_WARNING, "peer client is null, gid:%d", c->gid);
-                            }
-                        }
-                    }
-                }
-                if ((c->flags & CLIENT_MASTER
-                    || ((c->flags & CLIENT_CRDT_MASTER) && getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED))
-                    && !(c->flags & CLIENT_MULTI)) {
-                    /* Update the applied replication offset of our master. */
-                    c->pending_used_offset += c->read_reploff - sdslen(c->querybuf) - c->reploff;
-                    c->reploff = c->read_reploff - sdslen(c->querybuf);
-                    
-                }
-                
-                /* Don't reset the client structure for clients blocked in a
-                 * module blocking command, so that the reply callback will
-                 * still be able to access the client argv and argc field.
-                 * The client will be reset in unblockClientFromModule(). */
-                if (!(c->flags & CLIENT_BLOCKED) || c->btype != BLOCKED_MODULE)
-                    resetClient(c);
+                commandProcessed(c);
             }
             /* freeMemoryIfNeeded may flush slave output buffers. This may
              * result into a slave, that may be the active client, to be

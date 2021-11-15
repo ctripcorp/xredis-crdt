@@ -222,6 +222,9 @@ long long get_min_backstream_vcu();
 #define CMD_FAST (1<<13)            /* "F" flag */
 #define CMD_MODULE_GETKEYS (1<<14)  /* Use the modules getkeys interface. */
 #define CMD_MODULE_NO_CLUSTER (1<<15) /* Deny on Redis Cluster. */
+#define CMD_SWAP_GET (1<<16)        /* Cmd require swap get if key absent. */
+#define CMD_SWAP_PUT (1<<17)        /* Cmd require swap put if key present. */
+#define CMD_SWAP_DEL (1<<18)        /* Cmd require swap del. */
 
 /* AOF states */
 #define AOF_OFF 0             /* AOF is off */
@@ -263,6 +266,7 @@ long long get_min_backstream_vcu();
 #define CLIENT_CRDT_SLAVE (1<<28) /*Client is acting as a CRDT Slave to sync data from me*/
 #define CLIENT_CRDT_MASTER (1<<29) /*Client is acting as a CRDT Master that I receive data from it*/
 #define CLIENT_FORCE_REPL_CRDT (1<<30)  /* Force replication of current cmd. */
+#define CLIENT_SWAPPING (1<<31) /* The client is waiting swap. */
 //todo Client.flags of type is int , it used up
 
 /* Client block type (btype field in client structure)
@@ -505,11 +509,17 @@ long long get_min_backstream_vcu();
 #define REDISMODULE_TYPE_ENCVER(id) (id & REDISMODULE_TYPE_ENCVER_MASK)
 #define REDISMODULE_TYPE_SIGN(id) ((id & ~((uint64_t)REDISMODULE_TYPE_ENCVER_MASK)) >>REDISMODULE_TYPE_ENCVER_BITS)
 
+/* Data Swaps types */
+#define REDISMODULE_DATA_SWAPS_EVICTION     0
+#define REDISMODULE_DATA_SWAPS_EXPIRE       1
+
 struct RedisModule;
 struct RedisModuleIO;
 struct RedisModuleDigest;
 struct RedisModuleCtx;
 struct redisObject;
+struct swap;
+struct getSwapsResult;
 
 /* Each module type implementation should export a set of methods in order
  * to serialize and deserialize the value in the RDB file, rewrite the AOF
@@ -521,6 +531,14 @@ typedef void (*moduleTypeRewriteFunc)(struct RedisModuleIO *io, struct redisObje
 typedef void (*moduleTypeDigestFunc)(struct RedisModuleDigest *digest, void *value);
 typedef size_t (*moduleTypeMemUsageFunc)(const void *value);
 typedef void (*moduleTypeFreeFunc)(void *value);
+typedef void* (*moduleTypeLookupSwappingClientsFunc)(struct RedisModuleCtx *ctx, struct redisObject *key, struct redisObject *subkey);
+typedef void (*moduleTypeSetupSwappingClientsFunc)(struct RedisModuleCtx *ctx, struct redisObject *key, struct redisObject *subkey, void *scs);
+typedef void (*moduleTypeGetDataSwapsFunc)(struct RedisModuleCtx *ctx, struct redisObject *key, int mode, struct getSwapsResult *result);
+typedef void (*moduleSwapFinishedCallback)(struct RedisModuleCtx *ctx, int action, char *rawkey, char *rawval, void *pd);
+typedef int (*moduleTypeSwapAnaFunc)(struct RedisModuleCtx *ctx, struct redisObject *key, struct redisObject *subkey, int *action, char **rawkey, char **rawval, moduleSwapFinishedCallback *cb, void **pd);
+typedef int (*complementObjectFunc)(void **pdupptr, sds rawkey, sds rawval, void *pd);
+typedef void *(*moduleTypeGetComplementSwapsFunc)(struct RedisModuleCtx *ctx, struct redisObject *key, struct getSwapsResult *result, complementObjectFunc *comp, void **pd);
+
 /* The module type, which is referenced in each value of a given type, defines
  * the methods and links to the module exporting the type. */
 typedef struct RedisModuleType {
@@ -532,6 +550,11 @@ typedef struct RedisModuleType {
     moduleTypeMemUsageFunc mem_usage;
     moduleTypeDigestFunc digest;
     moduleTypeFreeFunc free;
+    moduleTypeLookupSwappingClientsFunc lookup_swapping_clients;
+    moduleTypeSetupSwappingClientsFunc setup_swapping_clients;
+    moduleTypeGetDataSwapsFunc get_data_swaps;
+    moduleTypeGetComplementSwapsFunc get_complement_swaps;
+    moduleTypeSwapAnaFunc swap_ana;
     char name[10]; /* 9 bytes name + null term. Charset: A-Z a-z 0-9 _- */
 } moduleType;
 
@@ -620,6 +643,9 @@ typedef struct redisObject { //16
     unsigned lru:LRU_BITS; /* LRU time (relative to global lru_clock) or
                             * LFU data (least significant 8 bits frequency
                             * and most significant 16 bits access time). */
+    unsigned scs:1;
+    unsigned evicted:1;
+    unsigned reserved:6;
     int refcount;
     void *ptr;
 } robj;
@@ -650,6 +676,8 @@ typedef struct redisDb {
     dict *deleted_keys;
     int id;                     /* Database ID */
     long long avg_ttl;          /* Average TTL, just for stats */
+    /* swap */
+    dict *evict;                /* evicted keys(or subkeys). */
 } redisDb;
 
 /* Client MULTI/EXEC state */
@@ -726,6 +754,8 @@ void* str2proxy(int proxy_type, sds str);
 sds proxy2str(int proxy_type, void* proxy);
 void* proxyHiRedis(int proxy_type, void* proxy, char* src_host, int src_port, char* host, int port);
 int proxyIsKeepConnected(int proxy_type, void* current, void* proxy);
+
+typedef void (*voidfuncptr)(void);
 /* With multiplexing we need to take per-client state.
  * Clients are taken in a linked list. */
 typedef struct client {
@@ -790,6 +820,14 @@ typedef struct client {
     int gid;
     long long pending_used_offset;
     VectorClock filterVectorClock;
+
+    /* swap */
+    int swapping_count;
+    int swap_result;
+    dict *hold_keys;
+    voidfuncptr client_swap_finished_cb;
+    void *client_swap_finished_pd;
+    int CLIENT_DEFERED_CLOSING;
 } client;
 
 struct saveparam {
@@ -897,7 +935,14 @@ struct redisMemOverhead {
         size_t overhead_ht_main;
         size_t overhead_ht_expires;
         size_t overhead_ht_tombstone;
+        size_t overhead_ht_evict;
     } *db;
+
+    size_t rocks_total;
+    size_t rocks_block_cache;
+    size_t rocks_index_and_filter;
+    size_t rocks_memtable;
+    size_t rocks_pinned_blocks;
 };
 
 /* This structure can be optionally passed to RDB save/load functions in
@@ -955,6 +1000,7 @@ typedef struct CRDT_Master_Instance {
  *----------------------------------------------------------------------------*/
 
 struct clusterState;
+struct swappingClients;
 
 /* AIX defines hz to __hz, we don't use this define and in order to allow
  * Redis build on AIX we need to undef it. */
@@ -1009,6 +1055,7 @@ struct redisServer {
     int cfd_count;              /* Used slots in cfd[] */
     list *clients;              /* List of active clients */
     list *clients_to_close;     /* Clients to close asynchronously */
+    list *clients_to_free;      /* Clients to close when swaps finished. */
     list *clients_pending_write; /* There is to write or install handler. */
     list *slaves, *monitors;    /* List of slaves and MONITORs */
     client *current_client; /* Current client, only used on crash report */
@@ -1318,8 +1365,19 @@ struct redisServer {
     long long local_clock;
     int peer_set;
     long long start_time;
-    size_t multi_process_sync;
+    int multi_process_sync;
     int restart_lazy_peerof_time; 
+
+	/* rocks */
+	struct rocks *rocks;
+	/* swaps */
+    client **evict_clients; /* array of evict clients (one for each db). */
+    client **rksdel_clients; /* array of rocks del clients (one for each db). */
+    client **rksget_clients; /* array of rocks get clients (one for each db). */
+    client **dummy_clients; /* array of dummy clients (one for each db). */
+    struct swapStat *swap_stats; /* array of swap stats (one for each swap type). */
+    int debug_evict_keys; /* num of keys to evict before calling cmd. */
+    struct swappingClients *scs; /* global scs for flushdb/flushall */
 }redisServer;
 
 typedef struct pubsubPattern {
@@ -1327,8 +1385,30 @@ typedef struct pubsubPattern {
     robj *pattern;
 } pubsubPattern;
 
+/* Note that swap is result of syntax anaysis for redis command, which have
+ * nothing to do with keyspace. type can be generic(e.g DEL command), which
+ * does not match any kind of OBJ_*; also, type might not match key type. */
+typedef struct swap {
+    robj *key; 
+    robj *subkey;
+    robj *val;
+} swap;
+
+#define MAX_SWAPS_BUFFER 256
+typedef struct getSwapsResult {
+    swap swapsbuf[MAX_SWAPS_BUFFER];
+    swap *swaps;
+    int numswaps;
+    int size;
+} getSwapsResult;
+#define GETSWAPS_RESULT_INIT { {{0}}, NULL, 0, MAX_SWAPS_BUFFER }
+void getSwapsPrepareResult(getSwapsResult *result, int numswaps);
+void getSwapsAppendResult(getSwapsResult *result, robj *key, robj *subkey, robj *val);
+void getSwapsFreeResult(getSwapsResult *result);
+
 typedef void redisCommandProc(client *c);
 typedef int *redisGetKeysProc(struct redisCommand *cmd, robj **argv, int argc, int *numkeys);
+typedef int (*redisGetSwapsProc)(struct redisCommand *cmd, robj **argv, int argc, getSwapsResult *result);
 struct redisCommand {
     char *name;
     redisCommandProc *proc;
@@ -1343,6 +1423,13 @@ struct redisCommand {
     int lastkey;  /* The last argument that's a key */
     int keystep;  /* The step between first and last key */
     long long microseconds, calls;
+    /* Function used to find swap target key (or subkey). Note that:
+     * - no need to query keyspace to decide if swap needed , which will
+     *   be done later.
+     * - should return key (or subkey) even if swap_action is NOP, otherwise
+     *   current command will not block when key is swapping. */
+    redisGetSwapsProc getswaps_proc;
+    int swap_action; /* Action type if swap needed (NOP/GET/PUT/DEL). */
 };
 
 struct redisFunctionSym {
@@ -1411,11 +1498,13 @@ extern struct redisServer crdtServer;
 extern int crdt_enabled;
 extern struct sharedObjectsStruct shared;
 extern dictType objectKeyPointerValueDictType;
+extern dictType objectKeyObjectValueDictType;
 extern dictType setDictType;
 extern dictType zsetDictType;
 extern dictType clusterNodesDictType;
 extern dictType clusterNodesBlackListDictType;
 extern dictType dbDictType;
+extern dictType evictDictType;
 extern dictType shaScriptObjectDictType;
 extern double R_Zero, R_PosInf, R_NegInf, R_Nan;
 extern dictType hashDictType;
@@ -1428,7 +1517,7 @@ extern dictType modulesDictType;
  *----------------------------------------------------------------------------*/
 
 /* Modules */
-void* createModuleKey(redisDb *db, robj *keyname, int mode, robj* value, robj* tombstone);
+void* createModuleKey(redisDb *db, robj *keyname, int mode, robj* value, robj* tombstone, robj *evict);
 void moduleInitModulesSystem(void);
 int moduleLoad(const char *path, void **argv, int argc);
 void moduleLoadFromQueue(void);
@@ -1444,6 +1533,14 @@ size_t moduleCount(void);
 void moduleAcquireGIL(void);
 void moduleReleaseGIL(void);
 void jumpVectorClock();
+struct swappingClients *moduleLookupSwappingClients(moduleValue *mv, client *c, robj *key, robj *subkey);
+void moduleSetupSwappingClients(moduleValue *mv, client *c, robj *key, robj *subkey, struct swappingClients *scs);
+void moduleGetDataSwaps(moduleValue *mv, client *c, robj *key, int mode, getSwapsResult *result);
+int moduleSwapAna(moduleValue *mv, client *c, robj *key, robj *subkey, int *action, char **rawkey, char **rawval, moduleSwapFinishedCallback *cb, void **pd);
+void moduleGetCommandSwaps(struct redisCommand *cmd, robj **argv, int argc, getSwapsResult *result);
+void *moduleGetComplementSwaps(moduleValue *mv, client *c, robj *key, getSwapsResult *result, complementObjectFunc *comp, void **pd);
+void moduleSwapFinished(client *c, int action, char *rawkey, char *rawval, moduleSwapFinishedCallback cb, void *pd);
+
 /* Utils */
 long long ustime(void);
 long long mstime(void);
@@ -1495,6 +1592,7 @@ void rewriteClientCommandArgument(client *c, int i, robj *newval);
 void replaceClientCommandVector(client *c, int argc, robj **argv);
 unsigned long getClientOutputBufferMemoryUsage(client *c);
 void freeClientsInAsyncFreeQueue(void);
+void freeClientsInDerferedQueue(void);
 void asyncCloseClientOnOutputBufferLimitReached(client *c);
 int getClientType(client *c);
 int getClientTypeByName(char *name);
@@ -1676,7 +1774,6 @@ void replicationFeedAllSlaves(int dictid, robj **argv, int argc);
 void replicationFeedStringToAllSlaves(int dictid, void* cmdbuf, size_t cmdlen);
 void replicationFeedRobjToAllSlaves(int dictid, robj* cmd);
 void crdtCancelReplicationHandshake(int gid);
-void evictionTombstoneCommand(client *c);
 /* CRDT Command */
 void crdtDelCommand(client *c);
 struct CrdtObject *retrieveCrdtObject(robj *obj);
@@ -1716,11 +1813,13 @@ void receiveChildInfo(struct redisServer *srv);
 
 //module 
 /* API flags and constants */
+//TODO refactor and remove, now we have to KEEP IN SYNC WITH redismodule.h
 #define REDISMODULE_READ (1<<0)
 #define REDISMODULE_WRITE (1<<1)
 #define REDISMODULE_TOMBSTONE (1<<2)
-#define REDISMODULE_NO_TOUCH_KEY (1<<3)
-void *getModuleKey(redisDb *db, robj *keyname, int mode, int needCheck);
+#define REDISMODULE_OPEN_KEY_NOTOUCH (1<<16)
+#define REDISMODULE_OPEN_KEY_NOEXPIRE (1<<17)
+void *getModuleKey(redisDb *db, robj *keyname, int mode);
 void closeModuleKey(void *moduleKey);
 #define TYPECONFLICT (1<<0)
 #define SET_CONFLICT (1<<1)
@@ -1902,12 +2001,14 @@ int updateConfigFileVectorUnit(char *path);
 int removeExpire(redisDb *db, robj *key);
 int crdtPropagateExpire(redisDb *db, robj *key, int lazy, long long expireTime);
 void propagateExpire(redisDb *db, robj *key, int lazy);
+int keyIsExpired(redisDb *db, robj *key);
 int expireIfNeeded(redisDb *db, robj *key);
 long long getExpire(redisDb *db, robj *key);
 void setExpire(client *c, redisDb *db, robj *key, long long when);
 robj *lookupKey(redisDb *db, robj *key, int flags);
 robj *lookupKeyRead(redisDb *db, robj *key);
 robj *lookupKeyWrite(redisDb *db, robj *key);
+robj *lookupKeyWriteWithFlags(redisDb *db, robj *key, int flags);
 robj *lookupKeyReadOrReply(client *c, robj *key, robj *reply);
 robj *lookupKeyWriteOrReply(client *c, robj *key, robj *reply);
 robj *lookupKeyReadWithFlags(redisDb *db, robj *key, int flags);
@@ -1915,6 +2016,9 @@ robj *objectCommandLookup(client *c, robj *key);
 robj *objectCommandLookupOrReply(client *c, robj *key, robj *reply);
 #define LOOKUP_NONE 0
 #define LOOKUP_NOTOUCH (1<<0)
+#define LOOKUP_EVICT_VAL (1<<0)
+#define LOOKUP_EVICT_SCS (1<<1)
+#define LOOKUP_EVICT_ALL (1<<8)
 void dbAdd(redisDb *db, robj *key, robj *val);
 void dbOverwrite(redisDb *db, robj *key, robj *val);
 void setKey(redisDb *db, robj *key, robj *val);
@@ -1922,7 +2026,12 @@ int dbExists(redisDb *db, robj *key);
 robj *dbRandomKey(redisDb *db);
 int dbSyncDelete(redisDb *db, robj *key);
 int dbDelete(redisDb *db, robj *key);
+int dbDeleteEvict(redisDb *db, robj *key);
 robj *dbUnshareStringValue(redisDb *db, robj *key, robj *o);
+/* Swap */
+robj *lookupEvict(redisDb *db, robj *key);
+robj *lookupEvictKey(redisDb *db, robj *key);
+robj *lookupEvictSCS(redisDb *db, robj *key);
 
 //CRDT GC
 void tombstoneAdd(redisDb *db, robj *key, robj *val);
@@ -1961,6 +2070,7 @@ size_t lazyfreeGetPendingObjectsCount(void);
 /* API to get key arguments from commands */
 int *getKeysFromCommand(struct redisCommand *cmd, robj **argv, int argc, int *numkeys);
 void getKeysFreeResult(int *result);
+int *getKeysUsingCommandTable(struct redisCommand *cmd, robj **argv, int argc, int *numkeys);
 int *zunionInterGetKeys(struct redisCommand *cmd,robj **argv, int argc, int *numkeys);
 int *evalGetKeys(struct redisCommand *cmd, robj **argv, int argc, int *numkeys);
 int *sortGetKeys(struct redisCommand *cmd, robj **argv, int argc, int *numkeys);
@@ -2025,6 +2135,7 @@ int dictSdsKeyCompare(void *privdata, const void *key1, const void *key2);
 void dictSdsDestructor(void *privdata, void *val);
 void* dictDupKeyStatMemory(void *privdata, const void *key);
 void dictDestructorKeyStatMemory(void *privdata, void *key);
+void dictListDestructor(void *privdata, void *val);
 
 /* Git SHA1 */
 char *redisGitSHA1(void);
@@ -2107,6 +2218,8 @@ void infoCommand(client *c);
 void crdtinfoCommand(client *c);
 void mgetCommand(client *c);
 void monitorCommand(client *c);
+void rksdelCommand(client *c);
+void rksgetCommand(client *c);
 void expireCommand(client *c);
 void expireatCommand(client *c);
 void pexpireCommand(client *c);
@@ -2247,11 +2360,113 @@ void xorDigest(unsigned char *digest, void *ptr, size_t len);
     printf("-- MARK %s:%d --\n", __FILE__, __LINE__)
 
 #include "ctrip.h"
+#include <rocksdb/c.h>
 
-// void
-// refreshMinVectorClock(VectorClock *other, int sourceGid);
+/* rocks */
+#define ROCKS_GET             	1
+#define ROCKS_PUT            	2
+#define ROCKS_DEL              	3
 
-void
-refreshGcVectorClock(VectorClock other);
+struct RIO;
+
+typedef void (*rocksIOCallback)(int action, sds key, sds val, void *privdata);
+void rocksIOSubmitAsync(uint32_t dist, int type, sds key, sds val, rocksIOCallback cb, void *privdata);
+struct RIO *rocksIOSubmitSync(uint32_t dist, int type, sds key, sds val, int notify_fd);
+void RIOReap(struct RIO *r, sds *key, sds *val);
+unsigned long rocksPendingIOs();
+
+struct rocks *rocksCreate(void);
+void rocksDestroy(struct rocks *rocks);
+int rocksEvictionsInprogress(void);
+int rocksDelete(redisDb *db, robj *key);
+int rocksFlushAll();
+rocksdb_t *rocksGetDb(struct rocks *rocks);
+rocksdb_memory_consumers_t *rocksGetMemConsumer(struct rocks *rocks);
+
+/* swap */
+#define SWAP_NOP    0
+#define SWAP_GET    1
+#define SWAP_PUT    2
+#define SWAP_DEL    3
+#define SWAP_TYPES  4
+
+typedef struct swapClient {
+    swap s;
+    client *c;
+} swapClient;
+
+typedef struct swappingClients {
+    redisDb *db;    /* db used to index scs */
+    robj *key;      /* key used to index scs */
+    robj *subkey;   /* subkey used to index scs */
+    struct swappingClients *parent; /* parent scs */
+    int nchild;     /* # of child scs list */
+    list *swapclients; /* list of swapClients */
+} swappingClients;
+
+sds swappingClientsDump(swappingClients *scs);
+
+typedef struct swapStat {
+    char *name;
+    long long started;
+    long long finished;
+    mstime_t last_start_time;
+    mstime_t last_finish_time;
+    size_t started_rawkey_bytes;
+    size_t started_rawval_bytes;
+    size_t finished_rawkey_bytes;
+    size_t finished_rawval_bytes;
+} swapStat;
+
+void swapInit();
+int clientSwap(client *c);
+int dbEvict(redisDb *db, robj *key);
+int dbExpire(redisDb *db, robj *key);
+void continueProcessCommand(client *c);
+void evictCommand(client *c);
+int getSwapsNone(struct redisCommand *cmd, robj **argv, int argc, getSwapsResult *result);
+int getSwapsGlobal(struct redisCommand *cmd, robj **argv, int argc, getSwapsResult *result);
+void updateStatsSwapStart(int type, sds rawkey, sds rawval);
+void updateStatsSwapFinish(int type, sds rawkey, sds rawval);
+int swapsPendingOfType(int type);
+
+/* parallel swap */
+typedef int (*parallelSwapFinishedCb)(sds rawkey, sds rawval, void *pd);
+
+typedef struct {
+    int inprogress;         /* swap entry in progress? */
+    int pipe_read_fd;       /* read end to wait rio swap finish. */
+    int pipe_write_fd;      /* write end to notify swap finish by rio. */
+    struct RIO *r;          /* swap attached RIO handle. */
+    parallelSwapFinishedCb cb; /* swap finished callback. */
+    void *pd;               /* swap finished private data. */
+} swapEntry;
+
+typedef struct parallelSwap {
+    list *entries;
+    int parallel;
+} parallelSwap;
+
+parallelSwap *parallelSwapNew(int parallel);
+void parallelSwapFree(parallelSwap *ps);
+int parallelSwapSubmit(parallelSwap *ps, sds rawkey, parallelSwapFinishedCb cb, void *pd);
+int parallelSwapDrain(parallelSwap *ps);
+
+/* rks */
+struct swappingClients *lookupSwappingClients(client *c, robj *key, robj *subkey);
+void setupSwappingClients(client *c, robj *key, robj *subkey, swappingClients *scs);
+void getEvictionSwaps(client *c, robj *key, getSwapsResult *result);
+void getExpireSwaps(client *c, robj *key, getSwapsResult *result);
+int swapAna(client *c, robj *key, robj *subkey, int *action, char **rawkey, char **rawval, moduleSwapFinishedCallback *cb, void **pd);
+void getSwaps(client *c, getSwapsResult *result);
+void releaseSwaps(getSwapsResult *result);
+robj *getComplementSwaps(redisDb *db, robj *key, getSwapsResult *result, complementObjectFunc *comp, void **pd);
+int complementObject(robj *dup, sds rawkey, sds rawval, complementObjectFunc comp, void *pd);
+
+/* rks string */
+int stringSwapAna(client *c, robj *key, robj *subkey, int *action, char **rawkey, char **rawval, moduleSwapFinishedCallback *cb, void **pd);
+
+
+void refreshGcVectorClock(VectorClock other);
 void addPeerSet(int gid);
 #endif

@@ -207,7 +207,7 @@ void peerofCommand(client *c) {
             } else if (strcasecmp(c->argv[i]->ptr, "proxy-type") == 0) {
                 proxy_type = getProxyType(c->argv[++i]->ptr);
                 if(proxy_type == NONE_PROXY) {
-                    serverLog(LL_NOTICE, "[CRDT]peerof proxy unknow type : %s", c->argv[i]->ptr);
+                    serverLog(LL_NOTICE, "[CRDT]peerof proxy unknow type : %s", (char*)c->argv[i]->ptr);
                     addReplyError(c,"proxy unknow type");
                     return;
                 }

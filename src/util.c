@@ -665,12 +665,48 @@ sds getAbsolutePath(char *filename) {
     return abspath;
 }
 
+
 /* Return true if the specified path is just a file basename without any
  * relative or absolute path. This function just checks that no / or \
  * character exists inside the specified path, that's enough in the
  * environments where Redis runs. */
 int pathIsBaseName(char *path) {
     return strchr(path,'/') == NULL && strchr(path,'\\') == NULL;
+}
+
+/* -------------------- encode/decode helper functions --------------------- */
+int encodeVarint(char *buf, uint64_t x) {
+    int n = 0;
+    static const unsigned int B = 128;
+    unsigned char* ptr = (unsigned char*)buf;
+    while (x >= B) {
+        *(ptr++) = (x & (B - 1)) | B;
+        x >>= 7;
+        n++;
+    }   
+    *(ptr++) = (unsigned char)x;
+
+    return ++n;
+}
+
+uint64_t decodeVarint(const char *buf, int *n) {
+    int cnt = 0;
+    uint64_t result = 0;
+    for (uint32_t shift = 0; shift <= 63; shift += 7) {
+        uint64_t byte = *((const unsigned char*)(buf));
+        buf++;
+        cnt++;
+        if (byte & 128) {
+            // More bytes are present
+            result |= ((byte & 127) << shift);
+        } else {
+            result |= (byte << shift);
+            *n = cnt;
+            return result;
+        }   
+    }   
+
+    return 0;
 }
 
 #ifdef REDIS_TEST

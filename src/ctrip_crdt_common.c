@@ -72,13 +72,13 @@ CrdtTombstoneMethod* getCrdtTombstoneMethod(CrdtObject* tombstone) {
     return getMethod(tombstone, "getCrdtTombstoneMethod");
 }
 int getDataType(CrdtObject* data) {
-    return (int)getMethod(data, "getDataType");
+    return (int)(long)getMethod(data, "getDataType");
 }
 int isData(CrdtObject* data) {
-    return (int)getMethod(data, "isData");
+    return (int)(long)getMethod(data, "isData");
 }
 int isTombstone(CrdtObject* data) {
-    return (int)getMethod(data, "isTombstone");
+    return (int)(long)getMethod(data, "isTombstone");
 }
 void* getObjValue(robj *obj) {
     if (obj == NULL || isModuleCrdt(obj) == C_ERR) return NULL;

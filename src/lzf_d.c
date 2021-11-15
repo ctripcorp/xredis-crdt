@@ -52,6 +52,10 @@
 #endif
 #endif
 
+#if defined(__GNUC__) && __GNUC__ >= 7
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
+#endif
 unsigned int
 lzf_decompress (const void *const in_data,  unsigned int in_len,
                 void             *out_data, unsigned int out_len)
@@ -183,3 +187,6 @@ lzf_decompress (const void *const in_data,  unsigned int in_len,
   return op - (u8 *)out_data;
 }
 
+#if defined(__GNUC__) && __GNUC__ >= 5
+#pragma GCC diagnostic pop
+#endif

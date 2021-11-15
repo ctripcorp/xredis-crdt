@@ -875,6 +875,8 @@ int rdbSaveInfoAuxFields(rio *rdb, int flags, rdbSaveInfo *rsi) {
 
     return 1;
 }
+
+int rdbSaveEvictDb(rio *rdb, int *error, redisDb *db);
 /* Produces a dump of the database in RDB format sending it to the specified
  * Redis I/O channel. On success C_OK is returned, otherwise C_ERR
  * is returned and part of the output, or all the output, can be
@@ -906,10 +908,9 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
     for (j = 0; j < server.dbnum; j++) {
         redisDb *db = server.db+j;
         dict *d = db->dict;
-        if (dictSize(d) == 0 && !crdt_enabled) continue;
-        if (dictSize(d) == 0 && 
-            dictSize(db->deleted_keys) == 0 
-        ) 
+        if (dictSize(d) == 0 && dictSize(db->evict) == 0 && !crdt_enabled)
+            continue;
+        if (dictSize(d) == 0 && dictSize(db->evict) == 0 && dictSize(db->deleted_keys) == 0) 
             continue;
         di = dictGetSafeIterator(d);
         if (!di) return C_ERR;
@@ -935,13 +936,19 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
         if(crdt_enabled) {
             if(rdbSaveCrdtDbSize(rdb, db) == C_ERR) goto werr;
         }
-        /* Iterate this DB writing every entry */
+        /* Iterate this DB.dict writing every entry */
         while((de = dictNext(di)) != NULL) {
             sds keystr = dictGetKey(de);
-            robj key, *o = dictGetVal(de),*tombstone;
+            robj key, *o = dictGetVal(de),*tombstone, *e;
             long long expire;
             initStaticStringObject(key,keystr);
             expire = getExpire(db,&key);
+
+            if ((e = lookupEvictKey(db,&key))) {
+                /* key evicted, will be processed later. */
+                continue;
+            }
+
             if(isModuleCrdt(o) != C_OK) {
                 serverLog(LL_WARNING,"save value is not crdt key: %s", keystr);
                 if (rdbSaveKeyValuePair(rdb,&key,o,expire,now) == -1) goto werr;
@@ -952,9 +959,9 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
                 }
                 if (rdbSaveType(rdb,RDB_CRDT_VALUE) == -1) return C_ERR;
 
-                if (rdbSaveStringObject(rdb,&key) == -1) return C_ERR;
+                if (rdbSaveStringObject(rdb,&key) == -1) return C_ERR; 
                 tombstone = lookupTombstoneKey(db, &key);
-                void* moduleKey = createModuleKey(db, &key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE, o, tombstone);
+                void* moduleKey = createModuleKey(db, &key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE, o, tombstone, NULL/*FIXME*/);
                 save(db, rdb, &key, moduleKey);
             }
             
@@ -969,6 +976,10 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
             }
         }
         dictReleaseIterator(di);
+
+        /* Iterate DB.evict writing every entry */
+        if (rdbSaveEvictDb(rdb, error, db)) return C_ERR;
+
         di = dictGetSafeIterator(db->deleted_keys);
         while((de = dictNext(di)) != NULL) {
             sds keystr = dictGetKey(de);
@@ -979,7 +990,7 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
             initStaticStringObject(key,keystr);
             if (rdbSaveType(rdb,RDB_CRDT_VALUE) == -1) return C_ERR;
             if (rdbSaveStringObject(rdb,&key) == -1) return C_ERR;
-            void* moduleKey = createModuleKey(db, &key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE, NULL, o);
+            void* moduleKey = createModuleKey(db, &key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE, NULL, o, NULL/*FIXME*/);
             save(db, rdb, &key, moduleKey);
             if(moduleKey != NULL) closeModuleKey(moduleKey);
             if (flags & RDB_SAVE_AOF_PREAMBLE &&
@@ -1109,6 +1120,7 @@ werr:
     return C_ERR;
 }
 
+int rocksInitThreads(struct rocks *rocks);
 int rdbSaveBackground(char *filename, rdbSaveInfo *rsi) {
     pid_t childpid;
     long long start;
@@ -1127,6 +1139,9 @@ int rdbSaveBackground(char *filename, rdbSaveInfo *rsi) {
         /* Child */
         closeListeningSockets(0);
         redisSetProcTitle("redis-rdb-bgsave");
+        
+        rocksInitThreads(server.rocks);
+
         retval = rdbSave(filename,rsi);
         if (retval == C_OK) {
             size_t private_dirty = zmalloc_get_private_dirty(-1);
@@ -1794,7 +1809,7 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                 
                 void* proxy = str2proxy(currentMasterInstance->proxy_type,auxval->ptr);
                 if (proxy == NULL) {
-                    serverLog(LL_WARNING,"RDB Parse Proxy %s", auxval->ptr);
+                    serverLog(LL_WARNING,"RDB Parse Proxy %s", (char*)auxval->ptr);
                     rdbExitReportCorruptRDB("RDB Proxy error");
                     return C_ERR;
                 }
@@ -1826,6 +1841,8 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
         * responsible for key expiry. If we would expire keys here, the
         * snapshot taken by the master may not be reflected on the slave. */
         
+        freeMemoryIfNeeded();
+
         /* Add the new object in the hash table */
         if(!isCrdtRdb && crdt_enabled) {
             if(data2CrdtData(fakeClient, key, val) == C_ERR) {
@@ -2121,6 +2138,7 @@ int rdbSaveToSlavesSockets(void *rsi, struct redisServer *svr) {
         closeListeningSockets(0);
         redisSetProcTitle("redis-rdb-to-slaves");
 
+        rocksInitThreads(server.rocks);
 
         if(svr == &server) {
             serverLog(LL_NOTICE,

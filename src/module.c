@@ -147,6 +147,7 @@ struct RedisModuleKey {
     robj *key;      /* Key name object. */
     robj *value;    /* Value object, or NULL if the key was not found. */
     robj *tombstone; /* Tombstone value object, or NULL if the key was not found. */
+    robj *evict; /* Evict value object, or NULL if the key was not found. */
     void *iter;     /* Iterator. */
     int mode;       /* Opening mode. */
 
@@ -171,6 +172,7 @@ typedef struct RedisModuleKey RedisModuleKey;
 /* Function pointer type of a function representing a command inside
  * a Redis module. */
 typedef int (*RedisModuleCmdFunc) (RedisModuleCtx *ctx, void **argv, int argc);
+typedef int (*RedisModuleGetSwapsFunc) (RedisModuleCtx *ctx, RedisModuleString **argv, int argc, RedisModuleGetSwapsResult *result);
 
 /* This struct holds the information about a command registered by a module.*/
 struct RedisModuleCommandProxy {
@@ -282,10 +284,7 @@ static size_t module_memory = 0;
 void *RM_Alloc(size_t bytes) {
     size_t old_size = zmalloc_used_memory();
     void* r = zmalloc(bytes);
-    size_t memory = zmalloc_used_memory() - old_size;
-    // #if defined (DEBUG)
-    //     debug_module_memory(memory, 3);
-    // #endif
+    ssize_t memory = zmalloc_used_memory() - old_size;
     add_module_memory_stat_alloc(memory);
     return r;
 }
@@ -342,7 +341,7 @@ size_t RM_GetModuleValueMemorySize() {
 void *RM_Calloc(size_t nmemb, size_t size) {
     size_t old_size = zmalloc_used_memory();
     void* r = zcalloc(nmemb*size);
-    add_module_memory_stat_alloc(zmalloc_used_memory() - old_size);
+    add_module_memory_stat_alloc((ssize_t)(zmalloc_used_memory() - old_size));
     return r;
 }
 
@@ -350,7 +349,7 @@ void *RM_Calloc(size_t nmemb, size_t size) {
 void* RM_Realloc(void *ptr, size_t bytes) {
     size_t old_size = zmalloc_used_memory();
     void* r = zrealloc(ptr,bytes);
-    add_module_memory_stat_alloc(zmalloc_used_memory() - old_size);
+    add_module_memory_stat_alloc((ssize_t)(zmalloc_used_memory() - old_size));
     return r;
 }
 
@@ -360,7 +359,7 @@ void* RM_Realloc(void *ptr, size_t bytes) {
 void RM_Free(void *ptr) {
     size_t old_size = zmalloc_used_memory();
     zfree(ptr);
-    size_t free_size = zmalloc_used_memory() - old_size;
+    ssize_t free_size = (ssize_t)(zmalloc_used_memory() - old_size);
     // #if defined (TCL_TEST)
     //     debug_module_memory(free_size, 3);
     // #endif
@@ -607,6 +606,83 @@ int *moduleGetCommandKeysViaAPI(struct redisCommand *cmd, robj **argv, int argc,
     return res;
 }
 
+struct swappingClients *moduleLookupSwappingClients(moduleValue *mv, client *c, robj *key, robj *subkey) {
+    RedisModuleCtx ctx = REDISMODULE_CTX_INIT;
+
+    if (!mv->type->lookup_swapping_clients) return NULL;
+    ctx.client = c;
+    ctx.module = mv->type->module;
+    struct swappingClients *scs = mv->type->lookup_swapping_clients(&ctx, key, subkey);
+    moduleFreeContext(&ctx);
+    return scs;
+}
+
+void moduleSetupSwappingClients(moduleValue *mv, client *c, robj *key, robj *subkey, struct swappingClients *scs) {
+    RedisModuleCtx ctx = REDISMODULE_CTX_INIT;
+
+    if (!mv->type->setup_swapping_clients) return;
+    ctx.module = mv->type->module;
+    ctx.client = c;
+    mv->type->setup_swapping_clients(&ctx, key, subkey, scs);
+    moduleFreeContext(&ctx);
+}
+
+void moduleGetDataSwaps(moduleValue *mv, client *c, robj *key, int mode, getSwapsResult *result) {
+    RedisModuleCtx ctx = REDISMODULE_CTX_INIT;
+    
+    if (!mv->type->get_data_swaps) return;
+    ctx.module = mv->type->module;
+    ctx.client = c;
+    mv->type->get_data_swaps(&ctx, key, mode, result);
+    moduleFreeContext(&ctx);
+}
+
+void *moduleGetComplementSwaps(moduleValue *mv, client *c, robj *key, getSwapsResult *result, complementObjectFunc *comp, void **pd) {
+    RedisModuleCtx ctx = REDISMODULE_CTX_INIT;
+    
+    if (!mv->type->get_complement_swaps) return NULL;
+    ctx.module = mv->type->module;
+    ctx.client = c;
+    void *dup = mv->type->get_complement_swaps(&ctx, key, result, comp, pd);
+    moduleFreeContext(&ctx);
+    return dup;
+}
+
+void moduleGetCommandSwaps(struct redisCommand *cmd, robj **argv, int argc, getSwapsResult *result) {
+    RedisModuleCommandProxy *cp = (void*)(unsigned long)cmd->getkeys_proc;
+    RedisModuleCtx ctx = REDISMODULE_CTX_INIT;
+    RedisModuleGetSwapsFunc getswapsfunc;
+    
+    ctx.module = cp->module;
+    ctx.client = NULL;
+    getSwapsPrepareResult(result, MAX_SWAPS_BUFFER);
+    getswapsfunc = (RedisModuleGetSwapsFunc)cmd->getswaps_proc;
+    getswapsfunc(&ctx, argv, argc, result);
+    moduleFreeContext(&ctx);
+}
+
+int moduleSwapAna(moduleValue *mv, client *c, robj *key, robj *subkey,
+        int *action, char **rawkey, char **rawval, moduleSwapFinishedCallback *cb, void **pd) {
+    RedisModuleCtx ctx = REDISMODULE_CTX_INIT;
+    
+    if (!mv->type->swap_ana) return REDISMODULE_OK;
+    ctx.module = mv->type->module;
+    ctx.client = c;
+    int ret = mv->type->swap_ana(&ctx, key, subkey, action, rawkey, rawval, cb, pd);
+    moduleFreeContext(&ctx);
+    return ret;
+}
+
+void moduleSwapFinished(client *c, int action, char *rawkey, char *rawval,
+        moduleSwapFinishedCallback cb, void *pd) {
+    RedisModuleCtx ctx = REDISMODULE_CTX_INIT;
+
+    ctx.module = NULL;
+    ctx.client = c;
+    cb(&ctx, action, rawkey, rawval, pd);
+    moduleFreeContext(&ctx);
+}
+
 /* Return non-zero if a module command, that was declared with the
  * flag "getkeys-api", is called in a special way to get the keys positions
  * and not to get executed. Otherwise zero is returned. */
@@ -658,11 +734,32 @@ int commandFlagsFromString(char *s) {
         else if (!strcasecmp(t,"fast")) flags |= CMD_FAST;
         else if (!strcasecmp(t,"getkeys-api")) flags |= CMD_MODULE_GETKEYS;
         else if (!strcasecmp(t,"no-cluster")) flags |= CMD_MODULE_NO_CLUSTER;
+        else if (!strcasecmp(t,"swap-nop")) continue;
+        else if (!strcasecmp(t,"swap-get")) continue;
+        else if (!strcasecmp(t,"swap-put")) continue;
+        else if (!strcasecmp(t,"swap-del")) continue;
         else break;
     }
     sdsfreesplitres(tokens,count);
     if (j != count) return -1; /* Some token not processed correctly. */
     return flags;
+}
+
+int swapActionFromString(char *s) {
+    int count, j;
+    int action = REDISMODULE_SWAP_NOP;
+    sds *tokens = sdssplitlen(s,strlen(s)," ",1,&count);
+    for (j = 0; j < count; j++) {
+        char *t = tokens[j];
+        if (!strcasecmp(t,"swap-nop")) action = REDISMODULE_SWAP_NOP;
+        else if (!strcasecmp(t,"swap-get")) action = REDISMODULE_SWAP_GET;
+        else if (!strcasecmp(t,"swap-put")) action = REDISMODULE_SWAP_PUT;
+        else if (!strcasecmp(t,"swap-del")) action = REDISMODULE_SWAP_DEL;
+        else continue;
+    }
+    sdsfreesplitres(tokens,count);
+    if (j != count) return -1; /* Some token not processed correctly. */
+    return action;
 }
 
 /* Register a new command in the Redis server, that will be handled by
@@ -717,12 +814,24 @@ int commandFlagsFromString(char *s) {
  *                     example, is unable to report the position of the
  *                     keys, programmatically creates key names, or any
  *                     other reason.
+ * * **"swap-nop"**:  The command would trigger no swap action(default).
+ * * **"swap-get"**:  The command would trigger swap get action if key
+ *                    in command is absent(in db.evcit).
+ * * **"swap-put"**:  The command would trigger swap put action if key
+ *                    in command is present(in db.dict).
+ * * **"swap-del"**:  The command would trigger swap del action if key
+ *                    in command is present or absent.
  */
-int RM_CreateCommand(RedisModuleCtx *ctx, const char *name, RedisModuleCmdFunc cmdfunc, const char *strflags, int firstkey, int lastkey, int keystep) {
+int RM_CreateCommand(RedisModuleCtx *ctx, const char *name, RedisModuleCmdFunc cmdfunc,
+        RedisModuleGetSwapsFunc getswaps_func, const char *strflags,
+        int firstkey, int lastkey, int keystep) {
     int flags = strflags ? commandFlagsFromString((char*)strflags) : 0;
     if (flags == -1) return REDISMODULE_ERR;
     if ((flags & CMD_MODULE_NO_CLUSTER) && server.cluster_enabled)
         return REDISMODULE_ERR;
+    int swap_action = strflags ? swapActionFromString((char*)strflags) : 0;
+    if (swap_action == -1) return REDISMODULE_ERR;
+
 
     struct redisCommand *rediscmd;
     RedisModuleCommandProxy *cp;
@@ -734,6 +843,7 @@ int RM_CreateCommand(RedisModuleCtx *ctx, const char *name, RedisModuleCmdFunc c
         return REDISMODULE_ERR;
     }
 
+    redisGetSwapsProc getswaps_proc = (redisGetSwapsProc)getswaps_func;
     /* Create a command "proxy", which is a structure that is referenced
      * in the command table, so that the generic command that works as
      * binding between modules and Redis, can know what function to call
@@ -749,7 +859,9 @@ int RM_CreateCommand(RedisModuleCtx *ctx, const char *name, RedisModuleCmdFunc c
     cp->rediscmd->proc = RedisModuleCommandDispatcher;
     cp->rediscmd->arity = -1;
     cp->rediscmd->flags = flags | CMD_MODULE;
+    cp->rediscmd->swap_action = swap_action;
     cp->rediscmd->getkeys_proc = (redisGetKeysProc*)(unsigned long)cp;
+    cp->rediscmd->getswaps_proc = getswaps_proc;
     cp->rediscmd->firstkey = firstkey;
     cp->rediscmd->lastkey = lastkey;
     cp->rediscmd->keystep = keystep;
@@ -758,6 +870,14 @@ int RM_CreateCommand(RedisModuleCtx *ctx, const char *name, RedisModuleCmdFunc c
     dictAdd(server.commands,sdsdup(cmdname),cp->rediscmd);
     dictAdd(server.orig_commands,sdsdup(cmdname),cp->rediscmd);
     return REDISMODULE_OK;
+}
+
+int RM_GetSwapAction(RedisModuleCtx *ctx) {
+    if (ctx->client && ctx->client->cmd) {
+        return ctx->client->cmd->swap_action;
+    } else {
+        return REDISMODULE_SWAP_NOP;
+    }
 }
 
 void RM_SetOvc(RedisModuleCtx *ctx, VectorClock vc) {
@@ -906,7 +1026,7 @@ void autoMemoryCollect(RedisModuleCtx *ctx) {
  * at `ptr`. No reference is retained to the passed buffer. */
 RedisModuleString *RM_CreateString(RedisModuleCtx *ctx, const char *ptr, size_t len) {
     RedisModuleString *o = createStringObject(ptr,len);
-    autoMemoryAdd(ctx,REDISMODULE_AM_STRING,o);
+    if (ctx != NULL) autoMemoryAdd(ctx,REDISMODULE_AM_STRING,o);
     return o;
 }
 
@@ -925,7 +1045,7 @@ RedisModuleString *RM_CreateStringPrintf(RedisModuleCtx *ctx, const char *fmt, .
     va_end(ap);
 
     RedisModuleString *o = createObject(OBJ_STRING, s);
-    autoMemoryAdd(ctx,REDISMODULE_AM_STRING,o);
+    if (ctx != NULL) autoMemoryAdd(ctx,REDISMODULE_AM_STRING,o);
 
     return o;
 }
@@ -949,7 +1069,7 @@ RedisModuleString *RM_CreateStringFromLongLong(RedisModuleCtx *ctx, long long ll
  * enabling automatic memory management. */
 RedisModuleString *RM_CreateStringFromString(RedisModuleCtx *ctx, const RedisModuleString *str) {
     RedisModuleString *o = dupStringObject(str);
-    autoMemoryAdd(ctx,REDISMODULE_AM_STRING,o);
+    if (ctx != NULL) autoMemoryAdd(ctx,REDISMODULE_AM_STRING,o);
     return o;
 }
 
@@ -961,7 +1081,7 @@ RedisModuleString *RM_CreateStringFromString(RedisModuleCtx *ctx, const RedisMod
  * from the pool of string to release at the end. */
 void RM_FreeString(RedisModuleCtx *ctx, RedisModuleString *str) {
     decrRefCount(str);
-    autoMemoryFreed(ctx,REDISMODULE_AM_STRING,str);
+    if (ctx != NULL) autoMemoryFreed(ctx,REDISMODULE_AM_STRING,str);
 }
 
 /* Every call to this function, will make the string 'str' requiring
@@ -987,7 +1107,7 @@ void RM_FreeString(RedisModuleCtx *ctx, RedisModuleString *str) {
  * into a string that lives after the callback function returns, if
  * no FreeString() call is performed. */
 void RM_RetainString(RedisModuleCtx *ctx, RedisModuleString *str) {
-    if (!autoMemoryFreed(ctx,REDISMODULE_AM_STRING,str)) {
+    if (ctx == NULL || !autoMemoryFreed(ctx,REDISMODULE_AM_STRING,str)) {
         /* Increment the string reference counting only if we can't
          * just remove the object from the list of objects that should
          * be reclaimed. Why we do that, instead of just incrementing
@@ -1084,7 +1204,7 @@ RedisModuleString *moduleAssertUnsharedString(RedisModuleString *str) {
 }
 
 /* Append the specified buffere to the string 'str'. The string must be a
- * string created by the user that is referenced only a single time, otherwise
+  string created by the user that is referenced only a single time, otherwise
  * REDISMODULE_ERR is returend and the operation is not performed. */
 int RM_StringAppendBuffer(RedisModuleCtx *ctx, RedisModuleString *str, const char *buf, size_t len) {
     UNUSED(ctx);
@@ -1692,8 +1812,6 @@ void RM_MergeVectorClock (int gid, VectorClock vclock) {
     
     updateProcessVectorClock(&crdtServer.vectorClock, &vclock, gid, crdtServer.crdt_gid);
     
-    
-    // refreshMinVectorClock(vclock, gid);
     refreshGcVectorClock(vclock);
 }
 
@@ -1815,7 +1933,14 @@ int RM_CrdtSelectDb(RedisModuleCtx *ctx, int gid, int newid) {
     retval &= selectDb(ctx->client,newid);
     return (retval == C_OK) ? REDISMODULE_OK : REDISMODULE_ERR;
 }
-void* createModuleKey(redisDb *db, robj *keyname, int mode,robj* value, robj* tombstone) {
+
+int RM_GetSwapsAppendResult(RedisModuleGetSwapsResult *result,
+        RedisModuleString *key, RedisModuleString *subkey, robj *val) {
+    getSwapsAppendResult(result, key, subkey, val);
+    return 1;
+}
+
+void* createModuleKey(redisDb *db, robj *keyname, int mode,robj* value, robj* tombstone, robj *evict) {
     RedisModuleKey *kp;   
     kp = zmalloc(sizeof(*kp));
     kp->db = db;
@@ -1823,6 +1948,7 @@ void* createModuleKey(redisDb *db, robj *keyname, int mode,robj* value, robj* to
     incrRefCount(keyname);
     kp->value = value;
     kp->tombstone = tombstone;
+    kp->evict = evict;
     kp->iter = NULL;
     kp->mode = mode;
     kp->ctx = NULL;
@@ -1830,21 +1956,35 @@ void* createModuleKey(redisDb *db, robj *keyname, int mode,robj* value, robj* to
     return (void*)kp;
 }
 
-void *getModuleKey(redisDb *db, robj *keyname, int mode, int needCheck) {
-    robj *value, *tombstone = NULL;
+void *getModuleKey(redisDb *db, robj *keyname, int mode) {
+    robj *value = NULL, *tombstone = NULL, *evict = NULL;
+	int noexpire = mode & REDISMODULE_OPEN_KEY_NOEXPIRE;
+	int flags = mode & REDISMODULE_OPEN_KEY_NOTOUCH ? LOOKUP_NOTOUCH : LOOKUP_NONE;
+
+	/* db.evict */
+    if (mode & REDISMODULE_EVICT) {
+        evict = lookupEvict(db,keyname);
+    }
+	
+	/* db.dict */
     if (mode & REDISMODULE_WRITE) {
-        value = needCheck == C_OK? lookupKeyWrite(db,keyname): lookupKey(db,keyname,LOOKUP_NONE);
+        if (noexpire) value = lookupKey(db,keyname,flags);
+        else value = lookupKeyWriteWithFlags(db,keyname, flags);
     } else {
-        value = lookupKeyRead(db,keyname);
-        if (value == NULL) {
+        if (noexpire) value = lookupKey(db,keyname,flags);
+        else value = lookupKeyReadWithFlags(db,keyname,flags);
+
+        if (value == NULL && evict == NULL) {
             return NULL;
         }
     }
+	
+	/* db.tombstone */
     if (mode & REDISMODULE_TOMBSTONE) {
         tombstone = lookupTombstoneKey(db,keyname);
     }
-    RedisModuleKey *kp = createModuleKey(db, keyname, mode, value, tombstone);
-    return kp;
+
+    return createModuleKey(db, keyname, mode, value, tombstone, evict);
 }
 /* Return an handle representing a Redis key, so that it is possible
  * to call other APIs with the key handle as argument to perform
@@ -1861,7 +2001,7 @@ void *getModuleKey(redisDb *db, robj *keyname, int mode, int needCheck) {
  * call RedisModule_CloseKey() and RedisModule_KeyType() on a NULL
  * value. */
 void *RM_OpenKey(RedisModuleCtx *ctx, robj *keyname, int mode) {
-    RedisModuleKey *kp = getModuleKey(ctx->client->db, keyname, mode, 0);
+    RedisModuleKey *kp = getModuleKey(ctx->client->db, keyname, mode);
     if(kp == NULL) {
         return NULL;
     }
@@ -1947,7 +2087,7 @@ int RM_DbSetValue(RedisModuleCtx *ctx, RedisModuleString *keyname, moduleType* t
     return REDISMODULE_OK;
 }
 void *RM_GetKey(redisDb* db, robj* keyname, int mode) {
-    RedisModuleKey *kp = getModuleKey(db, keyname, mode, 0);
+    RedisModuleKey *kp = getModuleKey(db, keyname, mode);
     return kp;
 } 
 uint64_t RM_GetModuleTypeId(moduleType *t) {
@@ -1983,7 +2123,7 @@ void closeModuleKey(void* k) {
     RedisModuleKey *key = k;
     if (key == NULL) return;
     //add REDISMODULE_NO_TOUCH_KEY,becase expire not signalModifiedKey
-    if (key->mode & REDISMODULE_WRITE && !(key->mode & REDISMODULE_NO_TOUCH_KEY)) signalModifiedKey(key->db,key->key);
+    if (key->mode & REDISMODULE_WRITE && !(key->mode & REDISMODULE_OPEN_KEY_NOTOUCH)) signalModifiedKey(key->db,key->key);
     /* TODO: if (key->iter) RM_KeyIteratorStop(kp); */
     RM_ZsetRangeStop(key);
     decrRefCount(key->key);
@@ -2001,10 +2141,21 @@ void RM_CloseKey(RedisModuleKey *key) {
 /* Return the type of the key. If the key pointer is NULL then
  * REDISMODULE_KEYTYPE_EMPTY is returned. */
 int RM_KeyType(RedisModuleKey *key) {
-    if (key == NULL || key->value ==  NULL) return REDISMODULE_KEYTYPE_EMPTY;
+    int type;
+
+    if (key == NULL) return REDISMODULE_KEYTYPE_EMPTY;
+
+    if (key->value != NULL) {
+        type = key->value->type;
+    } else if (key->evict != NULL) {
+        type = key->evict->type;
+    } else {
+        return REDISMODULE_KEYTYPE_EMPTY;
+    }
+
     /* We map between defines so that we are free to change the internal
      * defines as desired. */
-    switch(key->value->type) {
+    switch(type) {
     case OBJ_STRING: return REDISMODULE_KEYTYPE_STRING;
     case OBJ_LIST: return REDISMODULE_KEYTYPE_LIST;
     case OBJ_SET: return REDISMODULE_KEYTYPE_SET;
@@ -2081,6 +2232,10 @@ mstime_t RM_GetExpire(RedisModuleKey *key) {
     if (expire == -1 || key->value == NULL) return -1;
     expire -= mstime();
     return expire >= 0 ? expire : 0;
+}
+
+mstime_t RM_KeyIsExpired(RedisModuleKey *key) {
+    return keyIsExpired(key->db, key->key);
 }
 
 void* GetRobj(RedisModuleKey *key, dict* d) {
@@ -3550,6 +3705,11 @@ moduleType *RM_CreateDataType(RedisModuleCtx *ctx, const char *name, int encver,
         moduleTypeMemUsageFunc mem_usage;
         moduleTypeDigestFunc digest;
         moduleTypeFreeFunc free;
+        moduleTypeLookupSwappingClientsFunc lookup_swapping_clients;
+        moduleTypeSetupSwappingClientsFunc setup_swapping_clients;
+        moduleTypeGetDataSwapsFunc get_data_swaps;
+        moduleTypeGetComplementSwapsFunc get_complement_swaps;
+        moduleTypeSwapAnaFunc swap_ana;
     } *tms = (struct typemethods*) typemethods_ptr;
 
     moduleType *mt = zcalloc(sizeof(*mt));
@@ -3561,6 +3721,11 @@ moduleType *RM_CreateDataType(RedisModuleCtx *ctx, const char *name, int encver,
     mt->mem_usage = tms->mem_usage;
     mt->digest = tms->digest;
     mt->free = tms->free;
+    mt->lookup_swapping_clients = tms->lookup_swapping_clients;
+    mt->setup_swapping_clients = tms->setup_swapping_clients;
+    mt->get_data_swaps = tms->get_data_swaps;
+    mt->get_complement_swaps = tms->get_complement_swaps;
+    mt->swap_ana = tms->swap_ana;
     memcpy(mt->name,name,sizeof(mt->name));
     listAddNodeTail(ctx->module->types,mt);
     return mt;
@@ -3612,10 +3777,15 @@ int RM_ModuleTombstoneLoadRdbAddValue(RedisModuleKey *key, moduleType *mt, void 
  * If the key is NULL, is not associated with a module type, or is empty,
  * then NULL is returned instead. */
 moduleType *RM_ModuleTypeGetType(RedisModuleKey *key) {
-    if (key == NULL ||
-        key->value == NULL ||
-        RM_KeyType(key) != REDISMODULE_KEYTYPE_MODULE) return NULL;
-    moduleValue *mv = key->value->ptr;
+    moduleValue *mv;
+    if (key == NULL) return NULL;
+    if (key->value == NULL && key->evict == NULL) return NULL;
+    if (RM_KeyType(key) != REDISMODULE_KEYTYPE_MODULE) return NULL;
+    if (key->value) {
+        mv = key->value->ptr;
+    } else {
+        mv = key->evict->ptr;
+    }
     return mv->type;
 }
 
@@ -3644,6 +3814,205 @@ void *RM_ModuleTypeGetTombstone(RedisModuleKey *key) {
         key->tombstone == NULL) return NULL;
     moduleValue *mv = key->tombstone->ptr;
     return mv->value;
+}
+
+/* Replace the value assigned to a module type.
+ *
+ * The key must be open for writing, have an existing value, and have a moduleType
+ * that matches the one specified by the caller.
+ *
+ * Unlike RM_ModuleTypeSetValue() which will free the old value, this function
+ * simply swaps the old value with the new value.
+ *
+ * The function returns REDISMODULE_OK on success, REDISMODULE_ERR on errors
+ * such as:
+ *
+ * 1. Key is not opened for writing.
+ * 2. Key is not a module data type key.
+ * 3. Key is a module datatype other than 'mt'.
+ *
+ * If old_value is non-NULL, the old value is returned by reference.
+ */
+int RM_ModuleTypeReplaceValue(RedisModuleKey *key, moduleType *mt, void *new_value, void **old_value) {
+	if ((!(key->mode & REDISMODULE_WRITE) && !(key->mode & REDISMODULE_EVICT)) || key->iter)
+		return REDISMODULE_ERR;
+	if (!key->value || key->value->type != OBJ_MODULE)
+		return REDISMODULE_ERR;
+
+	moduleValue *mv = key->value->ptr;
+	if (mv->type != mt)
+		return REDISMODULE_ERR;
+
+	if (old_value)
+		*old_value = mv->value;
+	mv->value = new_value;
+
+	return REDISMODULE_OK;
+}
+
+/* Evict key are used to:
+ * - store SCS(swapping clients list)
+ * - store EVICTED(evicted key, lru bits are reserved.)
+ * Note that evict key could store scs or evicted or both, here we only add
+ * an empty evict key(which doest not store anything), module should call
+ * SetSCS or SwapOut to store scs or evicted. */
+int RM_ModuleTypeAddEvict(RedisModuleKey *key) {
+    if (!(key->mode & REDISMODULE_EVICT)) return REDISMODULE_ERR;
+    if (key->value == NULL || key->value->type != OBJ_MODULE)
+        return REDISMODULE_ERR;
+    if (key->evict) return REDISMODULE_ERR;
+
+    moduleType *mt = RM_ModuleTypeGetType(key);
+    robj *e = createModuleObject(mt,NULL);
+    dictAdd(key->db->evict, sdsdup(key->key->ptr), e);
+    key->evict = e;
+    return REDISMODULE_OK;
+}
+
+int RM_ModuleTypeEvictExists(RedisModuleKey *key) {
+    if (key == NULL || !(key->mode & REDISMODULE_EVICT)) return 0;
+    return key->evict != NULL;
+}
+
+int RM_ModuleTypeReplaceEvict(RedisModuleKey *key, moduleType *mt, void *new_evict,
+        void **old_evict) {
+	if (!(key->mode & REDISMODULE_EVICT) || key->iter) return REDISMODULE_ERR;
+	if (!key->evict || key->evict->type != OBJ_MODULE) return REDISMODULE_ERR;
+
+	moduleValue *mv = key->evict->ptr;
+	if (mv->type != mt) return REDISMODULE_ERR;
+
+	if (old_evict) *old_evict = mv->value;
+	mv->value = new_evict;
+
+	return REDISMODULE_OK;
+}
+
+/* Note that key->evict have the same module type as key->value, but actually
+ * key->evict points to swapping client list which can't free by mt->free, so
+ * we set evict->ptr to NULL to avoid deleting evict->ptr(NULL or scs). */
+int RM_DeleteEvict(RedisModuleKey *key) {
+    if (!(key->mode & REDISMODULE_EVICT)) return REDISMODULE_ERR;
+    if (key->value && key->value->type != OBJ_MODULE) return REDISMODULE_ERR;
+    if (key->evict && key->evict->type != OBJ_MODULE) return REDISMODULE_ERR;
+    if (key->evict) {
+        moduleValue *mv = key->evict->ptr;
+        mv->value = NULL; /* free only robj shell (avoid releasing scs) */
+        dbDeleteEvict(key->db, key->key);
+        key->evict = NULL;
+    }
+    return REDISMODULE_OK;
+}
+
+/* -------- Use Evict to store SCS. -------- */
+int RM_ModuleTypeEvictSetSCS(RedisModuleKey *key, void *scs) {
+    if (key == NULL || !(key->mode & REDISMODULE_EVICT)) return REDISMODULE_ERR;
+    if (!key->evict || key->evict->type != OBJ_MODULE) return REDISMODULE_ERR;
+
+    moduleValue *mv = key->evict->ptr;
+    if (scs == NULL) {
+        key->evict->scs = 0;
+        mv->value = NULL;
+    } else {
+        key->evict->scs = 1;
+        mv->value = scs;
+    }
+    return REDISMODULE_OK;
+}
+
+void *RM_ModuleTypeEvictGetSCS(RedisModuleKey *key) {
+    if (key == NULL || !(key->mode & REDISMODULE_EVICT)) return NULL;
+    if (!key->evict || key->evict->type != OBJ_MODULE) return NULL;
+    moduleValue *mv = key->evict->ptr;
+    if (!key->evict->scs)
+        return NULL;
+    else 
+        return mv->value;
+}
+
+/* -------- Use Evict to store Evicted. -------- */
+int RM_ModuleTypeEvictEvicted(RedisModuleKey *key) {
+    if (key == NULL || !(key->mode & REDISMODULE_EVICT)) return 0;
+    if (key->evict == NULL) return 0;
+    return key->evict->evicted;
+}
+
+/* Only robj shell(excluding ptr) would be swapped into keyspace */
+int RM_ModuleTypeSwapIn(RedisModuleKey *key, void *new_value) {
+	if (!(key->mode & REDISMODULE_EVICT) || key->iter) return REDISMODULE_ERR;
+    if (key->evict == NULL || !key->evict->evicted || key->value != NULL)
+        return REDISMODULE_ERR;
+    if (key->evict->type != OBJ_MODULE) return REDISMODULE_ERR;
+
+    /* Move key from evict to dict. */
+    dictEntry *de = dictUnlink(key->db->evict, key->key->ptr);
+    dictLink(key->db->dict, de);
+    key->value = key->evict;
+    key->evict = NULL;
+
+    moduleValue *mv = key->value->ptr;
+
+    /* reserve scs if needed. */
+    if (key->value->scs) {
+        //serverLog(LL_WARNING, "[xxx] # %s  %s", (sds)key->key->ptr, swappingClientsDump(mv->value));
+
+        robj *e = createModuleObject(mv->type, mv->value);
+        e->scs = 1;
+        dictAdd(key->db->evict, sdsdup(key->key->ptr), e);
+        key->evict = e;
+    }
+
+    /* Set value to new value*/
+    mv->value = new_value;
+    key->value->evicted = 0;
+    key->value->scs = 0;
+
+    return REDISMODULE_OK;
+}
+
+/* Only robj shell(excluding ptr) would be swapped outto rocksdb.
+ * Note that we would overwrite db->evict 'cause db->value has the lru value
+ * we need. */
+int RM_ModuleTypeSwapOut(RedisModuleKey *key, void **old_value) {
+    int scsflag = 0;
+    void *scs = NULL;
+    moduleValue *mv;
+
+	if (!(key->mode & REDISMODULE_EVICT) || key->iter) return REDISMODULE_ERR;
+    if (key->value == NULL || key->value->type != OBJ_MODULE)
+        return REDISMODULE_ERR;
+
+    /* key->evict might already have swapping clients, in which case we would
+     * free key->evict robj shell but reserve scs and scs flag. */
+    if (key->evict) {
+        mv = key->evict->ptr;
+        scsflag = key->evict->scs;
+        scs = mv->value; /* reserve scs and scs flag */
+        mv->value = NULL; /* free robj shell */
+        dictDelete(key->db->evict, key->key->ptr);
+    }
+
+    /* If key->value still have contents, value would be saved into old_value,
+     * but robj shell are swapped out (e.g. lfu info) */
+    mv = key->value->ptr;
+    if (mv->value != NULL) {
+        if (old_value) *old_value = mv->value;
+        mv->value = NULL;
+    }
+
+    mv->value = scs;
+    dictEntry *de = dictUnlink(key->db->dict, key->key->ptr);
+    dictLink(key->db->evict, de);
+    key->evict = key->value;
+    key->evict->scs = scsflag;
+    key->evict->evicted = 1;
+    key->value = NULL;
+
+    return REDISMODULE_OK;
+}
+
+int RM_RocksDelete(RedisModuleCtx *ctx,RedisModuleString *keyname) {
+    return rocksDelete(ctx->client->db,keyname);
 }
 
 void* RM_ModuleGetValue(RedisModuleCtx* ctx,RedisModuleString* keyname) {
@@ -3818,7 +4187,7 @@ void *RM_LoadSds(RedisModuleIO *io) {
     }
     void *s = rdbGenericLoadStringObject(io->rio,
                RDB_LOAD_SDS, NULL);
-    add_module_memory_stat_alloc(sds_memory(s));
+    add_module_memory_stat_alloc((ssize_t)sds_memory(s));
     if (s == NULL) goto loaderr;
     return s;
 loaderr:
@@ -3917,7 +4286,7 @@ long double RM_LoadLongDouble(RedisModuleIO *io) {
     sds str = RM_LoadSds(io);
     long double value = *(long double*)str;
     assert(sdslen(str) == sizeof(long double));
-    add_module_memory_stat_alloc(-sds_memory(str));
+    add_module_memory_stat_alloc(-(ssize_t)sds_memory(str));
     sdsfree(str);
     return value;
 }
@@ -4732,6 +5101,8 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(GetSelectedDb);
     REGISTER_API(SelectDb);
     REGISTER_API(CrdtSelectDb);
+    REGISTER_API(GetSwapsAppendResult);
+    REGISTER_API(GetSwapAction);
     REGISTER_API(OpenKey);
     REGISTER_API(DbAddOrFind);
     REGISTER_API(DbDelete);
@@ -4787,6 +5158,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(StringTruncate);
     REGISTER_API(SetExpire);
     REGISTER_API(GetExpire);
+    REGISTER_API(KeyIsExpired);
     REGISTER_API(ZsetAdd);
     REGISTER_API(ZsetIncrby);
     REGISTER_API(ZsetScore);
@@ -4812,6 +5184,17 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(ModuleTypeLoadRdbAddValue);
     REGISTER_API(ModuleTypeGetType);
     REGISTER_API(ModuleTypeGetValue);
+    REGISTER_API(ModuleTypeSwapIn);
+    REGISTER_API(ModuleTypeSwapOut);
+    REGISTER_API(ModuleTypeReplaceValue);
+    REGISTER_API(DeleteEvict);
+    REGISTER_API(ModuleTypeAddEvict);
+    REGISTER_API(ModuleTypeEvictEvicted);
+    REGISTER_API(ModuleTypeEvictExists);
+    REGISTER_API(ModuleTypeReplaceEvict);
+    REGISTER_API(ModuleTypeEvictSetSCS);
+    REGISTER_API(ModuleTypeEvictGetSCS);
+    REGISTER_API(RocksDelete);
     REGISTER_API(ModuleGetValue);
     REGISTER_API(ModuleGetTombstone);
     REGISTER_API(SaveUnsigned);

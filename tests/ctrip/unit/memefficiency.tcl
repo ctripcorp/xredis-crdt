@@ -4,6 +4,32 @@ proc get_current_memory {client} {
     regexp $regstr $info match value 
     set _ $value
 }
+
+# if redis reached maxmemory, 
+proc almost_equal { target base } {
+    set equal 0
+    if { $target >= $base && $target < $base + $base/100 } {
+        set equal 1
+    }
+    set _ $equal
+}
+
+proc wait_swap_finished {client} {
+    for {set i 0} {$i < 36000} {incr i} {
+        set info [$client info swaps]
+        regexp "\r\nswap_inprogress:(.*?)\r\n" $info match swap_inprogress
+        regexp "\r\nswap_last_finish:(.*?)\r\n" $info match swap_last_finish
+        set elpased [expr [clock seconds] - $swap_last_finish]
+        # puts "$i: swap_inprogress($swap_inprogress) swap_last_finish($swap_last_finish) dbsize([$client dbsize])"
+        # swap finished: no swap in progress and swap finished for longer than 1s
+        if {$swap_inprogress == 0 && $elpased > 1} {
+            break
+        } else {
+            after 100
+        }
+    }
+}
+
 test "stand-alone" {
     start_server {tags {"stand-alone"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so}} {
         set master [srv 0 client]
@@ -13,17 +39,14 @@ test "stand-alone" {
         set master_gid  1
         $master config set maxmemory-policy allkeys-lru
         $master config set maxmemory [expr [get_current_memory $master] + 1048576]
+
         for {set i 0 } { $i < 20000} {incr i} {
             $master set $i $i
         }
-        # assert_equal [$master dbsize] 90
-        # puts [$master dbsize]
-        assert {[$master dbsize] < 20000}
-        assert_equal [$master tombstonesize] 0
-        assert_equal [expr [crdt_stats $master evicted_tombstones] + [$master dbsize]] 20000
-        # $master set 89 89
-        # puts [$master dbsize]
 
+        set master_dbsize [$master dbsize]
+        assert [almost_equal $master_dbsize 20000]
+        assert_equal [$master tombstonesize] 0
     }
 }
 
@@ -35,9 +58,9 @@ test "stand-alone  some type" {
         set master_stdout [srv 0 stdout]
         set master_gid  1
         $master config set maxmemory-policy allkeys-lru
-        $master config set maxmemory 1mb
+        $master config set maxmemory 5mb
         for {set i 0 } { $i < 1000} {incr i} {
-        $master set $i $i 
+            $master set $i $i 
         }
         for {set i 1000} {$i < 2000} {incr i} {
             $master set $i a
@@ -53,10 +76,9 @@ test "stand-alone  some type" {
         }
         # assert {[$master dbsize] < 100}
         assert_equal [$master tombstonesize] 0
-        assert_equal [expr [crdt_stats $master evicted_tombstones] + [$master dbsize]] 5000
-        # $master set 89 89
-        # puts [$master dbsize]
-
+        set master_dbsize [$master dbsize]
+        assert [almost_equal $master_dbsize 5000]
+        assert {$master_dbsize >= 5000 && $master_dbsize < 5050}
     }
 }
 
@@ -103,21 +125,20 @@ test "only add rc" {
                 }
                 after 2000
                 assert {[$master dbsize] > 0}
-                assert_equal [$master dbsize] [$peer dbsize]
-                assert_equal [$master dbsize] [$slave dbsize]
+                # puts "master([$master dbsize]) peer([$peer dbsize]) slave([$slave dbsize])"
+                assert [almost_equal [$master dbsize] [$peer dbsize]]
+                assert [almost_equal [$master dbsize] [$slave dbsize]]
                 assert_equal [$master tombstonesize] 0
                 assert_equal [$peer tombstonesize] 0
                 assert_equal [$slave tombstonesize] 0
                 
-                assert_equal [expr [crdt_stats $master evicted_tombstones] + [$master dbsize]] 2000
-                assert_equal [expr [crdt_stats $peer evicted_tombstones] + [$peer dbsize]] 2000
-                assert_equal [expr [crdt_stats $slave evicted_tombstones] + [$slave dbsize]] 2000
+                assert_equal [crdt_stats $master evicted_tombstones] 0
+                assert_equal [crdt_stats $peer evicted_tombstones] 0
+                assert_equal [crdt_stats $slave evicted_tombstones] 0
             }
         }
-
     }
 }
-
 
 test "some db" {
     start_server {tags {"some db"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so}} {
@@ -147,56 +168,20 @@ test "some db" {
                 $master del $i
             }
             assert {[$master tombstonesize] == 1000}
-            # puts [$master crdt.info replication]
-            after 1000
+
+            for {set i 500 } { $i < 1000} {incr i} {
+                $master set $i $i
+            }
             $master config set maxmemory [get_current_memory $master]
-            for {set i 0 } { $i < 1000} {incr i} {
+            for {set i 0 } { $i < 500} {incr i} {
                 $master set $i $i
             }
             after 1000
-            # $master set 2 2 
-            assert {[$master dbsize]  > 0}
-            assert_equal [$master dbsize] [$peer dbsize]
-            # assert {[$master dbsize] == 1000 }
+            assert [almost_equal [$master dbsize] 1000]
+            assert [almost_equal [$master dbsize] [$peer dbsize]]
             assert_equal [$master tombstonesize]  [$peer tombstonesize]
-            assert_equal [expr [crdt_stats $master evicted_tombstones] + [$master tombstonesize] + [$master dbsize]] 2000
-            assert_equal [expr [crdt_stats $peer evicted_tombstones] + [$peer tombstonesize] + [$peer dbsize]] 2000
-            # assert {[$master tombstonesize] > 0}
-            # assert_equal [$master tombstonesize] 0
-
-        }
-
-    }
-}
-
-
-test "evictiontombstone" {
-    start_server {tags {"evictiontombstone"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so}} {
-        set master [srv 0 client]
-        set master_host [srv 0 host]
-        set master_port [srv 0 port]
-        set master_stdout [srv 0 stdout]
-        set master_gid  1
-        $master config crdt.set repl-diskless-sync-delay 1
-        $master config set repl-diskless-sync-delay 1
-        $master config crdt.set repl-backlog-size 1mb
-        $master config set repl-backlog-size 1mb
-        $master config crdt.set repl-backlog-ttl 10
-        $master config set maxmemory-policy allkeys-lru
-        
-        start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 2} module {crdt.so}} {
-            set peer [srv 0 client]
-            set peer_host [srv 0 host]
-            set peer_port [srv 0 port]
-            set peer_stdout [srv 0 stdout]
-            set peer_gid  2
-            $peer peerof $master_gid $master_host $master_port
-            wait_for_peer_sync $peer 
-            $master set k a 
-            $master del k 
-            assert_equal [$master tombstonesize] 1
-            $master crdt.evictiontombstone k 1  {1:2}
-            assert_equal [$master tombstonesize] 0
+            assert_equal [crdt_stats $master evicted_tombstones] 0
+            assert_equal [crdt_stats $peer evicted_tombstones] 0
         }
     }
 }
@@ -245,10 +230,13 @@ test "other db tombstone" {
                 assert_equal [$peer tombstonesize] 1000
                 # puts [$master crdt.info replication]
                 after 1000
-                $master config set maxmemory [get_current_memory $master]
                 
                 $master select 9
-                for {set i 0 } { $i < 1000} {incr i} {
+                for {set i 500 } { $i < 1000} {incr i} {
+                    $master set $i $i
+                }
+                $master config set maxmemory [get_current_memory $master]
+                for {set i 0 } { $i < 500} {incr i} {
                     $master set $i $i
                 }
                 after 1000
@@ -257,8 +245,8 @@ test "other db tombstone" {
                 set master_size [$master dbsize]
                 set peer_size [$peer dbsize]
                 set slave_size [$slave dbsize]
-                assert_equal $master_size $peer_size
-                assert_equal $slave_size $master_size
+                assert [almost_equal $master_size $peer_size]
+                assert [almost_equal $master_size $slave_size]
                 if {[$master tombstonesize] > 0} {
                     assert_equal $master_size 1000
                 }
@@ -266,22 +254,9 @@ test "other db tombstone" {
                 $peer select 2
                 $slave select 2
                 assert_equal [$master tombstonesize] [$peer tombstonesize]
-                assert_equal [expr [crdt_stats $master evicted_tombstones] + [$master tombstonesize] +$master_size] 2000
-                assert_equal [expr [crdt_stats $peer evicted_tombstones] + [$peer tombstonesize] + $peer_size] 2000
-                assert_equal   [crdt_stats $slave evicted_tombstones]  [crdt_stats $master evicted_tombstones] 
-                # assert_equal [expr [crdt_stats $master evicted_tombstones] + [$master tombstonesize] + [$master dbsize]] 2000
-                # assert_equal [expr [crdt_stats $peer evicted_tombstones] + [$peer tombstonesize] + [$peer dbsize]] 2000
-                
-
-                # $master set 2 2 
-                # assert_equal [$master dbsize]  1000
-                # $peer select 9
-                # assert_equal [$master dbsize] [$peer dbsize]
-                # assert {[$master dbsize] == 1000 }
-                
-                # assert {[$master tombstonesize] > 0}
-                # assert_equal [$master tombstonesize] 0
-
+                assert_equal [crdt_stats $master evicted_tombstones] 0
+                assert_equal [crdt_stats $peer evicted_tombstones] 0
+                assert_equal [crdt_stats $slave evicted_tombstones] 0
             }
         }
     }

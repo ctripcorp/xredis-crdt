@@ -342,6 +342,21 @@ void listRotate(list *list) {
     list->head = tail;
 }
 
+/* Rotate the list removing the head node and inserting it to the tail. */
+void listRotateHeadToTail(list *list) {
+    if (listLength(list) <= 1) return;
+
+    listNode *head = list->head;
+    /* Detach current head */
+    list->head = head->next;
+    list->head->prev = NULL;
+    /* Move it as tail */
+    list->tail->next = head;
+    head->next = NULL;
+    head->prev = list->tail;
+    list->tail = head;
+}
+
 /* Add all the elements of the list 'o' at the end of the
  * list 'l'. The list 'other' remains empty but otherwise valid. */
 void listJoin(list *l, list *o) {

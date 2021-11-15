@@ -156,6 +156,7 @@ dictEntry *dictAddOrFind(dict *d, void *key);
 int dictReplace(dict *d, void *key, void *val);
 int dictDelete(dict *d, const void *key);
 dictEntry *dictUnlink(dict *ht, const void *key);
+int dictLink(dict *d, dictEntry *de);
 void dictFreeUnlinkedEntry(dict *d, dictEntry *he);
 void dictRelease(dict *d);
 dictEntry * dictFind(dict *d, const void *key);

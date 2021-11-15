@@ -95,11 +95,15 @@ int dbAsyncDelete(redisDb *db, robj *key) {
  * lazy freeing. */
 void emptyDbAsync(redisDb *db) {
     dict *oldht1 = db->dict, *oldht2 = db->expires;
+    dict *oldht3 = db->deleted_keys, *oldht4 = db->evict;
     db->dict = dictCreate(&dbDictType,NULL);
     db->expires = dictCreate(&keyptrDictType,NULL);
     db->deleted_keys = dictCreate(&dbDictType,NULL);
+    db->evict = dictCreate(&evictDictType,NULL);
     atomicIncr(lazyfree_objects,dictSize(oldht1));
+    atomicIncr(lazyfree_objects,dictSize(oldht4));
     bioCreateBackgroundJob(BIO_LAZY_FREE,NULL,oldht1,oldht2);
+    bioCreateBackgroundJob(BIO_LAZY_FREE,NULL,oldht3,oldht4);
 }
 
 /* Empty the slots-keys map of Redis CLuster by creating a new empty one

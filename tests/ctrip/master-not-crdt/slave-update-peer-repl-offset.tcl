@@ -22,7 +22,7 @@ proc wait { client index type log}  {
         } else {
             assert_equal [$client ping] PONG
             incr retry -1
-            after 100
+            after 1000
         }
     }
     if {$retry == 0} {

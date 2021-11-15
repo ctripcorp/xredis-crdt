@@ -56,19 +56,8 @@ int activeExpireCycleTryExpire(redisDb *db, dictEntry *de, long long now) {
     if (now > t) {
         sds key = dictGetKey(de);
         robj *keyobj = createStringObject(key,sdslen(key));
-
-        if(crdtPropagateExpire(db,keyobj,server.lazyfree_lazy_expire, t) != C_OK) {
-            decrRefCount(keyobj);
-            return 0;
-        }
-        if (server.lazyfree_lazy_expire)
-            dbAsyncDelete(db,keyobj);
-        else
-            dbSyncDelete(db,keyobj);
-        notifyKeyspaceEvent(NOTIFY_EXPIRED,
-            "expired",keyobj,db->id);
+        dbExpire(db, keyobj);
         decrRefCount(keyobj);
-        // server.stat_expiredkeys++;
         return 1;
     } else {
         return 0;
@@ -458,7 +447,8 @@ void ttlGenericCommand(client *c, int output_ms) {
     long long expire, ttl = -1;
 
     /* If the key does not exist at all, return -2 */
-    if (lookupKeyReadWithFlags(c->db,c->argv[1],LOOKUP_NOTOUCH) == NULL) {
+    if (lookupKeyReadWithFlags(c->db,c->argv[1],LOOKUP_NOTOUCH) == NULL &&
+            lookupEvictKey(c->db,c->argv[1]) == NULL) {
         addReplyLongLong(c,-2);
         return;
     }
