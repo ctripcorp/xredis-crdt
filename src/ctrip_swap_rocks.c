@@ -393,6 +393,7 @@ static int rocksInitDB(rocks *rocks) {
     rocks->block_opts = block_opts;
 
     rocksdb_options_optimize_for_point_lookup(rocks->rocksdb_opts, 1);
+    rocksdb_options_optimize_level_style_compaction(rocks->rocksdb_opts, 256*1024*1024);
 
     rocks->rocksdb_ropts = rocksdb_readoptions_create();
     rocksdb_readoptions_set_verify_checksums(rocks->rocksdb_ropts, 0);
