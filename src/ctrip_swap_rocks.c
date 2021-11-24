@@ -385,7 +385,7 @@ static int rocksInitDB(rocks *rocks) {
     rocksdb_options_set_max_bytes_for_level_base(rocks->rocksdb_opts, 512*1024*1024); 
     struct rocksdb_block_based_table_options_t *block_opts = rocksdb_block_based_options_create();
     rocksdb_block_based_options_set_block_size(block_opts, 8192);
-    block_cache = rocksdb_cache_create_lru(1*1024*1024); // 1MB
+    block_cache = rocksdb_cache_create_lru(1*1024*1024);
     rocks->block_cache = block_cache;
     rocksdb_block_based_options_set_block_cache(block_opts, block_cache);
     rocksdb_block_based_options_set_cache_index_and_filter_blocks(block_opts, 0);
@@ -394,6 +394,9 @@ static int rocksInitDB(rocks *rocks) {
 
     rocksdb_options_optimize_for_point_lookup(rocks->rocksdb_opts, 1);
     rocksdb_options_optimize_level_style_compaction(rocks->rocksdb_opts, 256*1024*1024);
+    rocksdb_options_set_max_background_compactions(rocks->rocksdb_opts, 4); /* default 1 */
+    rocksdb_options_compaction_readahead_size(rocks->rocksdb_opts, 2*1024*1024); /* default 0 */
+    rocksdb_options_set_optimize_filters_for_hits(rocks->rocksdb_opts, 1); /* default false */
 
     rocks->rocksdb_ropts = rocksdb_readoptions_create();
     rocksdb_readoptions_set_verify_checksums(rocks->rocksdb_ropts, 0);
