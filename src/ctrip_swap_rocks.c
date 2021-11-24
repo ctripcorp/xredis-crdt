@@ -39,16 +39,6 @@
 #define RIO_NOTIFY_CQ           0
 #define RIO_NOTIFY_PIPE         1
 
-typedef struct RIO {
-    int type;               /* io type, GET/PUT/DEL */
-    sds key;                /* rocks key */
-    sds val;                /* rocks val */
-    int notify_type;        /* notify complete type, CQ/PIPE */
-    rocksIOCallback cb;     /* CQ: io finished callback */
-    void *privdata;         /* CQ: io finished privdata */
-    int pipe_fd;            /* PIPE: fd to notify io finished */
-} RIO;
-
 typedef struct {
     int id;
     pthread_t thread_id;
@@ -202,7 +192,7 @@ void *RIOThreadMain (void *arg) {
                     RIOFree(rio);
                 }
             } else { /* RIO_NOTIFY_PIPE */
-                if (write(rio->pipe_fd, "x", 1) < 1) {
+                if (write(rio->pipe_fd, "x", 1) < 1 && errno != EAGAIN) {
                     static mstime_t prev_log;
                     if (server.mstime - prev_log >= 1000) {
                         prev_log = server.mstime;
@@ -302,7 +292,7 @@ int appendToRIOComplteQueue(RIOCompleteQueue *cq, RIO *rio) {
     pthread_mutex_lock(&cq->lock);
     listAddNodeTail(cq->complete_queue, rio);
     pthread_mutex_unlock(&cq->lock);
-    if (write(cq->notify_send_fd, "x", 1) < 1) {
+    if (write(cq->notify_send_fd, "x", 1) < 1 && errno != EAGAIN) {
         static mstime_t prev_log;
         if (server.mstime - prev_log >= 1000) {
             prev_log = server.mstime;
@@ -373,6 +363,10 @@ static void rocksDeinitCompleteQueue(rocks *rocks) {
     close(cq->notify_send_fd);
     pthread_mutex_destroy(&cq->lock);
     listRelease(cq->complete_queue);
+}
+
+int rocksProcessCompleteQueue(rocks *rocks) {
+    return processFinishedRIOInCompleteQueue(&rocks->CQ);
 }
 
 #define ROCKS_DIR_MAX_LEN 512

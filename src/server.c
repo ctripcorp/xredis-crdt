@@ -2116,6 +2116,9 @@ void initServer(struct redisServer *srv) {
     srv->aof_last_write_status = C_OK;
     srv->aof_last_write_errno = 0;
     srv->repl_good_slaves_count = 0;
+    srv->swap_memory_inflight = 0;
+    srv->swap_memory_slowdown = 128*1024*1024;
+    srv->swap_memory_stop = 512*1024*1024;
 
     updateCachedTime(srv);
 

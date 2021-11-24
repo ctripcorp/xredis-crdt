@@ -1841,7 +1841,12 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
         * responsible for key expiry. If we would expire keys here, the
         * snapshot taken by the master may not be reflected on the slave. */
         
+        /* perform eviction while loading to control memory peak. */
         freeMemoryIfNeeded();
+        /* slowdown rdbLoad if evicting faster than ssd can handle. */
+        performRateLimiting();
+        /* process completed rocks IO to avoid io requests accumulate. */
+        rocksProcessCompleteQueue(server.rocks);
 
         /* Add the new object in the hash table */
         if(!isCrdtRdb && crdt_enabled) {

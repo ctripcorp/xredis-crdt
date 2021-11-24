@@ -227,6 +227,7 @@ typedef struct {
     moduleSwapFinishedCallback module_cb;
     void *module_pd;
     swappingClients *scs;
+    size_t memory_inflight;
 } rocksPrivData;
 
 void clientHoldKey(client *c, robj *key) {
@@ -302,6 +303,7 @@ void rocksSwapFinished(int action, sds rawkey, sds rawval, void *privdata) {
     clientSwapFinishedCallback client_cb = (clientSwapFinishedCallback)c->client_swap_finished_cb;
     void *client_pd = c->client_swap_finished_pd;
 
+    server.swap_memory_inflight -= rocks_pd->memory_inflight;
     updateStatsSwapFinish(R2S(action), rawkey, rawval);
 
     /* Current swapping client should be the head of swapping_clents. */
@@ -368,6 +370,21 @@ void rocksSwapFinished(int action, sds rawkey, sds rawval, void *privdata) {
     zfree(rocks_pd);
 }
 
+#define SWAP_MEM_INFLIGHT_BASE (sizeof(rocksPrivData) + sizeof(RIO) + sizeof(list) + sizeof(listNode) + sizeof(swapClient))
+static inline size_t estimateSwapMemoryInflight(sds rawkey, sds rawval, rocksPrivData *pd) {
+    size_t result = 0;
+    if (rawkey) result += sdsalloc(rawkey);
+    if (rawval) result += sdsalloc(rawval);
+    if (pd->key) {
+        result += sizeof(robj);
+        result += sdsalloc(pd->key->ptr);
+    }
+    if (pd->subkey) {
+        result += sizeof(robj);
+        result += sdsalloc(pd->subkey->ptr);
+    }
+    return SWAP_MEM_INFLIGHT_BASE + result;
+}
 /* Called when there are no preceding swapping clients: swap action will be
  * re-evaluated according to keyspace status to decide whether & which swap
  * action should be triggered. */
@@ -400,6 +417,8 @@ int clientSwapProceed(client *c, swap *s, swappingClients **pscs) {
     rocks_pd->module_pd = module_pd;
     rocks_pd->scs = *pscs;
 
+    rocks_pd->memory_inflight = estimateSwapMemoryInflight(rawkey, rawval, rocks_pd);
+    server.swap_memory_inflight += rocks_pd->memory_inflight;
     updateStatsSwapStart(action, rawkey, rawval);
     rocksIOSubmitAsync(crc16(rawkey, sdslen(rawkey)), S2R(action), rawkey,
             rawval, rocksSwapFinished, rocks_pd);

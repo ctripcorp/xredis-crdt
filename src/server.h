@@ -1378,6 +1378,10 @@ struct redisServer {
     struct swapStat *swap_stats; /* array of swap stats (one for each swap type). */
     int debug_evict_keys; /* num of keys to evict before calling cmd. */
     struct swappingClients *scs; /* global scs for flushdb/flushall */
+    /* swap rate limiting */
+    size_t swap_memory_inflight;  /* rocks inflight memory bytes */
+    size_t swap_memory_slowdown; /* MB of memory to slowdown command process */
+    size_t swap_memory_stop; /* MB of memory to (almost) stop command process */
 }redisServer;
 
 typedef struct pubsubPattern {
@@ -2367,9 +2371,18 @@ void xorDigest(unsigned char *digest, void *ptr, size_t len);
 #define ROCKS_PUT            	2
 #define ROCKS_DEL              	3
 
-struct RIO;
-
 typedef void (*rocksIOCallback)(int action, sds key, sds val, void *privdata);
+
+typedef struct RIO {
+    int type;               /* io type, GET/PUT/DEL */
+    sds key;                /* rocks key */
+    sds val;                /* rocks val */
+    int notify_type;        /* notify complete type, CQ/PIPE */
+    rocksIOCallback cb;     /* CQ: io finished callback */
+    void *privdata;         /* CQ: io finished privdata */
+    int pipe_fd;            /* PIPE: fd to notify io finished */
+} RIO;
+
 void rocksIOSubmitAsync(uint32_t dist, int type, sds key, sds val, rocksIOCallback cb, void *privdata);
 struct RIO *rocksIOSubmitSync(uint32_t dist, int type, sds key, sds val, int notify_fd);
 void RIOReap(struct RIO *r, sds *key, sds *val);
@@ -2382,6 +2395,7 @@ int rocksDelete(redisDb *db, robj *key);
 int rocksFlushAll();
 rocksdb_t *rocksGetDb(struct rocks *rocks);
 rocksdb_memory_consumers_t *rocksGetMemConsumer(struct rocks *rocks);
+int rocksProcessCompleteQueue(struct rocks *rocks);
 
 /* swap */
 #define SWAP_NOP    0
@@ -2429,6 +2443,7 @@ int getSwapsGlobal(struct redisCommand *cmd, robj **argv, int argc, getSwapsResu
 void updateStatsSwapStart(int type, sds rawkey, sds rawval);
 void updateStatsSwapFinish(int type, sds rawkey, sds rawval);
 int swapsPendingOfType(int type);
+int performRateLimiting();
 
 /* parallel swap */
 typedef int (*parallelSwapFinishedCb)(sds rawkey, sds rawval, void *pd);

@@ -380,11 +380,47 @@ size_t freeMemoryGetNotCountedMemory(void) {
     return overhead;
 }
 
+size_t objectComputeSize(robj *o, size_t sample_size);
+static inline size_t keyComputeSize(redisDb *db, robj *key) {
+    robj *val = lookupKey(db, key, LOOKUP_NOTOUCH);
+    return val ? objectComputeSize(val, 5): 0;
+}
+
+static inline size_t getUsedMemory() {
+    return zmalloc_used_memory() - server.swap_memory_inflight;
+}
+
+/* sleep 100us~100ms if current swap inflight memory is (slowdown, stop). */
+#define RATELIMIT_SLEEP_MIN 100
+#define RATELIMIT_SLEEP_MAX 100000
+
+int performRateLimiting() {
+    unsigned long time_tosleep;
+
+    if (server.swap_memory_inflight <= server.swap_memory_slowdown) {
+        time_tosleep = 0;
+    } else if (server.swap_memory_inflight >= server.swap_memory_stop) {
+        time_tosleep = RATELIMIT_SLEEP_MAX;
+    } else {
+        float pct = ((float)server.swap_memory_inflight - server.swap_memory_slowdown) /
+            ((float)server.swap_memory_stop - server.swap_memory_slowdown);
+        time_tosleep = (unsigned long)(RATELIMIT_SLEEP_MIN + pct * (RATELIMIT_SLEEP_MAX - RATELIMIT_SLEEP_MIN));
+    }
+
+    if (time_tosleep <= 0) {
+        return 0;
+    } else {
+        serverLog(LL_VERBOSE, "ratelimit swap_memory_inflight(%ld) sleep (%ld)us",
+                server.swap_memory_inflight, time_tosleep);
+        usleep(time_tosleep);
+        return time_tosleep;
+    }
+}
+
 int freeMemoryIfNeeded(void) {
     int keys_freed = 0;
     size_t mem_reported, mem_used, mem_tofree, mem_freed;
     mstime_t latency, eviction_latency;
-    long long delta;
     int slaves = listLength(server.slaves) + listLength(crdtServer.slaves);
 
     /* When clients are paused the dataset should be static not just from the
@@ -394,7 +430,7 @@ int freeMemoryIfNeeded(void) {
 
     /* Check if we are over the memory usage limit. If we are not, no need
      * to subtract the slaves output buffers. We can just return ASAP. */
-    mem_reported = zmalloc_used_memory();
+    mem_reported = getUsedMemory();
     if (mem_reported <= server.maxmemory) return C_OK;
 
     /* Remove the size of slaves output buffers and AOF buffer from the
@@ -509,15 +545,13 @@ int freeMemoryIfNeeded(void) {
              *
              * AOF and Output buffer memory will be freed eventually so
              * we only care about memory used by the key space. */
-            delta = (long long) zmalloc_used_memory();
             latencyStartMonitor(eviction_latency);
             /* Trigger async swap to move key from memory to rocksdb */
             dbEvict(db, keyobj);
             latencyEndMonitor(eviction_latency);
             latencyAddSampleIfNeeded("eviction-swap",eviction_latency);
             latencyRemoveNestedEvent(latency,eviction_latency);
-            delta -= (long long) zmalloc_used_memory();
-            mem_freed += delta;
+            mem_freed += keyComputeSize(db, keyobj);
             server.stat_evictedkeys++;
             notifyKeyspaceEvent(NOTIFY_EVICTED, "evicted",
                 keyobj, db->id);
@@ -539,7 +573,7 @@ int freeMemoryIfNeeded(void) {
              * release the memory all the time. */
             if (server.lazyfree_lazy_eviction && !(keys_freed % 16)) {
                 overhead = freeMemoryGetNotCountedMemory();
-                mem_used = zmalloc_used_memory();
+                mem_used = getUsedMemory();
                 mem_used = (mem_used > overhead) ? mem_used-overhead : 0;
                 if (mem_used <= server.maxmemory) {
                     mem_freed = mem_tofree;
@@ -558,6 +592,7 @@ int freeMemoryIfNeeded(void) {
     static mstime_t prev;
     nfreed += keys_freed;
     if (server.mstime - prev > 1000) {
+        //TODO remove
         serverLog(LL_VERBOSE, "[xxx] used memory(%ld) keys_freed(%ld)", mem_used, nfreed);
         prev = server.mstime;
         nfreed = 0;
