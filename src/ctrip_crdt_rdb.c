@@ -328,7 +328,7 @@ int crdtSendEvictMergeRequest2(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di,
     dictEntry *de;
     int num = 0;
 
-    parallelSwap *ps = parallelSwapNew(16);
+    parallelSwap *ps = parallelSwapNew(32);
     /* Iterate this DB tombstone writing every entry that is locally changed, but not gc'ed*/
     while((de = dictNext(di)) != NULL) {
         int i;
