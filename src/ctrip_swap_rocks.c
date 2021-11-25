@@ -403,6 +403,7 @@ static int rocksInitDB(rocks *rocks) {
     rocksdb_readoptions_set_fill_cache(rocks->rocksdb_ropts, 0);
 
     rocks->rocksdb_wopts = rocksdb_writeoptions_create();
+    rocksdb_writeoptions_disable_WAL(rocks->rocksdb_wopts, true);
 
     struct stat statbuf;
     if (!stat(ROCKS_DATA, &statbuf) && S_ISDIR(statbuf.st_mode)) {

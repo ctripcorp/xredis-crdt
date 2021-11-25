@@ -1548,6 +1548,18 @@ void stopLoading(void) {
     server.loading = 0;
 }
 
+/* If rdbLoad is rate limiting, we need to send newline to master and reply
+ * to PING/INFO so that sentinel wouldn't flag server down. */
+static void rdbLoadProgress() {
+    /* The DB can take some non trivial amount of time to load. Update
+     * our cached time since it is used to create and update the last
+     * interaction time with clients and for other important things. */
+    updateCachedTime(&server);
+    if (server.masterhost && server.repl_state == REPL_STATE_TRANSFER)
+        replicationSendNewlineToMaster();
+    processEventsWhileBlocked();
+}
+
 /* Track loading progress in order to serve client's from time to time
    and if needed calculate rdb checksum  */
 void rdbLoadProgressCallback(rio *r, const void *buf, size_t len) {
@@ -1556,14 +1568,8 @@ void rdbLoadProgressCallback(rio *r, const void *buf, size_t len) {
     if (server.loading_process_events_interval_bytes &&
         (r->processed_bytes + len)/server.loading_process_events_interval_bytes > r->processed_bytes/server.loading_process_events_interval_bytes)
     {
-        /* The DB can take some non trivial amount of time to load. Update
-         * our cached time since it is used to create and update the last
-         * interaction time with clients and for other important things. */
-        updateCachedTime(&server);
-        if (server.masterhost && server.repl_state == REPL_STATE_TRANSFER)
-            replicationSendNewlineToMaster();
+        rdbLoadProgress();
         loadingProgress(r->processed_bytes);
-        processEventsWhileBlocked();
     }
 }
 /* Load an RDB file from the rio stream 'rdb'. On success C_OK is returned,
@@ -1825,15 +1831,30 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
             decrRefCount(auxkey);
             decrRefCount(auxval);
             continue; /* Read type again. */
-        } 
+        }
 
         /* slowdown rdbLoad if evicting faster than ssd can handle. */
+        size_t memory_inflight = server.swap_memory_inflight;
         if (!performRateLimiting()) {
             /* perform eviction while loading to control memory peak. */
             freeMemoryIfNeeded();
-		}
+            if (server.swap_memory_inflight - memory_inflight >
+                    (size_t)server.loading_process_events_interval_bytes) {
+                rdbLoadProgress();
+            }
+		} else {
+            /* rdb load paused for quite a while, we should progress a bit to
+             * avoid being flagged down by sentinel. */
+            rdbLoadProgress();
+        }
+
+        memory_inflight = server.swap_memory_inflight;
         /* process completed rocks IO to avoid io requests accumulate. */
         rocksProcessCompleteQueue(server.rocks);
+        if (memory_inflight - server.swap_memory_inflight >
+                (size_t)server.loading_process_events_interval_bytes) {
+            rdbLoadProgress();
+        }
 
         if(type == RDB_CRDT_VALUE) {
             if(rdbLoadCrdtData(rdb, db, expiretime, load) == C_ERR) goto eoferr;

@@ -421,7 +421,7 @@ int clientSwapProceed(client *c, swap *s, swappingClients **pscs) {
     server.swap_memory_inflight += rocks_pd->memory_inflight;
     updateStatsSwapStart(action, rawkey, rawval);
     rocksIOSubmitAsync(crc16(rawkey, sdslen(rawkey)), S2R(action), rawkey,
-            rawval, rocksSwapFinished, rocks_pd);
+           rawval, rocksSwapFinished, rocks_pd);
     return 1;
 }
 
