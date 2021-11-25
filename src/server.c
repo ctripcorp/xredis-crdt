@@ -1383,6 +1383,9 @@ void beforeSleep(struct aeEventLoop *eventLoop) {
     /* Handle writes with pending output buffers. */
     handleClientsWithPendingWrites();
 
+    /* Slow down event processing when too much swap memory inflight. */
+    performRateLimiting();
+
     /* Before we are going to sleep, let the threads access the dataset by
      * releasing the GIL. Redis main thread will not touch anything at this
      * time. */

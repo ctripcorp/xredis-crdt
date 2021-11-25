@@ -380,8 +380,7 @@ size_t freeMemoryGetNotCountedMemory(void) {
     return overhead;
 }
 
-size_t objectComputeSize(robj *o, size_t sample_size);
-static inline size_t keyComputeSize(redisDb *db, robj *key) {
+size_t keyComputeSize(redisDb *db, robj *key) {
     robj *val = lookupKey(db, key, LOOKUP_NOTOUCH);
     return val ? objectComputeSize(val, 5): 0;
 }

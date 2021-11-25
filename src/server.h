@@ -2444,6 +2444,8 @@ void updateStatsSwapStart(int type, sds rawkey, sds rawval);
 void updateStatsSwapFinish(int type, sds rawkey, sds rawval);
 int swapsPendingOfType(int type);
 int performRateLimiting();
+size_t objectComputeSize(robj *o, size_t sample_size);
+size_t keyComputeSize(redisDb *db, robj *key);
 
 /* parallel swap */
 typedef int (*parallelSwapFinishedCb)(sds rawkey, sds rawval, void *pd);

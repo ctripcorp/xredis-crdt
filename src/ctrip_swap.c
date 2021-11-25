@@ -370,7 +370,18 @@ void rocksSwapFinished(int action, sds rawkey, sds rawval, void *privdata) {
     zfree(rocks_pd);
 }
 
-#define SWAP_MEM_INFLIGHT_BASE (sizeof(rocksPrivData) + sizeof(RIO) + sizeof(list) + sizeof(listNode) + sizeof(swapClient))
+/* Estimate memory used for one swap action, server will slow down event
+ * processing if swap consumed too much memory(i.e. server is generating
+ * io requests faster than rocksdb can handle). */
+#define SWAP_MEM_ESTMIATED_ZMALLOC_OVERHEAD   512
+#define SWAP_MEM_INFLIGHT_BASE (                                    \
+        /* db.evict store scs */                                    \
+        sizeof(moduleValue) + sizeof(robj) + sizeof(dictEntry) +    \
+        sizeof(swapClient) + sizeof(swappingClients) +              \
+        sizeof(rocksPrivData) +                                     \
+        sizeof(RIO) +                                               \
+        /* link in scs, pending_rios, processing_rios */            \
+        (sizeof(list) + sizeof(listNode))*3 )
 static inline size_t estimateSwapMemoryInflight(sds rawkey, sds rawval, rocksPrivData *pd) {
     size_t result = 0;
     if (rawkey) result += sdsalloc(rawkey);
@@ -378,13 +389,15 @@ static inline size_t estimateSwapMemoryInflight(sds rawkey, sds rawval, rocksPri
     if (pd->key) {
         result += sizeof(robj);
         result += sdsalloc(pd->key->ptr);
+        result += keyComputeSize(pd->c->db, pd->key);
     }
     if (pd->subkey) {
         result += sizeof(robj);
         result += sdsalloc(pd->subkey->ptr);
     }
-    return SWAP_MEM_INFLIGHT_BASE + result;
+    return SWAP_MEM_INFLIGHT_BASE + SWAP_MEM_ESTMIATED_ZMALLOC_OVERHEAD + result;
 }
+
 /* Called when there are no preceding swapping clients: swap action will be
  * re-evaluated according to keyspace status to decide whether & which swap
  * action should be triggered. */
