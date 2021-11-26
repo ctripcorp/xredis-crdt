@@ -97,7 +97,7 @@ int rdbSaveEvictDb(rio *rdb, int *error, redisDb *db) {
     dict *d = db->evict;
     long long now = mstime(), num = 0;
 
-    parallelSwap *ps = parallelSwapNew(16);
+    parallelSwap *ps = parallelSwapNew(32);
 
     di = dictGetSafeIterator(d);
     while((de = dictNext(di)) != NULL) {

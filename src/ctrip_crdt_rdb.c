@@ -291,7 +291,9 @@ keyCrdtMergeCtx *keyCrdtMergeCtxNew(crdtRdbSaveInfo *rsi, crdtFilterSplitFunc2 f
     ctx->filterFunc = filterFunc;
     ctx->freeFilterFunc = freeFilterfunc;
     ctx->rdb = rdb;
+    if (key) incrRefCount(key);
     ctx->key = key;
+    if (dup) incrRefCount(dup);
     ctx->dup = dup;
     ctx->expire = expire;
     ctx->totalswap = totalswap;
@@ -302,14 +304,19 @@ keyCrdtMergeCtx *keyCrdtMergeCtxNew(crdtRdbSaveInfo *rsi, crdtFilterSplitFunc2 f
     return ctx;
 }
 
-int complementObject(robj *dup, sds rawkey, sds rawval, complementObjectFunc comp, void *pd);
+void keyCrdtMergeCtxFree(keyCrdtMergeCtx *ctx) {
+    if (ctx->key) decrRefCount(ctx->key);
+    if (ctx->dup) decrRefCount(ctx->dup);
+    zfree(ctx);
+}
+
 int crdtMergeSwapFinished(sds rawkey, sds rawval, void *_kvp) {
     keyCrdtMergeCtx *kvp = _kvp;
 
     if (complementObject(kvp->dup, rawkey, rawval, kvp->comp, kvp->pd)) {
         serverLog(LL_WARNING, "[crdtMerge] comp object failed:%.*s %.*s",
                 (int)sdslen(rawkey), rawkey, (int)sdslen(rawval), rawval);
-        return C_ERR;
+        goto err;
     }
 
     kvp->numswapped++;
@@ -317,13 +324,22 @@ int crdtMergeSwapFinished(sds rawkey, sds rawval, void *_kvp) {
         if (crdtSendMergeRequestKeyValuePair(kvp->rsi, kvp->filterFunc,
                     kvp->freeFilterFunc, kvp->rdb, kvp->key, kvp->dup,
                     kvp->expire, kvp->cmdname) == -1) {
-            return C_ERR;
+            goto err;
         }
     }
+
+    sdsfree(rawkey);
+    sdsfree(rawval);
+    keyCrdtMergeCtxFree(kvp);
     return C_OK;
+
+err:
+    sdsfree(rawkey);
+    sdsfree(rawval);
+    keyCrdtMergeCtxFree(kvp);
+    return C_ERR;
 }
 
-robj *getComplementSwaps(redisDb *db, robj *key, getSwapsResult *result, complementObjectFunc *comp, void **pd);
 int crdtSendEvictMergeRequest2(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di, const char* cmdname, crdtFilterSplitFunc2 filterFunc, crdtFreeFilterResultFunc freeFilterFunc, redisDb *db) {
     dictEntry *de;
     int num = 0;
@@ -356,22 +372,31 @@ int crdtSendEvictMergeRequest2(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di,
         /* no need to swap, normally it should not happend, we'are just being
          * protective here. */
         if (result.numswaps == 0) {
-            decrRefCount(key);
-            if (dup) decrRefCount(dup);
             crdtSendMergeRequestKeyValuePair(rsi, filterFunc, freeFilterFunc,
                     rdb, key, val, expire, cmdname);
+            decrRefCount(key);
+            if (dup) decrRefCount(dup);
             continue;
         }
 
         kvp = keyCrdtMergeCtxNew(rsi, filterFunc, freeFilterFunc, rdb, key, dup,
                 result.numswaps, expire, cmdname,  comp, pd);
 
+        /* key, dup ownership moved to keyCrdtMergeCtx. */
+        decrRefCount(key);
+        if (dup) decrRefCount(dup);
+
         for (i = 0; i < result.numswaps; i++) {
             swap *s = &result.swaps[i];
             if (parallelSwapSubmit(ps, (sds)s->key, crdtMergeSwapFinished, kvp)) {
+                keyCrdtMergeCtxFree(kvp);
+                getSwapsFreeResult(&result);
                 goto error;
             }
         }
+
+        /* Note that complement swaps are refs to rawkey (moved to rocks). */
+        getSwapsFreeResult(&result);
         num++;
     }
 
@@ -384,7 +409,6 @@ error:
     return C_ERR;
 }
 
-//TODO may be refactor a bit ?
 int crdtSendMergeRequest2(int mode, rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di, const char* cmdname, crdtFilterSplitFunc2 filterFun, crdtFreeFilterResultFunc freeFilterFunc, redisDb *db) {
     dictEntry *de;
     rio payload;
