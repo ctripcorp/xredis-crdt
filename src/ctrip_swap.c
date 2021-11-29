@@ -251,7 +251,7 @@ void clientUnholdKeys(client *c) {
 
 void commandProcessed(client *c);
 void continueProcessCommand(client *c) {
-    size_t prev_offset = c->reploff;
+    /* size_t prev_offset = c->reploff; */
 
 	c->flags &= ~CLIENT_SWAPPING;
     server.current_client = c;
@@ -264,33 +264,7 @@ void continueProcessCommand(client *c) {
     commandProcessed(c);
     /* pipelined command might already read into querybuf, if process not
      * restarted, pending commands would not be processed again. */
-    if((c->flags & CLIENT_MASTER) && iAmMaster() != C_OK) {
-        processInputBuffer(c);
-        size_t applied = c->reploff - prev_offset;
-        if (applied) {
-            if(!server.repl_slave_repl_all){
-                replicationFeedSlavesFromMasterStream(server.slaves,
-                    c->pending_querybuf, applied);
-        	}
-            sdsrange(c->pending_querybuf,applied,-1);
-            c->pending_used_offset = 0;
-        }
-    } else if(c->flags & CLIENT_CRDT_MASTER && getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED) {
-        int dictid = c->db->id;
-        processInputBuffer(c);
-        size_t applied = c->reploff - prev_offset;
-        if (applied) {
-            if(server.slaveseldb != dictid) {
-                sendSelectCommandToSlave(dictid);
-            }
-            replicationFeedSlavesFromMasterStream(server.slaves,
-                c->pending_querybuf, applied);
-            sdsrange(c->pending_querybuf,applied,-1);
-            c->pending_used_offset = 0;
-        }
-    } else {
-        processInputBuffer(c);
-    }
+    processInputBuffer(c);
 }
 
 int clientSwapProceed(client *c, swap *s, swappingClients **scs);
@@ -483,6 +457,200 @@ void clientSwapFinished(client *c, robj *key, void *pd) {
     }
 }
 
+static void replDispatch(client *c, client *wc) {
+    /* Move command from master client to worker client. */
+    wc->argc = c->argc;
+    wc->argv = c->argv;
+    wc->cmd = c->cmd;
+    wc->lastcmd = c->lastcmd;
+    wc->flags = c->flags;
+    wc->cmd_reploff = c->read_reploff - sdslen(c->querybuf);
+    c->argc = 0;
+    c->argv = NULL;
+
+    /* In order to dispatch transaction commands to the same worker client,
+     * we process multi no matter preceeding commands processed or not. */
+    if (c->cmd->proc == multiCommand) {
+        wc->CLIENT_REPL_DISPATCHING = 1;
+        resetClient(wc);
+    } else if (wc->CLIENT_REPL_DISPATCHING) {
+        if (c->cmd->proc == execCommand || c->cmd->proc == crdtExecCommand) {
+            wc->CLIENT_REPL_DISPATCHING = 0;
+        } else {
+            queueMultiCommand(wc);
+            resetClient(wc);
+        }
+    } else {
+        /* Switch to another worker client. */
+    }
+}
+
+static void processRepl(client *c) {
+    listNode *ln;
+    client *wc;
+
+    serverAssert((c->flags&CLIENT_MASTER) || (c->flags&CLIENT_CRDT_MASTER));
+
+    while ((ln = listFirst(server.repl_worker_clients_used))) {
+        wc = listNodeValue(ln);
+        if (wc->CLIENT_REPL_SWAPPING) break;
+
+        listDelNode(server.repl_worker_clients_used, ln);
+        listAddNodeTail(server.repl_worker_clients_free, wc);
+
+        clientUnholdKeys(wc);
+
+        wc->flags &= ~CLIENT_SWAPPING;
+        c->flags &= ~CLIENT_SWAPPING;
+        server.current_client = c;
+
+        call(wc, CMD_CALL_FULL);
+
+        /* post call */
+        c->woff = server.master_repl_offset;
+        if (listLength(server.ready_keys))
+            handleClientsBlockedOnLists();
+
+        c->db = wc->db;
+        c->gid = wc->gid;
+
+        commandProcessed(wc);
+
+        /* update peer backlog or offset. */
+        if ((c->flags & CLIENT_MASTER) && iAmMaster() != C_OK) {
+            if(c->gid == crdtServer.crdt_gid) {
+                /* Recover peer-backlog from repl-stream so that when this slave
+                   promoted as new master, other peers could PSYNC, Note that
+                   we only recover peer-stream created by current gid.  */
+                feedReplicationBacklog(&crdtServer, c->pending_querybuf,
+                        wc->cmd_reploff - c->reploff);
+            } else if(c->gid != -1) {
+                CRDT_Master_Instance* peer = getPeerMaster(c->gid);
+                if(peer) { 
+                    if(peer->master != NULL) {
+                        peer->master->reploff += wc->cmd_reploff - c->reploff;
+                    } else {
+                        serverLog(LL_WARNING, "peer client is null, gid:%d", c->gid);
+                    }
+                }
+            }
+        }
+
+        long long prev_offset = c->reploff;
+        /* update reploff */
+        if (((c->flags & CLIENT_MASTER)
+                    || ((c->flags & CLIENT_CRDT_MASTER) &&
+                        getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED))
+                && !(c->flags & CLIENT_MULTI)) {
+            /* Update the applied replication offset of our master. */
+            c->reploff = wc->cmd_reploff;
+        }
+
+        /* proxy repl stream to subslaves.
+         * Note that crdt redis might replicate from vanilla redis when
+         * migrating, in which case repl stream is not proxied (crdt redis
+         * will propagate it's own crdt style repl stream). */
+
+        /* Sep/07/2019 marked by nick, we should also propagate the stream if client is
+         * a crdt(peer) master, as we wish our slaves to keeper align with peer master's
+         * repl offset, so that, when a failover happend locally, the globally repl_offset
+         * will not be any different */
+        if (((c->flags & CLIENT_MASTER) && iAmMaster() != C_OK) ||
+                ((c->flags & CLIENT_CRDT_MASTER) && 
+                 getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED)) {
+            long long applied = c->reploff - prev_offset;
+            if (applied) {
+                if(server.slaveseldb != c->db->id) {
+                    sendSelectCommandToSlave(c->db->id);
+                }
+                replicationFeedSlavesFromMasterStream(server.slaves,
+                        c->pending_querybuf,applied);
+                sdsrange(c->pending_querybuf,applied,-1);
+            }
+        }
+    }
+
+    list *repl_swapping_clients = server.repl_swapping_clients;
+    if (listFirst(repl_swapping_clients) == NULL) return;
+    server.repl_swapping_clients = listCreate();
+    while ((ln = listFirst(repl_swapping_clients))) {
+        client *repl_client = listNodeValue(ln);
+        processInputBuffer(repl_client);
+        listDelNode(repl_swapping_clients,ln);
+    }
+    listRelease(repl_swapping_clients);
+}
+
+void replSwapFinished(client *wc, robj *key, void *pd) {
+    client *c = pd;
+    if (key) clientHoldKey(wc, key);
+    wc->swapping_count--;
+    /* Flag swap finished, process will be defered to processRepl. */
+    if (wc->swapping_count == 0) wc->CLIENT_REPL_SWAPPING = 0;
+    processRepl(c);
+}
+
+int replSwap(client *c, client *wc) {
+    int swap_count;
+    getSwapsResult result = GETSWAPS_RESULT_INIT;
+    getSwaps(wc, &result);
+    swap_count = clientSwapSwaps(wc, &result, replSwapFinished, c);
+    releaseSwaps(&result);
+    getSwapsFreeResult(&result);
+    return swap_count;
+}
+
+/* Different from original replication stream process, slave.master client
+ * might trigger swap and block untill rocksdb IO finish. because there is
+ * only one master client so rocksdb IO will be done sequentially, thus slave
+ * can't catch up with master. 
+ * In order to speed up replication stream processing, slave.master client
+ * dispatches command to multiple worker client and execute commands when 
+ * rocks IO finishes. Note that replicated commands swap in-parallel but we
+ * still processed in received order. */
+int dbSwap(client *c) {
+    client *wc;
+    listNode *ln;
+
+    /* normal client swap */
+    if (!(c->flags & CLIENT_MASTER) && !(c->flags & CLIENT_CRDT_MASTER))
+        return clientSwap(c);
+
+    /* repl client swap */
+    if (!(ln = listFirst(server.repl_worker_clients_free))) {
+        /* return swapping if there are no worker to dispatch, so command
+         * processing loop would break out.
+         * Note that peer client might register no rocks callback but repl
+         * stream read and parsed, we need to processInputBuffer again. */
+        listAddNodeTail(server.repl_swapping_clients, c);
+        return 1;
+    }
+
+    wc = listNodeValue(ln);
+    serverAssert(wc);
+    serverAssert(!wc->CLIENT_REPL_SWAPPING || wc->flags & CLIENT_MULTI);
+
+    /* dispatch repl commands to worker clients */
+    replDispatch(c, wc);
+
+    /* swap data for command, note that replicated commands would be processed
+     * later in processRepl when all preceeding commands finished. */
+    if (!wc->CLIENT_REPL_DISPATCHING) {
+        wc->CLIENT_REPL_SWAPPING = replSwap(wc, c);
+
+        listDelNode(server.repl_worker_clients_free, ln);
+        listAddNodeTail(server.repl_worker_clients_used, wc);
+    }
+
+    /* process repl commands in received order (regardless of swap finished
+     * order) to make sure slave is consistent with master. */
+    processRepl(c);
+
+    /* return dispatched(-1) when repl dispatched command to workers, caller
+     * should skip call and continue command processing loop. */
+    return -1;
+}
+
 /* Start swapping or schedule a swapping task for client:
  * - if client requires swapping key (some other client is doing rocksdb IO for
  *   this key), we defer and re-evaluate untill all preceding swap finished.
@@ -653,7 +821,17 @@ void swapInit() {
         c->db = server.db+i;
         server.dummy_clients[i] = c;
     }
+
     server.scs = swappingClientsCreate(NULL, NULL, NULL, NULL);
+
+    server.repl_workers = 64;
+    server.repl_swapping_clients = listCreate();
+    server.repl_worker_clients_free = listCreate();
+    server.repl_worker_clients_used = listCreate();
+    for (i = 0; i < server.repl_workers; i++) {
+        client *c = createClient(-1);
+        listAddNodeTail(server.repl_worker_clients_free, c);
+    }
 }
 
 int getSwapsNone(struct redisCommand *cmd, robj **argv, int argc, getSwapsResult *result) {

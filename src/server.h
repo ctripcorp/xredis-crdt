@@ -755,6 +755,10 @@ sds proxy2str(int proxy_type, void* proxy);
 void* proxyHiRedis(int proxy_type, void* proxy, char* src_host, int src_port, char* host, int port);
 int proxyIsKeepConnected(int proxy_type, void* current, void* proxy);
 
+#define REPL_SWAP_INIT 0
+#define REPL_SWAP_SWAPPING 1
+#define REPL_SWAP_SWAPPED 2
+
 typedef void (*voidfuncptr)(void);
 /* With multiplexing we need to take per-client state.
  * Clients are taken in a linked list. */
@@ -818,7 +822,7 @@ typedef struct client {
     VectorClock vectorClock; // used for slave client only, when the client is a master, use crdtMasterInstance
     // struct CRDT_Master_Instance* peer_master;
     int gid;
-    long long pending_used_offset;
+    long long pending_used_offset; /* applied offset of pending_querybuf */
     VectorClock filterVectorClock;
 
     /* swap */
@@ -828,6 +832,9 @@ typedef struct client {
     voidfuncptr client_swap_finished_cb;
     void *client_swap_finished_pd;
     int CLIENT_DEFERED_CLOSING;
+    int CLIENT_REPL_SWAPPING;
+    int CLIENT_REPL_DISPATCHING;
+    long long cmd_reploff; /* Command replication offset when dispatch if this is a repl worker */
 } client;
 
 struct saveparam {
@@ -1382,6 +1389,11 @@ struct redisServer {
     size_t swap_memory_inflight;  /* rocks inflight memory bytes */
     size_t swap_memory_slowdown; /* MB of memory to slowdown command process */
     size_t swap_memory_stop; /* MB of memory to (almost) stop command process */
+    /* repl swap */
+    int repl_workers;   /* num of repl worker clients */
+    list *repl_worker_clients_free; /* free clients for repl(slaveof & peerof) swap. */
+    list *repl_worker_clients_used; /* used clients for repl swap. */
+    list *repl_swapping_clients; /* list of repl swapping clients. */
 }redisServer;
 
 typedef struct pubsubPattern {
@@ -2433,6 +2445,7 @@ typedef struct swapStat {
 } swapStat;
 
 void swapInit();
+int dbSwap(client *c);
 int clientSwap(client *c);
 int dbEvict(redisDb *db, robj *key);
 int dbExpire(redisDb *db, robj *key);

@@ -66,7 +66,7 @@ endif
 FINAL_CFLAGS=$(STD) $(WARN) $(OPT) $(DEBUG) $(CFLAGS) $(REDIS_CFLAGS)
 FINAL_LDFLAGS=$(LDFLAGS) $(REDIS_LDFLAGS) $(DEBUG)
 FINAL_LIBS=-lm -lrocksdb
-DEBUG=-g -ggdb
+DEBUG=-g -ggdb -O0
 
 ifeq ($(uname_S),SunOS)
 	# SunOS

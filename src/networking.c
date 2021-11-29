@@ -97,7 +97,6 @@ client *createClient(int fd) {
     c->bufpos = 0;
     c->querybuf = sdsempty();
     c->pending_querybuf = sdsempty();
-    c->pending_used_offset = 0;
     c->querybuf_peak = 0;
     c->reqtype = 0;
     c->argc = 0;
@@ -142,6 +141,8 @@ client *createClient(int fd) {
     c->swap_result = 0;
     c->hold_keys = dictCreate(&objectKeyObjectValueDictType, NULL);
     c->CLIENT_DEFERED_CLOSING = 0;
+    c->CLIENT_REPL_SWAPPING = 0;
+    c->CLIENT_REPL_DISPATCHING = 0;
     listSetFreeMethod(c->pubsub_patterns,decrRefCountVoid);
     listSetMatchMethod(c->pubsub_patterns,listMatchObjects);
     listSetFreeMethod(c->crdt_pubsub_patterns,decrRefCountVoid);
@@ -1422,34 +1423,6 @@ end:
 }
 
 void commandProcessed(client *c) {
-    if ((c->flags & CLIENT_MASTER) && iAmMaster() != C_OK) {
-        if(c->gid == crdtServer.crdt_gid) {
-            /* Recover peer-backlog from repl-stream so that when this slave
-             * promoted as new master, other peers could PSYNC, Note that
-             * we only recover peer-stream created by current gid. */
-            feedReplicationBacklog(&crdtServer, c->pending_querybuf + c->pending_used_offset,
-                    c->read_reploff - c->reploff- sdslen(c->querybuf));
-        } else if(c->gid != -1) {
-            CRDT_Master_Instance* peer = getPeerMaster(c->gid);
-            if(peer) { 
-                if(peer->master != NULL) {
-                    peer->master->reploff += c->read_reploff - sdslen(c->querybuf) - c->reploff;
-                } else {
-                    serverLog(LL_WARNING, "peer client is null, gid:%d", c->gid);
-                }
-            }
-        }
-    }
-    if (((c->flags & CLIENT_MASTER)
-                || ((c->flags & CLIENT_CRDT_MASTER) &&
-                    getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED))
-            && !(c->flags & CLIENT_MULTI)) {
-        /* Update the applied replication offset of our master. */
-        c->pending_used_offset += c->read_reploff - sdslen(c->querybuf) - c->reploff;
-        c->reploff = c->read_reploff - sdslen(c->querybuf);
-
-    }
-
     /* Don't reset the client structure for clients blocked in a
      * module blocking command, so that the reply callback will
      * still be able to access the client argv and argc field.
@@ -1606,41 +1579,7 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
      * was actually applied to the master state: this quantity, and its
      * corresponding part of the replication stream, will be propagated to
      * the sub-slaves and to the replication backlog. */
-
-    /* Sep/07/2019 marked by nick, we should also propagate the stream if client is
-     * a crdt(peer) master, as we wish our slaves to keeper align with peer master's
-     * repl offset, so that, when a failover happend locally, the globally repl_offset
-     * will not be any different*/
-    if(c->flags & CLIENT_MASTER && iAmMaster() != C_OK) {
-        
-        size_t prev_offset = c->reploff;
-        processInputBuffer(c);
-        size_t applied = c->reploff - prev_offset;
-        if (applied) {
-            if(!server.repl_slave_repl_all){
-                replicationFeedSlavesFromMasterStream(server.slaves,
-                    c->pending_querybuf, applied);
-        	}
-            sdsrange(c->pending_querybuf,applied,-1);
-            c->pending_used_offset = 0;
-        }
-    } else if(c->flags & CLIENT_CRDT_MASTER && getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED) {
-        int dictid = c->db->id;
-        size_t prev_offset = c->reploff;
-        processInputBuffer(c);
-        size_t applied = c->reploff - prev_offset;
-        if (applied) {
-            if(server.slaveseldb != dictid) {
-                sendSelectCommandToSlave(dictid);
-            }
-            replicationFeedSlavesFromMasterStream(server.slaves,
-                c->pending_querybuf, applied);
-            sdsrange(c->pending_querybuf,applied,-1);
-            c->pending_used_offset = 0;
-        }
-    } else {
-        processInputBuffer(c);
-    }
+    processInputBuffer(c);
 }
 
 void getClientsMaxBuffers(unsigned long *longest_output_list,
