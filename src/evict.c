@@ -417,7 +417,7 @@ int performRateLimiting() {
 }
 
 int freeMemoryIfNeeded(void) {
-    int keys_freed = 0;
+    int keys_freed = 0, swap_trigged = 0;
     size_t mem_reported, mem_used, mem_tofree, mem_freed;
     mstime_t latency, eviction_latency;
     int slaves = listLength(server.slaves) + listLength(crdtServer.slaves);
@@ -545,15 +545,14 @@ int freeMemoryIfNeeded(void) {
              * AOF and Output buffer memory will be freed eventually so
              * we only care about memory used by the key space. */
             latencyStartMonitor(eviction_latency);
-            /* Trigger async swap to move key from memory to rocksdb */
-            dbEvict(db, keyobj);
+            /* Trigger swap key from memory to rocksdb */
+            swap_trigged += dbEvict(db, keyobj);
             latencyEndMonitor(eviction_latency);
             latencyAddSampleIfNeeded("eviction-swap",eviction_latency);
             latencyRemoveNestedEvent(latency,eviction_latency);
             mem_freed += keyComputeSize(db, keyobj);
             server.stat_evictedkeys++;
-            notifyKeyspaceEvent(NOTIFY_EVICTED, "evicted",
-                keyobj, db->id);
+            notifyKeyspaceEvent(NOTIFY_EVICTED, "evicted", keyobj, db->id);
             decrRefCount(keyobj);
             keys_freed++;
 
@@ -587,14 +586,19 @@ int freeMemoryIfNeeded(void) {
         }
     }
 
-    static size_t nfreed;
+    static size_t nfreed, nloop, nswap;
     static mstime_t prev;
     nfreed += keys_freed;
+    nswap += swap_trigged;
+    nloop += 1;
     if (server.mstime - prev > 1000) {
         //TODO remove
-        serverLog(LL_VERBOSE, "[xxx] used memory(%ld) keys_freed(%ld)", mem_used, nfreed);
+        serverLog(LL_VERBOSE, "[xxx] used memory(%ld) loop(%ld) keys_freed(%ld) swap_trigged(%ld) mem_inflight(%ld) zmalloc(%ld)",
+                mem_used, nloop, nfreed, nswap, server.swap_memory_inflight, zmalloc_used_memory());
         prev = server.mstime;
         nfreed = 0;
+        nloop = 0;
+        nswap = 0;
     }
 
     latencyEndMonitor(latency);

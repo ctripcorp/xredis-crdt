@@ -835,6 +835,7 @@ typedef struct client {
     int CLIENT_REPL_SWAPPING;
     int CLIENT_REPL_DISPATCHING;
     long long cmd_reploff; /* Command replication offset when dispatch if this is a repl worker */
+    struct client *repl_client; /* Master or peer client if this is a repl worker */
 } client;
 
 struct saveparam {
@@ -2447,6 +2448,7 @@ typedef struct swapStat {
 void swapInit();
 int dbSwap(client *c);
 int clientSwap(client *c);
+int replClientSwap(client *c);
 int dbEvict(redisDb *db, robj *key);
 int dbExpire(redisDb *db, robj *key);
 void continueProcessCommand(client *c);

@@ -140,6 +140,8 @@ client *createClient(int fd) {
     c->swapping_count = 0;
     c->swap_result = 0;
     c->hold_keys = dictCreate(&objectKeyObjectValueDictType, NULL);
+    c->cmd_reploff = -1;
+    c->repl_client = NULL;
     c->CLIENT_DEFERED_CLOSING = 0;
     c->CLIENT_REPL_SWAPPING = 0;
     c->CLIENT_REPL_DISPATCHING = 0;

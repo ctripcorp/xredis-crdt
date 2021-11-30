@@ -3954,8 +3954,6 @@ int RM_ModuleTypeSwapIn(RedisModuleKey *key, void *new_value) {
 
     /* reserve scs if needed. */
     if (key->value->scs) {
-        //serverLog(LL_WARNING, "[xxx] # %s  %s", (sds)key->key->ptr, swappingClientsDump(mv->value));
-
         robj *e = createModuleObject(mv->type, mv->value);
         e->scs = 1;
         dictAdd(key->db->evict, sdsdup(key->key->ptr), e);

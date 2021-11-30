@@ -457,19 +457,42 @@ void clientSwapFinished(client *c, robj *key, void *pd) {
     }
 }
 
-static void replDispatch(client *c, client *wc) {
-    /* Move command from master client to worker client. */
+/* Start swapping or schedule a swapping task for client:
+ * - if client requires swapping key (some other client is doing rocksdb IO for
+ *   this key), we defer and re-evaluate untill all preceding swap finished.
+ * - if client requires cold(evicted) key, and there is no preceeding swap
+ *   action, we start a new swapping task.
+ * - if client requires hot or not-existing key, no swap is needed.
+ *
+ * this funcion returns num swapping needed for this client, we should pause
+ * processCommand if swapping needed. */
+int clientSwap(client *c) {
+    int swap_count;
+    getSwapsResult result = GETSWAPS_RESULT_INIT;
+    getSwaps(c, &result);
+    swap_count = clientSwapSwaps(c, &result, clientSwapFinished, NULL);
+    releaseSwaps(&result);
+    getSwapsFreeResult(&result);
+    return swap_count;
+}
+
+/* ----------------------------- repl swap ------------------------------ */
+static void replDispatch(client *wc, client *c) {
+    /* Move command from repl client to repl worker client. */
     wc->argc = c->argc;
     wc->argv = c->argv;
     wc->cmd = c->cmd;
     wc->lastcmd = c->lastcmd;
     wc->flags = c->flags;
     wc->cmd_reploff = c->read_reploff - sdslen(c->querybuf);
+    wc->repl_client = c;
+
+    /* Also reset repl client args so it will not be freed by resetClient. */
     c->argc = 0;
     c->argv = NULL;
 
-    /* In order to dispatch transaction commands to the same worker client,
-     * we process multi no matter preceeding commands processed or not. */
+    /* In order to dispatch transaction to the same worker client, process
+     * multi command whether preceeding commands processed or not. */
     if (c->cmd->proc == multiCommand) {
         wc->CLIENT_REPL_DISPATCHING = 1;
         resetClient(wc);
@@ -481,27 +504,27 @@ static void replDispatch(client *c, client *wc) {
             resetClient(wc);
         }
     } else {
-        /* Switch to another worker client. */
+        /* Switch to another repl worker client. */
     }
 }
 
-static void processRepl(client *c) {
+static void processRepl() {
     listNode *ln;
-    client *wc;
-
-    serverAssert((c->flags&CLIENT_MASTER) || (c->flags&CLIENT_CRDT_MASTER));
+    client *wc, *c;
 
     while ((ln = listFirst(server.repl_worker_clients_used))) {
         wc = listNodeValue(ln);
         if (wc->CLIENT_REPL_SWAPPING) break;
+        c = wc->repl_client;
 
+        serverAssert((c->flags&CLIENT_MASTER) || (c->flags&CLIENT_CRDT_MASTER));
+
+        wc->flags &= ~CLIENT_SWAPPING;
         listDelNode(server.repl_worker_clients_used, ln);
         listAddNodeTail(server.repl_worker_clients_free, wc);
 
         clientUnholdKeys(wc);
 
-        wc->flags &= ~CLIENT_SWAPPING;
-        c->flags &= ~CLIENT_SWAPPING;
         server.current_client = c;
 
         call(wc, CMD_CALL_FULL);
@@ -569,54 +592,61 @@ static void processRepl(client *c) {
             }
         }
     }
+}
 
-    list *repl_swapping_clients = server.repl_swapping_clients;
-    if (listFirst(repl_swapping_clients) == NULL) return;
+void replSwapFinished(client *wc, robj *key, void *pd) {
+    client *c;
+    listNode *ln;
+    list *repl_swapping_clients;
+
+    UNUSED(pd);
+
+    if (key) clientHoldKey(wc, key);
+
+    /* Flag swap finished, note that command processing will be defered to
+     * processRepl becasue there might be unfinished preceeding swap. */
+    wc->swapping_count--;
+    if (wc->swapping_count == 0) wc->CLIENT_REPL_SWAPPING = 0;
+
+    processRepl();
+
+    /* Dispatch repl command again for repl client blocked waiting free
+     * worker repl client. */
+    if (!listFirst(server.repl_swapping_clients) ||
+            !listFirst(server.repl_worker_clients_free)) {
+        return;
+    }
+
+    repl_swapping_clients = server.repl_swapping_clients;
     server.repl_swapping_clients = listCreate();
     while ((ln = listFirst(repl_swapping_clients))) {
-        client *repl_client = listNodeValue(ln);
-        processInputBuffer(repl_client);
+        c = listNodeValue(ln);
+
+        c->flags &= ~CLIENT_SWAPPING;
+        replClientSwap(c);
+        processInputBuffer(c);
+
         listDelNode(repl_swapping_clients,ln);
     }
     listRelease(repl_swapping_clients);
 }
 
-void replSwapFinished(client *wc, robj *key, void *pd) {
-    client *c = pd;
-    if (key) clientHoldKey(wc, key);
-    wc->swapping_count--;
-    /* Flag swap finished, process will be defered to processRepl. */
-    if (wc->swapping_count == 0) wc->CLIENT_REPL_SWAPPING = 0;
-    processRepl(c);
-}
-
-int replSwap(client *c, client *wc) {
+int replSwap(client *c) {
     int swap_count;
     getSwapsResult result = GETSWAPS_RESULT_INIT;
-    getSwaps(wc, &result);
-    swap_count = clientSwapSwaps(wc, &result, replSwapFinished, c);
+    getSwaps(c, &result);
+    swap_count = clientSwapSwaps(c, &result, replSwapFinished, NULL);
     releaseSwaps(&result);
     getSwapsFreeResult(&result);
     return swap_count;
 }
 
-/* Different from original replication stream process, slave.master client
- * might trigger swap and block untill rocksdb IO finish. because there is
- * only one master client so rocksdb IO will be done sequentially, thus slave
- * can't catch up with master. 
- * In order to speed up replication stream processing, slave.master client
- * dispatches command to multiple worker client and execute commands when 
- * rocks IO finishes. Note that replicated commands swap in-parallel but we
- * still processed in received order. */
-int dbSwap(client *c) {
+int replClientSwap(client *c) {
     client *wc;
     listNode *ln;
 
-    /* normal client swap */
-    if (!(c->flags & CLIENT_MASTER) && !(c->flags & CLIENT_CRDT_MASTER))
-        return clientSwap(c);
+    serverAssert(!(c->flags & CLIENT_SWAPPING));
 
-    /* repl client swap */
     if (!(ln = listFirst(server.repl_worker_clients_free))) {
         /* return swapping if there are no worker to dispatch, so command
          * processing loop would break out.
@@ -631,12 +661,12 @@ int dbSwap(client *c) {
     serverAssert(!wc->CLIENT_REPL_SWAPPING || wc->flags & CLIENT_MULTI);
 
     /* dispatch repl commands to worker clients */
-    replDispatch(c, wc);
+    replDispatch(wc, c);
 
     /* swap data for command, note that replicated commands would be processed
      * later in processRepl when all preceeding commands finished. */
     if (!wc->CLIENT_REPL_DISPATCHING) {
-        wc->CLIENT_REPL_SWAPPING = replSwap(wc, c);
+        wc->CLIENT_REPL_SWAPPING = replSwap(wc);
 
         listDelNode(server.repl_worker_clients_free, ln);
         listAddNodeTail(server.repl_worker_clients_used, wc);
@@ -644,42 +674,14 @@ int dbSwap(client *c) {
 
     /* process repl commands in received order (regardless of swap finished
      * order) to make sure slave is consistent with master. */
-    processRepl(c);
+    processRepl();
 
     /* return dispatched(-1) when repl dispatched command to workers, caller
      * should skip call and continue command processing loop. */
     return -1;
 }
 
-/* Start swapping or schedule a swapping task for client:
- * - if client requires swapping key (some other client is doing rocksdb IO for
- *   this key), we defer and re-evaluate untill all preceding swap finished.
- * - if client requires cold(evicted) key, and there is no preceeding swap
- *   action, we start a new swapping task.
- * - if client requires hot or not-existing key, no swap is needed.
- *
- * this funcion returns num swapping needed for this client, we should pause
- * processCommand if swapping needed. */
-int clientSwap(client *c) {
-    int swap_count;
-    getSwapsResult result = GETSWAPS_RESULT_INIT;
-    getSwaps(c, &result);
-    swap_count = clientSwapSwaps(c, &result, clientSwapFinished, NULL);
-    releaseSwaps(&result);
-    getSwapsFreeResult(&result);
-    return swap_count;
-}
-
-int clientEvictNoReply(client *c, robj *key) {
-    int swap_count;
-    getSwapsResult result = GETSWAPS_RESULT_INIT;
-    getEvictionSwaps(c, key, &result);
-    swap_count = clientSwapSwaps(c, &result, NULL, NULL);
-    releaseSwaps(&result);
-    getSwapsFreeResult(&result);
-    return swap_count;
-}
-
+/* ----------------------------- expire ------------------------------ */
 /* Assumming that key is expired and deleted from db, we still need to del
  * from rocksdb. */
 int rocksDeleteNoReply(client *c, robj *key) {
@@ -730,24 +732,6 @@ int clientExpireNoReply(client *c, robj *key) {
     return swap_count;
 }
 
-int dbEvict(redisDb *db, robj *key) {
-    client *c = server.evict_clients[db->id];
-    robj *o;
-
-    if (server.scs && listLength(server.scs->swapclients)) {
-        return 0;
-    }
-
-    /* Trigger evict only if key is PRESENT && !SWAPPING && !HOLDED */
-    if ((o = lookupKey(db, key, LOOKUP_NOTOUCH)) == NULL ||
-            o->refcount > 1 ||
-            lookupEvict(db, key)) {
-        return 0;
-    }
-    
-    return clientEvictNoReply(c, key);
-}
-
 /* How key is expired:
  * 1. SWAP GET if expiring key is EVICTED (clientExpireNoReply), note that
  *    this expire key evicted would only happend for active expire, because
@@ -771,6 +755,129 @@ int dbExpire(redisDb *db, robj *key) {
      * we need to do expireKey to remove key from db and rocksdb. */
     if (nswap == 0) expireKey(c, key, NULL);
     return nswap;
+}
+
+/* `rksdel` `rksget` are fake commands used only to provide flags for swap_ana,
+ * use `touch` command to expire key actively instead. */
+void rksdelCommand(client *c) {
+    addReply(c, shared.ok);
+}
+
+void rksgetCommand(client *c) {
+    addReply(c, shared.ok);
+}
+
+/* ----------------------------- eviction ------------------------------ */
+int clientEvictNoReply(client *c, robj *key) {
+    int swap_count;
+    getSwapsResult result = GETSWAPS_RESULT_INIT;
+    getEvictionSwaps(c, key, &result);
+    swap_count = clientSwapSwaps(c, &result, NULL, NULL);
+    releaseSwaps(&result);
+    getSwapsFreeResult(&result);
+    return swap_count;
+}
+
+int dbEvict(redisDb *db, robj *key) {
+    client *c = server.evict_clients[db->id];
+    robj *o;
+
+    if (server.scs && listLength(server.scs->swapclients)) {
+        return 0;
+    }
+
+    /* Trigger evict only if key is PRESENT && !SWAPPING && !HOLDED */
+    if ((o = lookupKey(db, key, LOOKUP_NOTOUCH)) == NULL ||
+            o->refcount > 1 ||
+            lookupEvict(db, key)) {
+        return 0;
+    }
+    
+    return clientEvictNoReply(c, key);
+}
+
+/* EVICT is a special command that getswaps returns nothing ('cause we don't
+ * need to swap anything before command executes) but does swap out(PUT)
+ * inside command func. Note that EVICT is the command of fake evict clients */
+void evictCommand(client *c) {
+    int i, nevict = 0;
+    for (i = 1; i < c->argc; i++) {
+        nevict += dbEvict(c->db, c->argv[i]);
+    }
+    addReplyLongLong(c, nevict);
+}
+
+/* ----------------------------- statistics ------------------------------ */
+int swapsPendingOfType(int type) {
+    long long pending;
+    serverAssert(type < SWAP_TYPES);
+    pending = server.swap_stats[type].started - server.swap_stats[type].finished;
+    return pending > 0 ? (int)pending : 0;
+}
+
+void updateStatsSwapStart(int type, sds rawkey, sds rawval) {
+    serverAssert(type < SWAP_TYPES);
+    size_t rawkey_bytes = rawkey == NULL ? 0 : sdslen(rawkey);
+    size_t rawval_bytes = rawval == NULL ? 0 : sdslen(rawval);
+    server.swap_stats[type].started++;
+    server.swap_stats[type].last_start_time = server.mstime;
+    server.swap_stats[type].started_rawkey_bytes += rawkey_bytes;
+    server.swap_stats[type].started_rawval_bytes += rawval_bytes;
+}
+
+void updateStatsSwapFinish(int type, sds rawkey, sds rawval) {
+    serverAssert(type < SWAP_TYPES);
+    size_t rawkey_bytes = rawkey == NULL ? 0 : sdslen(rawkey);
+    size_t rawval_bytes = rawval == NULL ? 0 : sdslen(rawval);
+    server.swap_stats[type].finished++;
+    server.swap_stats[type].last_finish_time = server.mstime;
+    server.swap_stats[type].finished_rawkey_bytes += rawkey_bytes;
+    server.swap_stats[type].finished_rawval_bytes += rawval_bytes;
+}
+
+/*  WHY do we need both getswaps & getdataswaps?
+ *  - getswaps return swap intentions analyzed from command without querying
+ *  keyspace; while getdataswaps return swaps based on data type (e.g.
+ *  return partial fields for crdt-hash eviction). so getswaps corresponds
+ *  to redis command, while getdataswaps corresponds to data type.
+ *  - merge getdataswaps into getswaps means that we need to define
+ *  getswaps_proc for whole key commands(e.g. set/incr) and lookup keyspace
+ *  inside getswap_proc to determin what swap should be returned.
+ */
+
+int getSwapsNone(struct redisCommand *cmd, robj **argv, int argc, getSwapsResult *result) {
+    UNUSED(cmd);
+    UNUSED(argc);
+    UNUSED(argv);
+    UNUSED(result);
+    return 0;
+}
+
+/* Used by flushdb/flushall to get global scs(similar to table lock). */
+int getSwapsGlobal(struct redisCommand *cmd, robj **argv, int argc, getSwapsResult *result) {
+    UNUSED(cmd);
+    UNUSED(argc);
+    UNUSED(argv);
+    getSwapsAppendResult(result, NULL, NULL, NULL);
+    return 0;
+}
+
+/* Different from original replication stream process, slave.master client
+ * might trigger swap and block untill rocksdb IO finish. because there is
+ * only one master client so rocksdb IO will be done sequentially, thus slave
+ * can't catch up with master. 
+ * In order to speed up replication stream processing, slave.master client
+ * dispatches command to multiple worker client and execute commands when 
+ * rocks IO finishes. Note that replicated commands swap in-parallel but we
+ * still processed in received order. */
+int dbSwap(client *c) {
+    if (!(c->flags & CLIENT_MASTER) && !(c->flags & CLIENT_CRDT_MASTER)) {
+        /* normal client swap */
+        return clientSwap(c);
+    } else {
+        /* repl client swap */
+        return replClientSwap(c);
+    }
 }
 
 void swapInit() {
@@ -832,81 +939,6 @@ void swapInit() {
         client *c = createClient(-1);
         listAddNodeTail(server.repl_worker_clients_free, c);
     }
-}
-
-int getSwapsNone(struct redisCommand *cmd, robj **argv, int argc, getSwapsResult *result) {
-    UNUSED(cmd);
-    UNUSED(argc);
-    UNUSED(argv);
-    UNUSED(result);
-    return 0;
-}
-
-/* Used by flushdb/flushall to get global scs(similar to table lock). */
-int getSwapsGlobal(struct redisCommand *cmd, robj **argv, int argc, getSwapsResult *result) {
-    UNUSED(cmd);
-    UNUSED(argc);
-    UNUSED(argv);
-    getSwapsAppendResult(result, NULL, NULL, NULL);
-    return 0;
-}
-
-/*  WHY do we need both getswaps & getdataswaps?
- *  - getswaps return swap intentions analyzed from command without querying
- *  keyspace; while getdataswaps return swaps based on data type (e.g.
- *  return partial fields for crdt-hash eviction). so getswaps corresponds
- *  to redis command, while getdataswaps corresponds to data type.
- *  - merge getdataswaps into getswaps means that we need to define
- *  getswaps_proc for whole key commands(e.g. set/incr) and lookup keyspace
- *  inside getswap_proc to determin what swap should be returned.
- */
-
-/* EVICT is a special command that getswaps returns nothing ('cause we don't
- * need to swap anything before command executes) but does swap out(PUT)
- * inside command func. Note that EVICT is the command of fake evict clients */
-void evictCommand(client *c) {
-    int i, nevict = 0;
-    for (i = 1; i < c->argc; i++) {
-        nevict += dbEvict(c->db, c->argv[i]);
-    }
-    addReplyLongLong(c, nevict);
-}
-
-/* `rksdel` `rksget` are fake commands used only to provide flags for swap_ana,
- * use `touch` command to expire key actively instead. */
-void rksdelCommand(client *c) {
-    addReply(c, shared.ok);
-}
-
-void rksgetCommand(client *c) {
-    addReply(c, shared.ok);
-}
-
-int swapsPendingOfType(int type) {
-    long long pending;
-    serverAssert(type < SWAP_TYPES);
-    pending = server.swap_stats[type].started - server.swap_stats[type].finished;
-    return pending > 0 ? (int)pending : 0;
-}
-
-void updateStatsSwapStart(int type, sds rawkey, sds rawval) {
-    serverAssert(type < SWAP_TYPES);
-    size_t rawkey_bytes = rawkey == NULL ? 0 : sdslen(rawkey);
-    size_t rawval_bytes = rawval == NULL ? 0 : sdslen(rawval);
-    server.swap_stats[type].started++;
-    server.swap_stats[type].last_start_time = server.mstime;
-    server.swap_stats[type].started_rawkey_bytes += rawkey_bytes;
-    server.swap_stats[type].started_rawval_bytes += rawval_bytes;
-}
-
-void updateStatsSwapFinish(int type, sds rawkey, sds rawval) {
-    serverAssert(type < SWAP_TYPES);
-    size_t rawkey_bytes = rawkey == NULL ? 0 : sdslen(rawkey);
-    size_t rawval_bytes = rawval == NULL ? 0 : sdslen(rawval);
-    server.swap_stats[type].finished++;
-    server.swap_stats[type].last_finish_time = server.mstime;
-    server.swap_stats[type].finished_rawkey_bytes += rawkey_bytes;
-    server.swap_stats[type].finished_rawval_bytes += rawval_bytes;
 }
 
 /* ------------------------ parallel swap -------------------------------- */
