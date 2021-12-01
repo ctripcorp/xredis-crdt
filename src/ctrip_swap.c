@@ -249,7 +249,6 @@ void clientUnholdKeys(client *c) {
     dictEmpty(c->hold_keys, NULL);
 }
 
-void commandProcessed(client *c);
 void continueProcessCommand(client *c) {
     /* size_t prev_offset = c->reploff; */
 
@@ -479,8 +478,9 @@ int clientSwap(client *c) {
 /* ----------------------------- repl swap ------------------------------ */
 static void replDispatch(client *wc, client *c) {
     /* Move command from repl client to repl worker client. */
-    wc->argc = c->argc;
-    wc->argv = c->argv;
+    if (wc->argv) zfree(wc->argv);
+    wc->argc = c->argc, c->argc = 0;
+    wc->argv = c->argv, c->argv = NULL;
     wc->cmd = c->cmd;
     wc->lastcmd = c->lastcmd;
     wc->flags = c->flags;
@@ -488,8 +488,6 @@ static void replDispatch(client *wc, client *c) {
     wc->repl_client = c;
 
     /* Also reset repl client args so it will not be freed by resetClient. */
-    c->argc = 0;
-    c->argv = NULL;
 
     /* In order to dispatch transaction to the same worker client, process
      * multi command whether preceeding commands processed or not. */
