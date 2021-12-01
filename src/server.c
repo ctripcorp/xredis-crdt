@@ -3821,13 +3821,17 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
         info = sdscatprintf(info,
                 "swap_inprogress:%lld\r\n"
                 "swap_last_start:%ld\r\n"
-                "swap_last_finish:%ld\r\n",
+                "swap_last_finish:%ld\r\n"
+                "swap_memory_inflight:%ld\r\n",
                 swap_inprogress,
                 swap_last_start/1000,
-                swap_last_finish/1000);
+                swap_last_finish/1000,
+                server.swap_memory_inflight);
 
         for (j = 1; j < SWAP_TYPES; j++) {
             swapStat *s = &server.swap_stats[j];
+            size_t inprogress_rawval_bytes = 0;
+            if (j == SWAP_PUT) inprogress_rawval_bytes = s->started_rawval_bytes - s->finished_rawval_bytes;
             info = sdscatprintf(info,
                     "swap_%s:finished=%lld,inprogress=%lld,finished_rawkey_bytes=%ld,inprogress_rawkey_bytes=%ld,finished_rawval_bytes=%ld,inprogress_rawval_bytes:%ld\r\n",
                     s->name,
@@ -3836,7 +3840,7 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                     s->finished_rawkey_bytes,
                     s->started_rawkey_bytes - s->finished_rawkey_bytes,
                     s->finished_rawval_bytes,
-                    s->started_rawval_bytes - s->finished_rawval_bytes);
+                    inprogress_rawval_bytes);
         }
     }
 

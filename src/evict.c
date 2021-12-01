@@ -586,19 +586,17 @@ int freeMemoryIfNeeded(void) {
         }
     }
 
-    static size_t nfreed, nloop, nswap;
+    static size_t nscaned, nloop, nswap;
     static mstime_t prev;
-    nfreed += keys_freed;
+    nloop ++;
+    nscaned += keys_freed;
     nswap += swap_trigged;
-    nloop += 1;
     if (server.mstime - prev > 1000) {
-        //TODO remove
-        serverLog(LL_VERBOSE, "[xxx] used memory(%ld) loop(%ld) keys_freed(%ld) swap_trigged(%ld) mem_inflight(%ld) zmalloc(%ld)",
-                mem_used, nloop, nfreed, nswap, server.swap_memory_inflight, zmalloc_used_memory());
+        serverLog(LL_VERBOSE,
+                "Eviction loop=%ld,scaned=%ld,swapped:%ld,mem_used=%ld,mem_inflight=%ld",
+                nloop, nscaned, nswap, mem_used, server.swap_memory_inflight);
         prev = server.mstime;
-        nfreed = 0;
-        nloop = 0;
-        nswap = 0;
+        nscaned = 0, nloop = 0, nswap = 0;
     }
 
     latencyEndMonitor(latency);

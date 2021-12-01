@@ -486,6 +486,7 @@ static void replDispatch(client *wc, client *c) {
     wc->flags = c->flags;
     wc->cmd_reploff = c->read_reploff - sdslen(c->querybuf);
     wc->repl_client = c;
+    wc->gid = c->gid;
 
     /* Also reset repl client args so it will not be freed by resetClient. */
 
@@ -509,6 +510,7 @@ static void replDispatch(client *wc, client *c) {
 static void processRepl() {
     listNode *ln;
     client *wc, *c;
+    struct redisCommand *backup_cmd;
 
     while ((ln = listFirst(server.repl_worker_clients_used))) {
         wc = listNodeValue(ln);
@@ -523,6 +525,8 @@ static void processRepl() {
 
         clientUnholdKeys(wc);
 
+        backup_cmd = c->cmd;
+        c->cmd = wc->cmd;
         server.current_client = c;
 
         call(wc, CMD_CALL_FULL);
@@ -534,6 +538,7 @@ static void processRepl() {
 
         c->db = wc->db;
         c->gid = wc->gid;
+        c->cmd = backup_cmd;
 
         commandProcessed(wc);
 
