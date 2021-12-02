@@ -855,7 +855,7 @@ struct sharedObjectsStruct {
     *emptymultibulk, *wrongtypeerr, *nokeyerr, *syntaxerr, *sameobjecterr,
     *outofrangeerr, *noscripterr, *loadingerr, *slowscripterr, *bgsaveerr,
     *masterdownerr, *roslaveerr, *execaborterr, *noautherr, *noreplicaserr,
-    *busykeyerr, *oomerr, *plus, *messagebulk, *pmessagebulk, *subscribebulk, *crdtsubscribebulk,
+    *busykeyerr, *oomerr, *outofdiskerr, *plus, *messagebulk, *pmessagebulk, *subscribebulk, *crdtsubscribebulk,
     *unsubscribebulk, *uncrdtsubscribebulk, *psubscribebulk, *crdtpsubscribebulk, *punsubscribebulk, *crdtpunsubscribebulk, *del, *unlink, *crdtdel,
     *rpop, *lpop, *lpush,*set,*hset,*pexpireat, *emptyscan, *crdtexec, *sadd, *zadd,
     *crdtmergeerr, *crdtevictiontombstone,
@@ -1270,6 +1270,7 @@ struct redisServer {
     int get_ack_from_slaves;            /* If true we send REPLCONF GETACK. */
     /* Limits */
     unsigned int maxclients;            /* Max number of simultaneous clients */
+    unsigned long long maxdisk;     /* Max number of disk bytes to use */
     unsigned long long maxmemory;   /* Max number of memory bytes to use */
     int maxmemory_policy;           /* Policy for key eviction */
     int maxmemory_samples;          /* Pricision of random sampling */
@@ -1378,6 +1379,7 @@ struct redisServer {
 
 	/* rocks */
 	struct rocks *rocks;
+    unsigned long long rocksdb_disk_used; /* rocksd disk usage bytes, updated every 1 minute. */
 	/* swaps */
     client **evict_clients; /* array of evict clients (one for each db). */
     client **rksdel_clients; /* array of rocks del clients (one for each db). */
@@ -2410,6 +2412,7 @@ int rocksFlushAll();
 rocksdb_t *rocksGetDb(struct rocks *rocks);
 rocksdb_memory_consumers_t *rocksGetMemConsumer(struct rocks *rocks);
 int rocksProcessCompleteQueue(struct rocks *rocks);
+void rocksCron();
 
 /* swap */
 #define SWAP_NOP    0

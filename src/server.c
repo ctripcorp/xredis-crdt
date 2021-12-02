@@ -869,6 +869,7 @@ int clientsCronHandleTimeout(client *c, mstime_t now_ms) {
     if (server.maxidletime &&
         !(c->flags & CLIENT_SLAVE) &&    /* no timeout for slaves */
         !(c->flags & CLIENT_MASTER) &&   /* no timeout for masters */
+        !(c->flags & CLIENT_CRDT_MASTER) &&   /* no timeout for crdt masters */
         !(c->flags & CLIENT_BLOCKED) &&  /* no timeout for BLPOP */
         !(c->flags & CLIENT_PUBSUB) &&  /* no timeout for Pub/Sub clients */
         (now - c->lastinteraction > server.maxidletime))
@@ -1327,6 +1328,8 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
             server.rdb_bgsave_scheduled = 0;
     }
 
+    run_with_period(60*1000) rocksCron();
+
     server.cronloops++;
     return 1000/server.hz;
 }
@@ -1444,6 +1447,8 @@ void createSharedObjects(void) {
         "-NOAUTH Authentication required.\r\n"));
     shared.oomerr = createObject(OBJ_STRING,sdsnew(
         "-OOM command not allowed when used memory > 'maxmemory'.\r\n"));
+    shared.outofdiskerr = createObject(OBJ_STRING,sdsnew(
+        "-ERR command not allowed when used disk > 'maxdisk'.\r\n"));
     shared.execaborterr = createObject(OBJ_STRING,sdsnew(
         "-EXECABORT Transaction discarded because of previous errors.\r\n"));
     shared.noreplicaserr = createObject(OBJ_STRING,sdsnew(
@@ -2186,6 +2191,7 @@ void initServer(struct redisServer *srv) {
         latencyMonitorInit();
         bioInit();
         srv->rocks = rocksCreate();
+        srv->rocksdb_disk_used = 0;
         swapInit();
         srv->initial_memory_usage = zmalloc_used_memory();
     }
@@ -2686,6 +2692,16 @@ int processCommand(client *c) {
                 sdscatprintf(sdsempty(),
                 "-MISCONF Errors writing to the AOF file: %s\r\n",
                 strerror(server.aof_last_write_errno)));
+        return C_OK;
+    }
+
+    if (server.maxdisk && server.rocksdb_disk_used > server.maxdisk &&
+            (iAmMaster() == C_OK && 
+             !(c->flags & CLIENT_CRDT_MASTER) &&
+             !(c->flags & CLIENT_MASTER)) &&
+            (c->cmd->flags & CMD_DENYOOM)) {
+        flagTransaction(c);
+        addReply(c, shared.outofdiskerr);
         return C_OK;
     }
 
@@ -3842,6 +3858,17 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                     s->finished_rawval_bytes,
                     inprogress_rawval_bytes);
         }
+    }
+
+    /* Rocks */
+    if (allsections || !strcasecmp(section,"rocks")) {
+        if (sections++) info = sdscat(info,"\r\n");
+        info = sdscatprintf(info,
+                "# Rocks\r\n"
+                "maxdisk:%lld\r\n"
+                "rocks_disk_used:%lld\r\n",
+                server.maxdisk,
+                server.rocksdb_disk_used);
     }
 
     return info;

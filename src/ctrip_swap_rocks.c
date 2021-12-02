@@ -557,3 +557,15 @@ int rocksFlushAll() {
 rocksdb_t *rocksGetDb(rocks *rocks) {
     return rocks->rocksdb;
 }
+
+void rocksCron(void) {
+    uint64_t property_int = 0;
+    if (!rocksdb_property_int(server.rocks->rocksdb,
+                "rocksdb.total-sst-files-size", &property_int)) {
+        server.rocksdb_disk_used = property_int;
+    }
+    if (server.maxdisk && server.rocksdb_disk_used > server.maxdisk) {
+        serverLog(LL_WARNING, "Rocksdb disk usage exceeds maxdisk %lld > %lld.",
+                server.rocksdb_disk_used, server.maxdisk);
+    }
+}
