@@ -406,6 +406,13 @@ crdtMergeEndCommand(client *c) {
     peerMaster->master->reploff = offset;
     peerMaster->master->read_reploff = offset;
     memcpy(peerMaster->master_replid, c->argv[3]->ptr, sdslen(c->argv[3]->ptr));
+
+    /* Note that untill crdt fullresync finish(current command called), crdt
+     * repl client reploff and read_reploff is not set. After adding repl worker
+     * clients, reploff will be updated offset when dispatch (which is before
+     * call), so in order to corretly init crdt repl client offset, we save it
+     * to woker client cmd_reploff. */
+    c->cmd_reploff = offset;
     
     if(!isNullVectorClock(peerMaster->backstream_vc)) {
         freeVectorClock(peerMaster->backstream_vc);
@@ -432,7 +439,8 @@ crdtMergeEndCommand(client *c) {
         peerMaster->repl_transfer_lastio = server.unixtime;
     } 
     server.dirty ++;
-    serverLog(LL_NOTICE, "[CRDT][crdtMergeEndCommand][end] master gid: %lld", sourceGid);
+    serverLog(LL_NOTICE, "[CRDT][crdtMergeEndCommand][end] master: gid=%lld,replid=%s,offset=%lld",
+            sourceGid, (sds)c->argv[3]->ptr, offset);
     return;
 
 err:
@@ -1435,7 +1443,10 @@ void crdtReplicationCacheMaster(client *c) {
         return;
     }
     CRDT_Master_Instance *crdtMaster = getPeerMaster(c->gid);
-    serverLog(LL_NOTICE,"[CRDT]Caching the disconnected master state.(%s: %lld)", crdtMaster->master ? crdtMaster->master->replid : "null", crdtMaster->master ? crdtMaster->master->reploff : -1);
+    serverLog(LL_NOTICE,"[CRDT]Caching the disconnected master state:gid=%d,replid=%s,reploff=%lld)",
+            c->gid,
+            crdtMaster->master ? crdtMaster->master->replid : "null",
+            crdtMaster->master ? crdtMaster->master->reploff : -1);
     /* Unlink the client from the server structures. */
     unlinkClient(c);
 
