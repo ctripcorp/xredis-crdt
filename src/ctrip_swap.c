@@ -477,7 +477,8 @@ int clientSwap(client *c) {
 
 /* ----------------------------- repl swap ------------------------------ */
 static void replDispatch(client *wc, client *c) {
-    /* Move command from repl client to repl worker client. */
+    /* Move command from repl client to repl worker client, also reset repl
+     * client args so it will not be freed by resetClient. */
     if (wc->argv) zfree(wc->argv);
     wc->argc = c->argc, c->argc = 0;
     wc->argv = c->argv, c->argv = NULL;
@@ -487,9 +488,7 @@ static void replDispatch(client *wc, client *c) {
     wc->cmd_reploff = c->read_reploff - sdslen(c->querybuf);
     wc->repl_client = c;
     wc->gid = c->gid;
-
-    /* Also reset repl client args so it will not be freed by resetClient. */
-
+    
     /* In order to dispatch transaction to the same worker client, process
      * multi command whether preceeding commands processed or not. */
     if (c->cmd->proc == multiCommand) {
@@ -503,7 +502,9 @@ static void replDispatch(client *wc, client *c) {
             resetClient(wc);
         }
     } else {
-        /* Switch to another repl worker client. */
+        /* Swapping count is dispatched command count. Note that free repl
+         * client would be defered untill swapping count drops to 0. */
+        c->swapping_count++;
     }
 }
 
@@ -536,6 +537,7 @@ static void processRepl() {
         if (listLength(server.ready_keys))
             handleClientsBlockedOnLists();
 
+        c->swapping_count--;
         c->db = wc->db;
         c->gid = wc->gid;
         c->cmd = backup_cmd;

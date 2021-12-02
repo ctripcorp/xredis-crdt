@@ -142,6 +142,7 @@ client *createClient(int fd) {
     c->hold_keys = dictCreate(&objectKeyObjectValueDictType, NULL);
     c->cmd_reploff = -1;
     c->repl_client = NULL;
+    c->swapping_count = 0;
     c->CLIENT_DEFERED_CLOSING = 0;
     c->CLIENT_REPL_SWAPPING = 0;
     c->CLIENT_REPL_DISPATCHING = 0;
@@ -795,7 +796,12 @@ void unlinkClient(client *c) {
 }
 
 static void deferFreeClient(client *c) {
+    sds client_desc;
     serverAssert(c->swapping_count);
+
+    client_desc = catClientInfoString(sdsempty(), c);
+    serverLog(LL_NOTICE, "Client close defered: %s", client_desc);
+    sdsfree(client_desc);
 
     c->CLIENT_DEFERED_CLOSING = 1;
     /* unlink so that client would read no more query */
@@ -805,18 +811,21 @@ static void deferFreeClient(client *c) {
 }
 
 void freeClientsInDerferedQueue(void) {
+    sds client_desc;
     while (listLength(server.clients_to_free)) {
         listNode *ln = listFirst(server.clients_to_free);
         client *c = listNodeValue(ln);
         if (!c->swapping_count) {
+            client_desc = catClientInfoString(sdsempty(), c);
+            serverLog(LL_NOTICE, "Defered client closing: %s", client_desc);
             c->CLIENT_DEFERED_CLOSING = 0;
             freeClient(c);
             listDelNode(server.clients_to_free,ln);
+            sdsfree(client_desc);
         }
     }
 }
 
-void swappingClientsRelease(swappingClients *scs);
 void freeClient(client *c) {
     listNode *ln;
 
