@@ -593,7 +593,7 @@ int freeMemoryIfNeeded(void) {
     nswap += swap_trigged;
     if (server.mstime - prev > 1000) {
         serverLog(LL_VERBOSE,
-                "Eviction loop=%ld,scaned=%ld,swapped:%ld,mem_used=%ld,mem_inflight=%ld",
+                "Eviction loop=%ld,scaned=%ld,swapped=%ld,mem_used=%ld,mem_inflight=%ld",
                 nloop, nscaned, nswap, mem_used, server.swap_memory_inflight);
         prev = server.mstime;
         nscaned = 0, nloop = 0, nswap = 0;
