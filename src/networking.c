@@ -1433,6 +1433,7 @@ end:
     serverLog(LL_DEBUG, "%s", buf);
 }
 
+void debugEvictKeys();
 void commandProcessed(client *c) {
     /* Don't reset the client structure for clients blocked in a
      * module blocking command, so that the reply callback will
@@ -1441,6 +1442,10 @@ void commandProcessed(client *c) {
     if ((!(c->flags & CLIENT_BLOCKED) || c->btype != BLOCKED_MODULE) &&
             !(c->flags & CLIENT_SWAPPING)) {
         resetClient(c);
+
+        /* To reuse test cases with extensive swap actions, we try to evict
+         * configured num of key after executing command. */
+        if (server.debug_evict_keys) debugEvictKeys();
     }
 }
 

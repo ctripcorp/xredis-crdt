@@ -889,7 +889,6 @@ void swapInit() {
     int i;
     char *swap_type_names[] = {"nop", "get", "put", "del"};
 
-    server.debug_evict_keys = 0;
     server.swap_stats = zmalloc(SWAP_TYPES*sizeof(swapStat));
     for (i = 0; i < SWAP_TYPES; i++) {
         server.swap_stats[i].name = swap_type_names[i];

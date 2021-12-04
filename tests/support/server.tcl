@@ -230,6 +230,10 @@ proc start_redis_server {server options {code undefined}} {
         }
     }
 
+    if {$::swap && $::debug_evict_keys > 0} {
+        dict set config "debug-evict-keys" $::debug_evict_keys
+    }
+
     # write new configuration to temporary file
     set config_file [tmpfile redis.conf]
     set fp [open $config_file w+]

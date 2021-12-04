@@ -657,6 +657,12 @@ for {set j 0} {$j < [llength $argv]} {incr j} {
     } elseif {$opt eq {--timeout}} {
         set ::timeout $arg
         incr j
+    } elseif {$opt eq {--swap}} {
+        set ::swap 1
+        incr j
+    } elseif {$opt eq {--debug-evict-keys}} {
+        set ::debug_evict_keys $arg
+        incr j
     } elseif {$opt eq {--help}} {
         print_help_screen
         exit 0

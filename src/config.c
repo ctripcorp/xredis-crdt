@@ -319,6 +319,8 @@ void loadServerConfigFromString(char *config) {
             if (server.maxclients < 1) {
                 err = "Invalid max clients limit"; goto loaderr;
             }
+        } else if (!strcasecmp(argv[0],"debug-evict-keys") && argc == 2) {
+            server.debug_evict_keys = atoi(argv[1]);
         } else if (!strcasecmp(argv[0],"maxdisk") && argc == 2) {
             server.maxdisk = memtoll(argv[1],NULL);
         } else if (!strcasecmp(argv[0],"maxmemory") && argc == 2) {
@@ -1218,6 +1220,8 @@ void configSetCommand(client *c, struct redisServer *srv) {
             enableWatchdog(ll);
         else
             disableWatchdog();
+    } config_set_numerical_field(
+      "debug-evict-keys",srv->debug_evict_keys,-1,LLONG_MAX) {
 
     /* Memory fields.
      * config_set_memory_field(name,var) */
@@ -1321,6 +1325,7 @@ void configGetCommand(client *c, struct redisServer *srv) {
     config_get_string_field("slave-announce-ip",srv->slave_announce_ip);
 
     /* Numerical values */
+    config_get_numerical_field("debug-evict-keys",srv->debug_evict_keys);
     config_get_numerical_field("maxdisk",srv->maxdisk);
     config_get_numerical_field("maxmemory",srv->maxmemory);
     config_get_numerical_field("proto-max-bulk-len",srv->proto_max_bulk_len);
@@ -2173,7 +2178,8 @@ int rewriteConfig(char *path) {
     rewriteConfigNumericalOption(state,"min-slaves-max-lag",server.repl_min_slaves_max_lag,CONFIG_DEFAULT_MIN_SLAVES_MAX_LAG);
     rewriteConfigStringOption(state,"requirepass",server.requirepass,NULL);
     rewriteConfigNumericalOption(state,"maxclients",server.maxclients,CONFIG_DEFAULT_MAX_CLIENTS);
-    rewriteConfigBytesOption(state,"maxdisk",server.maxdisk,CONFIG_DEFAULT_MAXMEMORY);
+    rewriteConfigBytesOption(state,"debug-evict-keys",server.debug_evict_keys,CONFIG_DEFAULT_DEBUG_EVICT_KEYS);
+    rewriteConfigBytesOption(state,"maxdisk",server.maxdisk,CONFIG_DEFAULT_MAXDISK);
     rewriteConfigBytesOption(state,"maxmemory",server.maxmemory,CONFIG_DEFAULT_MAXMEMORY);
     rewriteConfigBytesOption(state,"proto-max-bulk-len",server.proto_max_bulk_len,CONFIG_DEFAULT_PROTO_MAX_BULK_LEN);
     rewriteConfigBytesOption(state,"client-query-buffer-limit",server.client_max_querybuf_len,PROTO_MAX_QUERYBUF_LEN);

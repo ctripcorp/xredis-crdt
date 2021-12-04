@@ -1670,6 +1670,9 @@ void initServerConfig(struct redisServer *srv) {
     srv->repl_backlog_off = 0;
     srv->repl_backlog_time_limit = CONFIG_DEFAULT_REPL_BACKLOG_TIME_LIMIT;
     srv->repl_no_slaves_since = time(NULL);
+    /* swap */
+    srv->maxdisk = CONFIG_DEFAULT_MAXDISK;
+    srv->debug_evict_keys = CONFIG_DEFAULT_DEBUG_EVICT_KEYS;
 
     /* Client output buffer limits */
     for (j = 0; j < CLIENT_TYPE_OBUF_COUNT; j++)
@@ -2566,7 +2569,7 @@ void call(client *c, int flags) {
     server.stat_numcommands++;
 }
 
-static void debugEvictKeys() {
+void debugEvictKeys() {
     int i = 0, j, debug_evict_keys = server.debug_evict_keys;
     if (debug_evict_keys < 0) debug_evict_keys = INT_MAX;
     for (j = 0; j < server.dbnum; j++) {
@@ -2805,10 +2808,6 @@ int processCommand(client *c) {
         c->woff = server.master_repl_offset;
         if (listLength(server.ready_keys))
             handleClientsBlockedOnLists();
-
-        /* To reuse test cases with extensive swap actions, we try to evict
-         * configured num of key after executing command. */
-        if (server.debug_evict_keys) debugEvictKeys();
     }
     return C_OK;
 }

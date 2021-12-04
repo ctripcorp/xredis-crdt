@@ -561,12 +561,6 @@ void debugCommand(client *c) {
     } else if (!strcasecmp(c->argv[1]->ptr,"set-crdt-ovc") && c->argc == 3) {
         crdtServer.active_crdt_ovc = atoi(c->argv[2]->ptr);
         addReply(c,shared.ok);
-    } else if (!strcasecmp(c->argv[1]->ptr,"set-evict-keys") && c->argc == 3) {
-        long debug_evict_keys;
-        if (getLongFromObjectOrReply(c, c->argv[2], &debug_evict_keys, NULL) != C_OK)
-            return;
-        server.debug_evict_keys = debug_evict_keys;
-        addReply(c,shared.ok);
     } else if (!strcasecmp(c->argv[1]->ptr,"rocksdb-property-int") && c->argc == 3) {
         uint64_t property_int = -1;
         rocksdb_property_int(rocksGetDb(server.rocks), c->argv[2]->ptr, &property_int);

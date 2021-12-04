@@ -170,6 +170,8 @@ long long get_min_backstream_vcu();
 #define CONFIG_DEFAULT_PROTO_MAX_BULK_LEN (512ll*1024*1024) /* Bulk request max size */
 #define CONFIG_DEFAULT_GID -1
 #define CONFIG_DEFAULT_VECTORCLOCK_UNIT -1
+#define CONFIG_DEFAULT_MAXDISK 0
+#define CONFIG_DEFAULT_DEBUG_EVICT_KEYS 0
 
 #define ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP 20 /* Loopkups per loop. */
 #define ACTIVE_EXPIRE_CYCLE_FAST_DURATION 1000 /* Microseconds */
