@@ -15,7 +15,7 @@ proc wait { client index type log}  {
         } else {
             assert_equal [$client ping] PONG
             incr retry -1
-            after 100
+            after 1000
         }
     }
     if {$retry == 0} {
@@ -239,6 +239,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
         after 1000
         set size2 [r dbsize]
         r mget key1 key2 key3
+        after 1000
         set size3 [r dbsize]
         r debug set-active-expire 1
         list $size1 $size2 $size3

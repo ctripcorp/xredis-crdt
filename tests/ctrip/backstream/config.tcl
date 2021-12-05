@@ -99,7 +99,7 @@ test "master-config" {
         assert_equal [get_master_srv port] $master_port
         start_server_by_config [get_master_srv config_file] [get_master_srv config] $master_host $master_port $master_stdout $master_stderr 1 {
             set master [redis $master_host $master_port]
-            $master select 9
+            if {!$::swap} {$master select 9}
             
             wait_for_peers_sync 1 $master 
             wait_backstream $master 
@@ -129,7 +129,7 @@ test "master-config-backstream" {
         assert_equal [get_master_srv port] $master_port
         start_server_by_config [get_master_srv config_file] [get_master_srv config] $master_host $master_port $master_stdout $master_stderr 1 {
             set master [redis $master_host $master_port]
-            $master select 9
+            if {!$::swap} {$master select 9}
             wait_for_peers_sync 1 $master 
             wait_backstream $master 
             assert_equal [$master get k] [$peer get k]
@@ -155,7 +155,7 @@ test "master-config-nobackstream" {
         assert_equal [get_master_srv port] $master_port
         start_server_by_config [get_master_srv config_file] [get_master_srv config] $master_host $master_port $master_stdout $master_stderr 1 {
             set master [redis $master_host $master_port]
-            $master select 9
+            if {!$::swap} {$master select 9}
             wait_for_peers_sync 1 $master 
             wait_backstream $master 
             assert_equal [$master get k] [$peer get k]
@@ -180,7 +180,7 @@ test "slave-restart" {
 
         start_server_by_config [get_slave_srv config_file] [get_slave_srv config] $slave_host $slave_port $slave_stdout $slave_stderr 1 {
             set slave [redis $slave_host $slave_port]
-            $slave select 9
+            if {!$::swap} {$slave select 9}
             wait_for_sync $slave 
             assert_equal [$slave get k] [$master get k]
             assert_equal [$slave get k1] [$master get k1]
@@ -205,7 +205,7 @@ test "slave-restart2" {
         assert_equal [get_slave_srv port] $slave_port
         start_server_by_config [get_slave_srv config_file] [get_slave_srv config] $slave_host $slave_port $slave_stdout $slave_stderr 1 {
             set slave [redis $slave_host $slave_port]
-            $slave select 9
+            if {!$::swap} {$slave select 9}
             wait_for_sync $slave 
             assert_equal [$slave get k] [$master get k]
         }
@@ -284,14 +284,14 @@ test "change-slave(full-sync)1" {
         set master_config [get_master_srv config]
         start_server_by_config [get_slave_srv config_file] [get_slave_srv config] $slave_host $slave_port $slave_stdout $slave_stderr 1 {
             set slave [redis $slave_host $slave_port]
-            $slave select 9
+            if {!$::swap} {$slave select 9}
             $slave slaveof no one 
             wait_for_peers_sync 1 $slave 
             assert_equal [$slave get k] [$peer get k]
             assert_equal [$slave get k1] [$peer get k1]
             start_server_by_config $master_config_file $master_config $master_host $master_port $master_stdout $master_stderr 1 {
                 set master [redis $master_host $master_port]
-                $master select 9
+                if {!$::swap} {$master select 9}
                 $master slaveof $slave_host $slave_port
                 wait_for_sync $master 
                 assert_equal [$master get k] [$peer get k]

@@ -229,7 +229,9 @@ slave-peer-offset "maste-slave" {
     stop_write_load $load_handle1
     $non_crdt_master set k3 v3
     wait_for_sync $master  
+    after 1000
     assert_equal [$master get k3] v3
+    after 1000
     assert_equal [$non_crdt_master dbsize] [$master dbsize]
     assert_equal [get_info_replication_attr_value $non_crdt_master info master_repl_offset] [get_info_replication_attr_value $master info slave_repl_offset]
     

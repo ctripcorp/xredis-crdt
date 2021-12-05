@@ -219,7 +219,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
         set peer_port [srv 0 port]
         # set peer_port "6679"
         # set peer [redis $peer_host $peer_port]
-        $peer select 9
+        if {!$::swap} {$peer select 9}
         set peer_log [srv 0 stdout]
         $peer config crdt.set repl-diskless-sync-delay 1
         $peer config set repl-diskless-sync-delay 1

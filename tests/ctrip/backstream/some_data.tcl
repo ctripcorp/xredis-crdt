@@ -121,12 +121,14 @@ test "restart" {
         after 1000
         start_server_by_config [get_slave_srv config_file] [get_slave_srv config] $slave_host $slave_port $slave_stdout $slave_stderr 1 {
             set slave [redis $slave_host $slave_port]
-            $slave select 9
+            if {!$::swap} {$slave select 9}
             start_server_by_config $master_config_file $master_config $master_host $master_port $master_stdout $master_stderr 1 {
                 set master [redis $master_host $master_port]
-                $master select 9
+                if {!$::swap} {$master select 9}
                 wait_for_peers_sync 1 $master 
                 wait_for_sync $slave 
+                puts "[$master dbsize] [$peer dbsize]"
+                puts "[$slave dbsize] [$master dbsize]"
                 assert_equal [$master dbsize] [$peer dbsize]
                 assert_equal [$slave dbsize] [$master dbsize]
             }
@@ -138,6 +140,8 @@ test "change_master_when_start_master" {
         set load_handle0 [run_thread $master_host $master_port 5000]
         after 5000
         stop_write_load $load_handle0
+        $master set k v
+        $master incrbyfloat k1 2.0
         $slave slaveof $master_host $master_port
         wait_for_sync $slave 
         after 20
@@ -150,7 +154,7 @@ test "change_master_when_start_master" {
         after 1000
         start_server_by_config [get_slave_srv config_file] [get_slave_srv config] $slave_host $slave_port $slave_stdout $slave_stderr 1 {
             set slave [redis $slave_host $slave_port]
-            $slave select 9
+            if {!$::swap} {$slave select 9}
             $slave slaveof no one 
             wait_for_peers_sync 1 $slave 
             assert_equal [$slave get k] [$peer get k]
@@ -158,9 +162,13 @@ test "change_master_when_start_master" {
             assert_equal [$slave get k1] [$peer get k1]
             start_server_by_config $master_config_file $master_config $master_host $master_port $master_stdout $master_stderr 1 {
                 set master [redis $master_host $master_port]
-                $master select 9
+                if {!$::swap} {$master select 9}
                 $master slaveof $slave_host $slave_port
                 wait_for_sync $master 
+				puts "==xxx== 3.1 [$master dbsize ] [$peer dbsize]"
+                puts "==xxx== 4.1 [$slave dbsize] [$master dbsize]"
+                puts "==xxx== 3.2 [$master dbsize ] [$peer dbsize]"
+                puts "==xxx== 4.2 [$slave dbsize] [$master dbsize]"
                 assert_equal [$master dbsize ] [$peer dbsize]
                 assert_equal [$slave dbsize] [$master dbsize]
 
@@ -207,7 +215,7 @@ test "peering" {
         after 1000
         start_server_by_config [get_slave_srv config_file] [get_slave_srv config] $slave_host $slave_port $slave_stdout $slave_stderr 1 {
             set slave [redis $slave_host $slave_port]
-            $slave select 9
+            if {!$::swap} {$slave select 9}
             $slave slaveof no one 
             wait_for_peers_sync 1 $slave 
             assert_equal [$slave get k] [$peer get k]
@@ -215,10 +223,12 @@ test "peering" {
             assert_equal [$slave get k1] [$peer get k1]
             start_server_by_config $master_config_file $master_config $master_host $master_port $master_stdout $master_stderr 1 {
                 set master [redis $master_host $master_port]
-                $master select 9
+                if {!$::swap} {$master select 9}
                 wait_start_peer $master_stdout
                 $master slaveof $slave_host $slave_port
                 wait_for_sync $master 
+                puts "[$master dbsize ] [$peer dbsize]"
+                puts "[$slave dbsize] [$master dbsize]"
                 assert_equal [$master dbsize ] [$peer dbsize]
                 assert_equal [$slave dbsize] [$master dbsize]
 
@@ -243,7 +253,7 @@ test "peerof over" {
         after 1000
         start_server_by_config [get_slave_srv config_file] [get_slave_srv config] $slave_host $slave_port $slave_stdout $slave_stderr 1 {
             set slave [redis $slave_host $slave_port]
-            $slave select 9
+            if {!$::swap} {$slave select 9}
             $slave slaveof no one 
             wait_for_peers_sync 1 $slave 
             assert_equal [$slave get k] [$peer get k]
@@ -251,7 +261,7 @@ test "peerof over" {
             assert_equal [$slave get k1] [$peer get k1]
             start_server_by_config $master_config_file $master_config $master_host $master_port $master_stdout $master_stderr 1 {
                 set master [redis $master_host $master_port]
-                $master select 9
+                if {!$::swap} {$master select 9}
                 after 3000
                 wait_for_peers_sync 1 $master 
                 $master slaveof $slave_host $slave_port

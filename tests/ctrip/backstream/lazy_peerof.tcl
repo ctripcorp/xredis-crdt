@@ -85,7 +85,7 @@ test "restart" {
         catch {$master shutdown} error 
          start_server_by_config [get_master_srv config_file] [get_master_srv config] $master_host $master_port $master_stdout $master_stderr 1 {
             set master [redis $master_host $master_port]
-            $master select 9
+            if {!$::swap} {$master select 9}
             after 2000
             assert_equal [crdt_status $peer connected_slaves] 1
             assert_equal [crdt_status $peer2 connected_slaves] 1
@@ -110,7 +110,7 @@ test "rdb-restart" {
         catch {$master shutdown} error 
          start_server_by_config [get_master_srv config_file] [get_master_srv config] $master_host $master_port $master_stdout $master_stderr 1 {
             set master [redis $master_host $master_port]
-            $master select 9
+            if {!$::swap} {$master select 9}
             after 2000
             assert_equal [crdt_status $peer connected_slaves] 1
             assert_equal [crdt_status $peer2 connected_slaves] 1
@@ -135,7 +135,7 @@ test "rdb-restart-peerof-cancel-lazy-peerof" {
         catch {$master shutdown} error 
         start_server_by_config [get_master_srv config_file] [get_master_srv config] $master_host $master_port $master_stdout $master_stderr 1 {
             set master [redis $master_host $master_port]
-            $master select 9
+            if {!$::swap} {$master select 9}
             puts [$master peerof $peer_gid $peer_host $peer_port backstream 0]
             after 2000
             assert_equal [crdt_status $peer connected_slaves] 2
@@ -154,7 +154,7 @@ test "rdb-restart-change-other-peer-cancel-lazy-peerof" {
         catch {$peer shutdown} error 
         start_server_by_config [get_peer_srv config_file] [get_peer_srv config] $peer_host $peer_port $peer_stdout $peer_stderr $peer_gid {
             set peer [redis $peer_host $peer_port]
-            $peer select 9
+            if {!$::swap} {$peer select 9}
             assert_equal [crdt_status $slave connected_slaves] 0
             $peer peerof $slave_gid $slave_host $slave_port 
             after 2000

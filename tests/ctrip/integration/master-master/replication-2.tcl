@@ -27,9 +27,15 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
         set peer2_stdout [srv 0 stdout]
         set peer2_gid 2
 
-        set load_handle0 [start_bg_complex_string_data $peer1_host $peer1_port 9 100000]
-        set load_handle1 [start_bg_complex_string_data $peer1_host $peer1_port 11 100000]
-        set load_handle2 [start_bg_complex_string_data $peer2_host $peer2_port 12 100000]
+        if {!$::swap} {
+            set load_handle0 [start_bg_complex_string_data $peer1_host $peer1_port 9 100000]
+            set load_handle1 [start_bg_complex_string_data $peer1_host $peer1_port 11 100000]
+            set load_handle2 [start_bg_complex_string_data $peer2_host $peer2_port 12 100000]
+        } else {
+            set load_handle0 [start_bg_complex_string_data $peer1_host $peer1_port 0 100000]
+            set load_handle1 [start_bg_complex_string_data $peer1_host $peer1_port 0 100000]
+            set load_handle2 [start_bg_complex_string_data $peer2_host $peer2_port 0 100000]
+        } 
 
         $peer1 config crdt.set repl-diskless-sync-delay 1
         $peer2 config crdt.set repl-diskless-sync-delay 1

@@ -182,9 +182,9 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                     } {2}
                     test "ba +  set" {
                         test "ba +  set" {
-                            $master crdt.rc rc1300 1 1000 1:1 2:2.0 -1
+                            $master crdt.rc rc1300 1 1000 1:1 3:3:2.0 -1
                             $master crdt.counter rc1300 1 1000 1:2 4 4:1.0 
-                            $master crdt.rc rc1300 1 1000 1:3 2:3.0 -1
+                            $master crdt.rc rc1300 1 1000 1:3 3:3:3.0 -1
                             $master get rc1300 
                         } {4}
                         test "ba +  set + del" {
@@ -204,7 +204,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         test "ad +  set + del" {
                             $master crdt.counter rc1410 1 1000 1:2 4 4:3.0 
                             $master crdt.del_rc rc1410 1 1000 1:1 {1:1:2:2.0} 
-                            $master crdt.rc rc1410 1 1000 1:3 {2:3.0,1:1:4:4.0} -1
+                            $master crdt.rc rc1410 1 1000 1:3 {3:3:3.0,1:1:4:4.0} -1
                             $master get rc1410 
                         } {4}
                     }
@@ -520,7 +520,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master get rc3410 
                     } {2}
                     test "fail bad +  del_rc" {
-                        $master crdt.rc rc3510 1 1000 1:4  2:1.0 -1
+                        $master crdt.rc rc3510 1 1000 1:4  3:3:1.0 -1
                         $master crdt.counter rc3510 1 1000 1:5  4 4:2.0
                         $master crdt.del_rc rc3510 1 1000 1:3 {1:2:4:1.0}
                         $master crdt.del_rc rc3510 1 1000 1:2 {1:1:4:2.0}

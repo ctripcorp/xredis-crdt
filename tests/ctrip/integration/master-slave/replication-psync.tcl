@@ -41,9 +41,15 @@ proc test_psync {descr duration backlog_size backlog_ttl delay cond diskless rec
             $master config set repl-diskless-sync $diskless
             $master config set repl-diskless-sync-delay 1
 
-            set load_handle0 [start_bg_complex_string_data $master_host $master_port 9 100000]
-            set load_handle1 [start_bg_complex_string_data $master_host $master_port 11 100000]
-            set load_handle2 [start_bg_complex_string_data $master_host $master_port 12 100000]
+            if {!$::swap} {
+                set load_handle0 [start_bg_complex_string_data $master_host $master_port 9 100000]
+                set load_handle1 [start_bg_complex_string_data $master_host $master_port 11 100000]
+                set load_handle2 [start_bg_complex_string_data $master_host $master_port 12 100000]
+            } else {
+                set load_handle0 [start_bg_complex_string_data $master_host $master_port 0 100000]
+                set load_handle1 [start_bg_complex_string_data $master_host $master_port 0 100000]
+                set load_handle2 [start_bg_complex_string_data $master_host $master_port 0 100000]
+            }
 
             test {Slave should be able to synchronize with the master} {
                 $slave slaveof $master_host $master_port
