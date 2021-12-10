@@ -50,27 +50,41 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
             stop_bg_complex_data $load_handle2
             set retry 10
             print_log_content $peer2_stdout
-            while {$retry && ([$peer1 debug digest] ne [$peer2 debug digest])}\
-            {
-                after 1000
-                incr retry -1
-            }
-            assert {[$peer1 dbsize] > 0}
-            assert {[$peer2 dbsize] > 0}
+            if {!$::swap} {
+                while {$retry && ([$peer1 debug digest] ne [$peer2 debug digest])}\
+                {
+                    after 1000
+                    incr retry -1
+                }
+                assert {[$peer1 dbsize] > 0}
+                assert {[$peer2 dbsize] > 0}
 
-            if {[$peer1 debug digest] ne [$peer2 debug digest]} {
-                set csv1 [csvdump r]
-                set csv2 [csvdump {r -1}]
-                set fd [open /tmp/repldump1.txt w]
-                puts -nonewline $fd $csv1
-                close $fd
-                set fd [open /tmp/repldump2.txt w]
-                puts -nonewline $fd $csv2
-                close $fd
-                puts "Master - Slave inconsistency"
-                puts "Run diff -u against /tmp/repldump*.txt for more info"
+                if {[$peer1 debug digest] ne [$peer2 debug digest]} {
+                    set csv1 [csvdump r]
+                    set csv2 [csvdump {r -1}]
+                    set fd [open /tmp/repldump1.txt w]
+                    puts -nonewline $fd $csv1
+                    close $fd
+                    set fd [open /tmp/repldump2.txt w]
+                    puts -nonewline $fd $csv2
+                    close $fd
+                    puts "Master - Slave inconsistency"
+                    puts "Run diff -u against /tmp/repldump*.txt for more info"
+                }
+                assert_equal [r debug digest] [r -1 debug digest]
+            } else {
+                while {$retry && ([$peer1 dbsize] ne [$peer2 dbsize])}\
+                {
+                    puts "============== $retry =================="
+                    puts "peer1:\n [$peer1 info keyspace]\n [$peer1 dbsize]"
+                    puts "peer2:\n [$peer2 info keyspace]\n [$peer2 dbsize]"
+                    after 1000
+                    incr retry -1
+                }
+                assert {[$peer1 dbsize] > 0}
+                assert {[$peer2 dbsize] > 0}
+                assert_equal [$peer1 dbsize] [$peer2 dbsize]
             }
-            assert_equal [r debug digest] [r -1 debug digest]
         }
     }
 }

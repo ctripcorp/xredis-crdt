@@ -648,9 +648,9 @@ slave-peer-offset "check master replid and offset when master-master add sync" {
     
     test "check sync" {
         assert_equal [crdt_stats $master sync_full ] 1
-        assert_equal [crdt_stats $peer sync_full ] 1
-        assert_equal [crdt_stats $slave sync_full ] 0
-        assert_equal [crdt_stats $peer_slave sync_full ] 0
+        assert_equal [crdt_stats $peer sync_full ] 2
+        assert_equal [crdt_stats $slave sync_full ] 1
+        assert_equal [crdt_stats $peer_slave sync_full ] 1
     }
     
 

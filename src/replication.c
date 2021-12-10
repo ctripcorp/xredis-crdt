@@ -199,7 +199,7 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
          * peerMaster->repl_state change to REPL_STATE_CONNECTED When processing completes the crdtMergeEnd command.
          *  but crdtMergeEnd command Should not be copied 
          * */
-        if(server.current_client->cmd->proc != crdtMergeEndCommand) {
+        if(server.current_client->cmd && server.current_client->cmd->proc != crdtMergeEndCommand) {
             return;
         }
     }

@@ -231,7 +231,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
         set rd1 [redis_deferring_client]
         assert_equal {1} [psubscribe $rd1 *]
         r set foo bar
-        assert_equal {pmessage * __keyspace@9__:foo set} [$rd1 read]
+        assert_match {pmessage * __keyspace@*__:foo set} [$rd1 read]
         $rd1 close
     }
 
@@ -240,7 +240,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
         set rd1 [redis_deferring_client]
         assert_equal {1} [psubscribe $rd1 *]
         r set foo bar
-        assert_equal {pmessage * __keyevent@9__:set foo} [$rd1 read]
+        assert_match {pmessage * __keyevent@*__:set foo} [$rd1 read]
         $rd1 close
     }
 
@@ -249,20 +249,20 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
         set rd1 [redis_deferring_client]
         assert_equal {1} [psubscribe $rd1 *]
         r set foo bar
-        assert_equal {pmessage * __keyspace@9__:foo set} [$rd1 read]
-        assert_equal {pmessage * __keyevent@9__:set foo} [$rd1 read]
+        assert_match {pmessage * __keyspace@*__:foo set} [$rd1 read]
+        assert_match {pmessage * __keyevent@*__:set foo} [$rd1 read]
 
         r del foo 
-        assert_equal {pmessage * __keyspace@9__:foo del}  [$rd1 read]
-        assert_equal {pmessage * __keyevent@9__:del foo}  [$rd1 read]
+        assert_match {pmessage * __keyspace@*__:foo del}  [$rd1 read]
+        assert_match {pmessage * __keyevent@*__:del foo}  [$rd1 read]
 
         r crdt.set foo bar 1 1000 "1:1" 
-        assert_equal {pmessage * __keyspace@9__:foo set} [$rd1 read]
-        assert_equal {pmessage * __keyevent@9__:set foo} [$rd1 read]
+        assert_match {pmessage * __keyspace@*__:foo set} [$rd1 read]
+        assert_match {pmessage * __keyevent@*__:set foo} [$rd1 read]
 
         r CRDT.DEL_REG foo 1 1000 "1:2" 
-        assert_equal {pmessage * __keyspace@9__:foo del}  [$rd1 read]
-        assert_equal {pmessage * __keyevent@9__:del foo}  [$rd1 read]
+        assert_match {pmessage * __keyspace@*__:foo del}  [$rd1 read]
+        assert_match {pmessage * __keyevent@*__:del foo}  [$rd1 read]
 
         $rd1 close
     }
@@ -283,8 +283,8 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
     #     r set foo bar
     #     r lpush mylist a
     #     # No notification for set, because only list commands are enabled.
-    #     assert_equal {pmessage * __keyspace@9__:mylist lpush} [$rd1 read]
-    #     assert_equal {pmessage * __keyevent@9__:lpush mylist} [$rd1 read]
+    #     assert_match {pmessage * __keyspace@*__:mylist lpush} [$rd1 read]
+    #     assert_match {pmessage * __keyevent@*__:lpush mylist} [$rd1 read]
     #     $rd1 close
     # }
 
@@ -295,10 +295,10 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
     #     r set foo bar
     #     r expire foo 1
     #     r del foo
-    #     assert_equal {pmessage * __keyspace@9__:foo expire} [$rd1 read]
-    #     assert_equal {pmessage * __keyevent@9__:expire foo} [$rd1 read]
-    #     assert_equal {pmessage * __keyspace@9__:foo del} [$rd1 read]
-    #     assert_equal {pmessage * __keyevent@9__:del foo} [$rd1 read]
+    #     assert_match {pmessage * __keyspace@*__:foo expire} [$rd1 read]
+    #     assert_match {pmessage * __keyevent@*__:expire foo} [$rd1 read]
+    #     assert_match {pmessage * __keyspace@*__:foo del} [$rd1 read]
+    #     assert_match {pmessage * __keyevent@*__:del foo} [$rd1 read]
     #     $rd1 close
     # }
 
@@ -310,12 +310,12 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
     #     r lpush mylist a
     #     r rpush mylist a
     #     r rpop mylist
-    #     assert_equal {pmessage * __keyspace@9__:mylist lpush} [$rd1 read]
-    #     assert_equal {pmessage * __keyevent@9__:lpush mylist} [$rd1 read]
-    #     assert_equal {pmessage * __keyspace@9__:mylist rpush} [$rd1 read]
-    #     assert_equal {pmessage * __keyevent@9__:rpush mylist} [$rd1 read]
-    #     assert_equal {pmessage * __keyspace@9__:mylist rpop} [$rd1 read]
-    #     assert_equal {pmessage * __keyevent@9__:rpop mylist} [$rd1 read]
+    #     assert_match {pmessage * __keyspace@*__:mylist lpush} [$rd1 read]
+    #     assert_match {pmessage * __keyevent@*__:lpush mylist} [$rd1 read]
+    #     assert_match {pmessage * __keyspace@*__:mylist rpush} [$rd1 read]
+    #     assert_match {pmessage * __keyevent@*__:rpush mylist} [$rd1 read]
+    #     assert_match {pmessage * __keyspace@*__:mylist rpop} [$rd1 read]
+    #     assert_match {pmessage * __keyevent@*__:rpop mylist} [$rd1 read]
     #     $rd1 close
     # }
 
@@ -328,9 +328,9 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
     #     r srem myset x
     #     r sadd myset x y z
     #     r srem myset x
-    #     assert_equal {pmessage * __keyspace@9__:myset sadd} [$rd1 read]
-    #     assert_equal {pmessage * __keyspace@9__:myset sadd} [$rd1 read]
-    #     assert_equal {pmessage * __keyspace@9__:myset srem} [$rd1 read]
+    #     assert_match {pmessage * __keyspace@*__:myset sadd} [$rd1 read]
+    #     assert_match {pmessage * __keyspace@*__:myset sadd} [$rd1 read]
+    #     assert_match {pmessage * __keyspace@*__:myset srem} [$rd1 read]
     #     $rd1 close
     # }
 
@@ -343,9 +343,9 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
     #     r zrem myzset x
     #     r zadd myzset 3 x 4 y 5 z
     #     r zrem myzset x
-    #     assert_equal {pmessage * __keyspace@9__:myzset zadd} [$rd1 read]
-    #     assert_equal {pmessage * __keyspace@9__:myzset zadd} [$rd1 read]
-    #     assert_equal {pmessage * __keyspace@9__:myzset zrem} [$rd1 read]
+    #     assert_match {pmessage * __keyspace@*__:myzset zadd} [$rd1 read]
+    #     assert_match {pmessage * __keyspace@*__:myzset zadd} [$rd1 read]
+    #     assert_match {pmessage * __keyspace@*__:myzset zrem} [$rd1 read]
     #     $rd1 close
     # }
 
@@ -355,13 +355,13 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
         set rd1 [redis_deferring_client]
         assert_equal {1} [psubscribe $rd1 *]
         r hmset myhash yes 1 no 0
-        assert_equal {pmessage * __keyspace@9__:myhash hset} [$rd1 read]
+        assert_match {pmessage * __keyspace@*__:myhash hset} [$rd1 read]
         r del myhash
-        assert_equal {pmessage * __keyspace@9__:myhash del} [$rd1 read]
+        assert_match {pmessage * __keyspace@*__:myhash del} [$rd1 read]
         r crdt.hset myhash 1 1000 "1:10" 2 yes 1 no 0
-        assert_equal {pmessage * __keyspace@9__:myhash hset} [$rd1 read]
+        assert_match {pmessage * __keyspace@*__:myhash hset} [$rd1 read]
         r crdt.del_hash myhash 1 1000 "1:11"
-        assert_equal {pmessage * __keyspace@9__:myhash del} [$rd1 read]
+        assert_match {pmessage * __keyspace@*__:myhash del} [$rd1 read]
         $rd1 close
     }
 
@@ -376,7 +376,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
     #     } else {
     #         fail "Key does not expire?!"
     #     }
-    #     assert_equal {pmessage * __keyevent@9__:expired foo} [$rd1 read]
+    #     assert_match {pmessage * __keyevent@*__:expired foo} [$rd1 read]
     #     $rd1 close
     # }
 
@@ -386,7 +386,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
     #     set rd1 [redis_deferring_client]
     #     assert_equal {1} [psubscribe $rd1 *]
     #     r psetex foo 100 1
-    #     assert_equal {pmessage * __keyevent@9__:expired foo} [$rd1 read]
+    #     assert_match {pmessage * __keyevent@*__:expired foo} [$rd1 read]
     #     $rd1 close
     # }
 
@@ -398,7 +398,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
     #     assert_equal {1} [psubscribe $rd1 *]
     #     r set foo bar
     #     r config set maxmemory 1
-    #     assert_equal {pmessage * __keyevent@9__:evicted foo} [$rd1 read]
+    #     assert_match {pmessage * __keyevent@*__:evicted foo} [$rd1 read]
     #     r config set maxmemory 0
     #     $rd1 close
     # }
@@ -468,8 +468,8 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
             [lindex $peers 1] config set notify-keyspace-events KEA
             assert_equal {1} [psubscribe [lindex $rd 1] *]
             [lindex $peers 0] set foo bar
-            assert_equal {pmessage * __keyspace@9__:foo set} [[lindex $rd 1] read]
-            assert_equal {pmessage * __keyevent@9__:set foo} [[lindex $rd 1] read]
+            assert_match {pmessage * __keyspace@*__:foo set} [[lindex $rd 1] read]
+            assert_match {pmessage * __keyevent@*__:set foo} [[lindex $rd 1] read]
             punsubscribe [lindex $rd 1] *
         }
 
@@ -480,8 +480,8 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
             assert_equal {1} [psubscribe [lindex $rd 1] *]
             [lindex $peers 0] hmset myhash yes 1 no 0
             # r hincrby myhash yes 10
-            assert_equal {pmessage * __keyspace@9__:myhash hset} [[lindex $rd 1] read]
-            # assert_equal {pmessage * __keyspace@9__:myhash hincrby} [$rd1 read]
+            assert_match {pmessage * __keyspace@*__:myhash hset} [[lindex $rd 1] read]
+            # assert_match {pmessage * __keyspace@*__:myhash hincrby} [$rd1 read]
             punsubscribe [lindex $rd 1] *
         }
     }

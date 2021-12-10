@@ -80,8 +80,8 @@ void setupSwappingClients(client *c, robj *key, robj *subkey, swappingClients *s
     serverAssert(sdsEncodedObject(key));
     serverAssert(subkey == NULL || sdsEncodedObject(subkey));
 
-    if ((de = dictFind(c->db->dict, key->ptr)) == NULL) {
-        de = dictFind(c->db->evict, key->ptr);
+    if ((de = dictFind(c->db->evict, key->ptr)) == NULL) {
+        de = dictFind(c->db->dict, key->ptr);
     }
 
     if (de == NULL) {

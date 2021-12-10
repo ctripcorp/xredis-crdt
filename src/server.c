@@ -602,7 +602,7 @@ dictType objectKeyPointerValueDictType = {
     NULL,                      /* key dup */
     NULL,                      /* val dup */
     dictEncObjKeyCompare,      /* key compare */
-    dictObjectDestructor, /* key destructor */
+    dictObjectDestructor,      /* key destructor */
     NULL                       /* val destructor */
 };
 
@@ -1281,7 +1281,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     freeClientsInAsyncFreeQueue();
 
     /* Close clients that need to be closed when swaps finished */
-    run_with_period(1000) freeClientsInDerferedQueue();
+    run_with_period(1000) freeClientsInDeferedQueue();
 
     /* Clear the paused clients flag if needed. */
     clientsArePaused(); /* Don't check return value, just use the side effect.*/
@@ -2083,6 +2083,7 @@ void initServer(struct redisServer *srv) {
         for (j = 0; j < srv->dbnum; j++) {
             srv->db[j].dict = dictCreate(&dbDictType, NULL);
             srv->db[j].evict = dictCreate(&evictDictType, NULL);
+            srv->db[j].hold_keys = dictCreate(&objectKeyPointerValueDictType, NULL);
             srv->db[j].expires = dictCreate(&keyptrDictType, NULL);
             srv->db[j].deleted_keys = dictCreate(&dbDictType, NULL);
             srv->db[j].blocking_keys = dictCreate(&keylistDictType, NULL);
@@ -2453,6 +2454,9 @@ void preventCommandReplication(client *c) {
 void call(client *c, int flags) {
     long long dirty, start, duration;
     int client_old_flags = c->flags;
+
+    serverLog(LL_DEBUG, "* client(id=%ld,cmd=%s,key=%s)",
+        c->id,c->cmd->name,c->argc <= 1 ? "": (sds)c->argv[1]->ptr);
 
     /* Sent the command to clients in MONITOR mode, only if the commands are
      * not generated from reading an AOF. */

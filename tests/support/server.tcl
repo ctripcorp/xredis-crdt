@@ -148,7 +148,7 @@ proc start_redis_server {server options {code undefined}} {
             dict set srv "port" $::port
             set client [redis $::host $::port]
             dict set srv "client" $client
-            $client select 9
+            if {!$::swap} {$client select 9}
 
             # append the server to the stack
             lappend ::servers $srv
@@ -230,7 +230,7 @@ proc start_redis_server {server options {code undefined}} {
         }
     }
 
-    if {$::swap && $::debug_evict_keys > 0} {
+    if {$::swap && $::debug_evict_keys != 0 && ![string match {*assets*} $server]} {
         dict set config "debug-evict-keys" $::debug_evict_keys
     }
 

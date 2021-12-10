@@ -265,6 +265,8 @@ set ::force_failure 0
 set ::timeout 600; # 10 minutes without progresses will quit the test.
 set ::last_progress [clock seconds]
 set ::active_servers {} ; # Pids of active Redis instances.
+set ::swap 0
+set ::debug_evict_keys 0
 
 # Set to 1 when we are running in client mode. The Redis test uses a
 # server-client model to run tests simultaneously. The server instance
@@ -324,7 +326,7 @@ proc reconnect {args} {
 
     # select the right db when we don't have to authenticate
     if {![dict exists $config "requirepass"]} {
-        $client select 9
+        if {!$::swap} {$client select 9}
     }
 
     # re-set $srv in the servers list
@@ -342,8 +344,11 @@ proc redis_deferring_client {args} {
     set client [redis [srv $level "host"] [srv $level "port"] 1]
 
     # select the right db and read the response (OK)
-    $client select 9
-    $client read
+    if {!$::swap} {
+        $client select 9
+        $client read
+    }
+
     return $client
 }
 
@@ -386,9 +391,9 @@ proc test_server_main {} {
         set p [exec $tclsh [info script] {*}$::argv \
             --client $port --port $start_port --proxy_tcp $proxy_tcp --proxy_tls $proxy_tls &]
         lappend ::clients_pids $p
-        incr start_port 10
-        incr proxy_tcp 10
-        incr proxy_tls 10
+        incr start_port 50
+        incr proxy_tcp 50
+        incr proxy_tls 50
     }
 
     # Setup global state for the test server
@@ -659,7 +664,6 @@ for {set j 0} {$j < [llength $argv]} {incr j} {
         incr j
     } elseif {$opt eq {--swap}} {
         set ::swap 1
-        incr j
     } elseif {$opt eq {--debug-evict-keys}} {
         set ::debug_evict_keys $arg
         incr j

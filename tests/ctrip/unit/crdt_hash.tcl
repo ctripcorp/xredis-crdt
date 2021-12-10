@@ -149,7 +149,8 @@ start_server {tags {"crdt-hash"} overrides {crdt-gid 1} config {crdt.conf} modul
 
 
     test {"[crdt_hash.tcl]big hash map"} {
-        set load_handle0 [start_bg_hash_data $redis_host $redis_port 9 100000]
+        if {$::swap} {set db 0} else {set db 9}
+        set load_handle0 [start_bg_hash_data $redis_host $redis_port $db 100000]
         after 1000
         stop_bg_hash_data $load_handle0
     }

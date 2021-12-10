@@ -220,7 +220,6 @@ slave-peer-offset "maste-slave" {
     after 1000
     stop_write_load $load_handle1
     assert_equal [$master get k1] v1
-    after 5000
     assert_equal [$master get k2] v2
     $non_crdt_slave slaveof no one
     $master slaveof $non_crdt_master_host $non_crdt_master_port

@@ -412,7 +412,7 @@ crdtMergeEndCommand(client *c) {
      * clients, reploff will be updated offset when dispatch (which is before
      * call), so in order to corretly init crdt repl client offset, we save it
      * to woker client cmd_reploff. */
-    c->cmd_reploff = offset;
+    if (c->flags & CLIENT_CRDT_MASTER) c->cmd_reploff = offset;
     
     if(!isNullVectorClock(peerMaster->backstream_vc)) {
         freeVectorClock(peerMaster->backstream_vc);

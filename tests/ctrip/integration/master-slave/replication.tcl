@@ -117,6 +117,7 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
         test {FLUSHDB} {
             set aux {}
             r -1 set k v
+            after 1000
             lappend aux [r -1 dbsize]
             after 1000
             lappend aux [r dbsize]

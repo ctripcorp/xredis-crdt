@@ -38,7 +38,7 @@ test "stand-alone" {
         set master_stdout [srv 0 stdout]
         set master_gid  1
         $master config set maxmemory-policy allkeys-lru
-        $master config set maxmemory [expr [get_current_memory $master] + 1048576]
+        $master config set maxmemory [expr [get_current_memory $master] + 4194304]
 
         for {set i 0 } { $i < 20000} {incr i} {
             $master set $i $i

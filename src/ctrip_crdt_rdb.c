@@ -359,8 +359,8 @@ int crdtSendEvictMergeRequest2(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di,
         key = createStringObject(keystr, sdslen(keystr));
         expire = getExpire(db,key);    
 
-        if(val->type != OBJ_MODULE || isModuleCrdt(val) != C_OK) {
-            serverLog(LL_NOTICE, "[CRDT][%s] key: %s,NOT CRDT MODULE OBJECT, SKIP", cmdname, keystr);
+        if(val->type != OBJ_MODULE || isModuleCrdt(val) != C_OK || !val->evicted) {
+            serverLog(LL_NOTICE, "[CRDT][%s] key: %s,NOT CRDT MODULE OBJECT or NOT evicted, SKIP", cmdname, keystr);
             decrRefCount(key);
             continue;
         }

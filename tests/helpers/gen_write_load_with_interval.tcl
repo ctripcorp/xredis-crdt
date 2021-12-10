@@ -11,10 +11,10 @@ proc randomRangeString {length {chars "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmno
     return $txt
 }
 
-proc gen_write_load_with_interval {host port seconds interval} {
+proc gen_write_load_with_interval {host port seconds interval swap} {
     set start_time [clock seconds]
     set r [redis $host $port 1]
-    $r select 9
+    if {!$swap} {$r select 9}
     while 1 {
         $r set [randomRangeString 20] [randomRangeString 30]
         $r setex 60000 [randomRangeString 20] [randomRangeString 30]
@@ -43,4 +43,4 @@ proc gen_write_load_with_interval {host port seconds interval} {
     }
 }
 
-gen_write_load_with_interval [lindex $argv 0] [lindex $argv 1] [lindex $argv 2] [lindex $argv 3]
+gen_write_load_with_interval [lindex $argv 0] [lindex $argv 1] [lindex $argv 2] [lindex $argv 3] [lindex $argv 4]

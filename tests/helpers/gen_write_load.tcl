@@ -3,7 +3,7 @@ source tests/support/redis.tcl
 proc gen_write_load {host port seconds} {
     set start_time [clock seconds]
     set r [redis $host $port 1]
-    $r select 9
+    # $r select $db
     while 1 {
         $r set [expr rand()] [expr rand()]
         $r hset [expr rand()] [expr rand()] [expr rand()]

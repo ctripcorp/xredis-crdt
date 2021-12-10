@@ -186,11 +186,19 @@ write_diff_db "write db0 and db5 " {
     wait $slave 0 info $slave_slave_log
     
 
-    set load_handle0 [start_write_db_load $peer_host $peer_port 10 0]
-    set load_handle1 [start_write_db_load $peer_host $peer_port 6 1]
-    set load_handle2 [start_write_db_load $peer_host $peer_port 20 2]
-    set load_handle3 [start_write_db_load $peer2_host $peer2_port 8 3]
-    set load_handle4 [start_write_db_load $peer2_host $peer2_port 4 4]
+    if {!$::swap} {
+        set load_handle0 [start_write_db_load $peer_host $peer_port 10 0]
+        set load_handle1 [start_write_db_load $peer_host $peer_port 6 1]
+        set load_handle2 [start_write_db_load $peer_host $peer_port 20 2]
+        set load_handle3 [start_write_db_load $peer2_host $peer2_port 8 3]
+        set load_handle4 [start_write_db_load $peer2_host $peer2_port 4 4]
+    } else {
+        set load_handle0 [start_write_db_load $peer_host $peer_port 10 0]
+        set load_handle1 [start_write_db_load $peer_host $peer_port 6 0]
+        set load_handle2 [start_write_db_load $peer_host $peer_port 20 0]
+        set load_handle3 [start_write_db_load $peer2_host $peer2_port 8 0]
+        set load_handle4 [start_write_db_load $peer2_host $peer2_port 4 0]
+    }
 
     after 3000
     # Stop the write load
@@ -205,9 +213,16 @@ write_diff_db "write db0 and db5 " {
     $peer2 debug set-crdt-ovc 0
     # print_file_matches $peer_slave_log
     check $master $slave $slave_slave $peer  $peer_slave $peer2
-    assert_equal [get_keys $master 0] [get_keys $peer 0]
-    assert_equal [get_keys $master 1] [get_keys $peer 1]
-    assert_equal [get_keys $master 2] [get_keys $peer 2]
-    assert_equal [get_keys $master 3] [get_keys $peer2 3]
-    assert_equal [get_keys $master 4] [get_keys $peer2 4]
+    if {!$::swap} {
+        assert_equal [get_keys $master 0] [get_keys $peer 0]
+        assert_equal [get_keys $master 1] [get_keys $peer 1]
+        assert_equal [get_keys $master 2] [get_keys $peer 2]
+        assert_equal [get_keys $master 3] [get_keys $peer2 3]
+        assert_equal [get_keys $master 4] [get_keys $peer2 4]
+    } else {
+        assert {[$master dbsize] >= [$peer dbsize]}
+        assert {[$master dbsize] >= [$peer2 dbsize]}
+        assert {[$peer2 dbsize] > 0}
+        assert {[$peer dbsize] > 0}
+    }
 }

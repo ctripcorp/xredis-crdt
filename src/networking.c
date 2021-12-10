@@ -139,10 +139,11 @@ client *createClient(int fd) {
     c->filterVectorClock = newVectorClock(0);
     c->swapping_count = 0;
     c->swap_result = 0;
-    c->hold_keys = dictCreate(&objectKeyObjectValueDictType, NULL);
+    c->hold_keys = dictCreate(&objectKeyPointerValueDictType, NULL);
     c->cmd_reploff = -1;
     c->repl_client = NULL;
     c->swapping_count = 0;
+    c->client_hold_mode = CLIENT_HOLD_MODE_CMD;
     c->CLIENT_DEFERED_CLOSING = 0;
     c->CLIENT_REPL_SWAPPING = 0;
     c->CLIENT_REPL_DISPATCHING = 0;
@@ -810,7 +811,7 @@ static void deferFreeClient(client *c) {
     listAddNodeTail(server.clients_to_free, c);
 }
 
-void freeClientsInDerferedQueue(void) {
+void freeClientsInDeferedQueue(void) {
     sds client_desc;
     while (listLength(server.clients_to_free)) {
         listNode *ln = listFirst(server.clients_to_free);
@@ -1435,6 +1436,9 @@ end:
 
 void debugEvictKeys();
 void commandProcessed(client *c) {
+    serverLog(LL_DEBUG, "> commandProcessed client(id=%ld,cmd=%s,key=%s)",
+        c->id,c->cmd ? c->cmd->name: "",c->argc <= 1 ? "": (sds)c->argv[1]->ptr);
+
     /* Don't reset the client structure for clients blocked in a
      * module blocking command, so that the reply callback will
      * still be able to access the client argv and argc field.
@@ -1447,6 +1451,7 @@ void commandProcessed(client *c) {
          * configured num of key after executing command. */
         if (server.debug_evict_keys) debugEvictKeys();
     }
+    serverLog(LL_DEBUG, "< commandProcessed");
 }
 
 /* This function is called every time, in the client structure 'c', there is

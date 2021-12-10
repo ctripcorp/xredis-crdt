@@ -95,7 +95,7 @@ start_server {tags {"backstreaming, can't  write and read"} overrides {crdt-gid 
             start_server_by_config [srv 0 config_file] [srv 0 config] $master_host $master_port $master_stdout $master_stderr 1 {
                 after 1000
                 set master [redis $master_host $master_port]
-                $master select 9
+                if {!$::swap} {$master select 9}
                 test "0" {
                     catch {$master get key} error 
                     assert_match "*LOADING Redis is loading the dataset in memory*" $error 
@@ -264,7 +264,7 @@ start_server {tags {"slave load rdb.conf"} overrides {crdt-gid 2} config {crdt.c
             }
             start_server_by_config [srv 0 config_file] [srv 0 config] $slave_host $slave_port $slave_stdout $slave_stderr 0 {
                 set slave [redis $slave_host $slave_port]
-                $slave select 9
+                if {!$::swap} {$slave select 9}
                 $slave slaveof no one 
                 assert_equal [crdt_status $slave backstreaming] 1
                 wait_for_peer_sync $slave 
@@ -320,7 +320,7 @@ start_server {tags {"slave load rdb.conf"} overrides {crdt-gid 2} config {crdt.c
             
             start_server_by_config [srv 0 config_file] [srv 0 config] $slave_host $slave_port $slave_stdout $slave_stderr 1 {
                 set slave [redis $slave_host $slave_port]
-                $slave select 9
+                if {!$::swap} {$slave select 9}
                 wait_for_sync $slave 
                 assert_equal [$slave get key] {}
                 assert_equal [crdt_stats $peer sync_backstream] 0
@@ -378,7 +378,7 @@ start_server {tags {"slave full-sync after to master no backstream"} overrides {
             }
             start_server_by_config [srv 0 config_file] [srv 0 config] $slave_host $slave_port $slave_stdout $slave_stderr 0 {
                 set slave [redis $slave_host $slave_port]
-                $slave select 9
+                if {!$::swap} {$slave select 9}
                 wait_for_sync $slave
                 $slave slaveof no one 
                 assert_equal [crdt_stats $peer sync_backstream] 0
@@ -412,27 +412,28 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt_no_save.conf} 
         $peer peerof $master_gid $master_host $master_port
         $peer crdt.set key v1 1 1000 1:1
         $master peerof 2 127.0.0.1 0 
-        puts "abc"
         $master bgsave 
-        waitForBgrewriteaof $master
+        after 1000
+        waitForBgsave $master
         $master peerof $peer_gid $peer_host $peer_port
         #save config
+        set config_file  [read_file  $master_config_file]
         assert_match "*peerof 2 127.0.0.1*" $config_file
         #rdb is ok
         set dbfile [dict get $master_config dbfilename]
         set rdb_path [format "%s/%s" [dict get $master_config dir] $dbfile]
+
         assert_equal [file exists $rdb_path] 1
         catch {$master shutdown} 
         start_server_by_config $master_config_file $master_config $master_host $master_port $master_stdout $master_stderr 0 {
             after 2000
             set master [redis $master_host $master_port]
-            $master select 9
+            if {!$::swap} {$master select 9}
             test "2" {
                 wait_for_peer_sync $master 
                 puts "2"
                 assert_equal [$master get key] v1
             }
-            
         }
     }
 }
@@ -470,7 +471,7 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt_no_save.conf} 
             set master [redis $master_host $master_port]
             wait_for_peer_sync $master
             puts [$master crdt.info replication]
-            $master select 9
+            if {!$::swap} {$master select 9}
             assert_equal [$master crdt.datainfo peer_key] [$peer crdt.datainfo peer_key] 
             assert_equal [$master crdt.datainfo master_key] [$peer crdt.datainfo master_key] 
             assert_equal [$master crdt.datainfo k] [$peer crdt.datainfo k] 

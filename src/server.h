@@ -680,6 +680,7 @@ typedef struct redisDb {
     long long avg_ttl;          /* Average TTL, just for stats */
     /* swap */
     dict *evict;                /* evicted keys(or subkeys). */
+    dict *hold_keys;            /* holded keys. */
 } redisDb;
 
 /* Client MULTI/EXEC state */
@@ -757,9 +758,9 @@ sds proxy2str(int proxy_type, void* proxy);
 void* proxyHiRedis(int proxy_type, void* proxy, char* src_host, int src_port, char* host, int port);
 int proxyIsKeepConnected(int proxy_type, void* current, void* proxy);
 
-#define REPL_SWAP_INIT 0
-#define REPL_SWAP_SWAPPING 1
-#define REPL_SWAP_SWAPPED 2
+#define CLIENT_HOLD_MODE_CMD 0  /* Hold all key in cmd if any key in cmd needs swap. */
+#define CLIENT_HOLD_MODE_EVICT 1  /* Hold key if needs swap. */
+#define CLIENT_HOLD_MODE_REPL 2 /* Hold all key no matter what. */
 
 typedef void (*voidfuncptr)(void);
 /* With multiplexing we need to take per-client state.
@@ -833,6 +834,7 @@ typedef struct client {
     dict *hold_keys;
     voidfuncptr client_swap_finished_cb;
     void *client_swap_finished_pd;
+    int client_hold_mode; /* indicates how client should hold key */
     int CLIENT_DEFERED_CLOSING;
     int CLIENT_REPL_SWAPPING;
     int CLIENT_REPL_DISPATCHING;
@@ -1614,7 +1616,7 @@ void rewriteClientCommandArgument(client *c, int i, robj *newval);
 void replaceClientCommandVector(client *c, int argc, robj **argv);
 unsigned long getClientOutputBufferMemoryUsage(client *c);
 void freeClientsInAsyncFreeQueue(void);
-void freeClientsInDerferedQueue(void);
+void freeClientsInDeferedQueue(void);
 void asyncCloseClientOnOutputBufferLimitReached(client *c);
 int getClientType(client *c);
 int getClientTypeByName(char *name);

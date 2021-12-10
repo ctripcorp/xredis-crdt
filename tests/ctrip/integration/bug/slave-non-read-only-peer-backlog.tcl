@@ -24,7 +24,7 @@ start_server {tags {"crdt-basic"} overrides {crdt-gid 1} config {crdt.conf} modu
             lappend peer_hosts [srv 0 host]
             lappend peer_ports [srv 0 port]
             lappend peer_stdouts [srv 0 stdout]
-            lappend peer_gids 2
+            lappend peer_gids 1
             [lindex $peers 1] config crdt.set repl-diskless-sync-delay 1
             [lindex $peers 1] config set repl-diskless-sync-delay 1 
             [lindex $peers 0] slaveof [lindex $peer_hosts 1] [lindex $peer_ports 1]  
@@ -59,8 +59,10 @@ start_server {tags {"crdt-basic"} overrides {crdt-gid 1} config {crdt.conf} modu
                     [lindex $peers 0] hset h1 k v2
                     [lindex $peers 0] hdel h1 k
 
-                    [lindex $peers 1] select 0 
-                    [lindex $peers 1] set k v 
+                    if {!$::swap} {
+                        [lindex $peers 1] select 0 
+                        [lindex $peers 1] set k v 
+                    }
 
                     [lindex $peers 0] slaveof no one
                     
@@ -73,8 +75,10 @@ start_server {tags {"crdt-basic"} overrides {crdt-gid 1} config {crdt.conf} modu
                     assert {[[lindex $peers 2] ttl k] <= 600}
                     assert_equal [[lindex $peers 2] get k3] v1
                     assert_equal [[lindex $peers 2] hget h1 k] v1
-                    [lindex $peers 2] select 0 
-                    assert_equal [[lindex $peers 2] get k ] v
+                    if {!$::swap} {
+                        [lindex $peers 2] select 0 
+                        assert_equal [[lindex $peers 2] get k ] v
+                    }
                 }
             }
         }

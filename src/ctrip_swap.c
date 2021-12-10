@@ -77,9 +77,9 @@ sds swappingClientsDump(swappingClients *scs) {
         swapClient *sc = listNodeValue(ln);
         if (ln != listFirst(scs->swapclients)) result = sdscat(result,",");
         result = sdscat(result,"("); 
-        result = sdscat(result,actions[sc->c->cmd->swap_action]); 
+        if (sc->c->cmd)  result = sdscat(result,actions[sc->c->cmd->swap_action]); 
         result = sdscat(result,":"); 
-        result = sdscatsds(result,sc->s.key->ptr); 
+        if (sc->s.key) result = sdscatsds(result,sc->s.key->ptr); 
         result = sdscat(result,":"); 
         result = sdscat(result,sc->c->cmd->name); 
         result = sdscat(result,")"); 
@@ -150,7 +150,7 @@ swapClient *swappingClientsPeek(swappingClients *scs) {
  * to proceed). */
 int swappingClientsBlocking(swappingClients *scs) {
     /* if scs has pending swapclients or child scs, client should directly
-     * block untill all pending clints child scs swap finish. */
+     * block untill all pending child scs swap finish. */
     if (scs && (listLength(scs->swapclients) || scs->nchild > 0)) {
         return 1;
     } else {
@@ -232,21 +232,77 @@ typedef struct {
 
 void clientHoldKey(client *c, robj *key) {
     dictEntry *de;
-    robj *val;
+    redisDb *db = c->db;
+    int64_t hold_count;
 
     /* No need to hold key if it has already been holded */
     if (dictFind(c->hold_keys, key)) return;
-    /* Can't hold not existing key. */
-    if ((de = dictFind(c->db->dict, key->ptr)) == NULL) return;
-    val = dictGetVal(de);
-    /* Increase refcount to reserve key/val in c->hold_keys dict */
     incrRefCount(key);
-    incrRefCount(val);
-    serverAssert(dictAdd(c->hold_keys, key, val) == DICT_OK);
+    dictAdd(c->hold_keys, key, (void*)1);
+
+    /* Add key to server & client hold_keys */
+    if ((de = dictFind(db->hold_keys, key))) {
+        hold_count = dictGetSignedIntegerVal(de)+1;
+        dictSetSignedIntegerVal(de, hold_count);
+        serverLog(LL_DEBUG, "h %s (%ld)", (sds)key->ptr, hold_count);
+    } else {
+        incrRefCount(key);
+        dictAdd(db->hold_keys, key, (void*)1);
+        serverLog(LL_DEBUG, "h %s (%ld)", (sds)key->ptr, (int64_t)1);
+    }
+}
+
+void clientUnholdKey(client *c, robj *key) {
+    dictEntry *de;
+    int64_t hold_count;
+    redisDb *db = c->db;
+
+    if (dictDelete(c->hold_keys, key) == DICT_ERR) return;
+    serverAssert(de = dictFind(db->hold_keys, key));
+    hold_count = dictGetSignedIntegerVal(de)-1;
+    if (hold_count > 0) {
+        dictSetSignedIntegerVal(de, hold_count);
+    } else {
+        dictDelete(db->hold_keys, key);
+    }
+    serverLog(LL_DEBUG, "u %s (%ld)", (sds)key->ptr, hold_count);
 }
 
 void clientUnholdKeys(client *c) {
+    dictIterator *di;
+    dictEntry *cde, *dde;
+    int64_t hold_count;
+
+    di = dictGetIterator(c->hold_keys);
+    while ((cde = dictNext(di))) {
+        serverAssert(dde = dictFind(c->db->hold_keys, dictGetKey(cde)));
+        hold_count = dictGetSignedIntegerVal(dde)-1;
+        if (hold_count > 0) {
+            dictSetSignedIntegerVal(dde, hold_count);
+        } else {
+            dictDelete(c->db->hold_keys, dictGetKey(cde));
+        }
+        serverLog(LL_DEBUG, "u. %s (%ld)", (sds) ((robj*)dictGetKey(cde))->ptr, hold_count);
+    }
+
     dictEmpty(c->hold_keys, NULL);
+}
+
+int keyIsHolded(redisDb *db, robj *key) {
+    dictEntry *de;
+
+    if ((de = dictFind(db->hold_keys, key))) {
+        serverAssert(dictGetSignedIntegerVal(de) > 0);
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+void sharedSwapClientUnholdKey(client *c, robj *key, void *pd) {
+    UNUSED(pd);
+    serverAssert(c->client_hold_mode == CLIENT_HOLD_MODE_EVICT);
+    clientUnholdKey(c, key);
 }
 
 void continueProcessCommand(client *c) {
@@ -261,6 +317,9 @@ void continueProcessCommand(client *c) {
         handleClientsBlockedOnLists();
     /* post command */
     commandProcessed(c);
+    /* unhold keys for current command. */
+    serverAssert(c->client_hold_mode == CLIENT_HOLD_MODE_CMD);
+    clientUnholdKeys(c);
     /* pipelined command might already read into querybuf, if process not
      * restarted, pending commands would not be processed again. */
     processInputBuffer(c);
@@ -292,6 +351,11 @@ void rocksSwapFinished(int action, sds rawkey, sds rawval, void *privdata) {
     /* Note that client_cb might spawned new swap(typically by expire), those
      * swaps can be appended to scs because PUT will not happend unless scs
      * is empty. */
+    sds dump = swappingClientsDump(scs);
+    serverLog(LL_DEBUG, "- client(id=%ld,cmd=%s,key=%s): %s",
+            c->id, c->cmd->name, (sds)key->ptr, dump);
+    sdsfree(dump);
+
     if (client_cb)  client_cb(c, key, client_pd);
 
     swappingClientsPop(scs);
@@ -310,6 +374,12 @@ void rocksSwapFinished(int action, sds rawkey, sds rawval, void *privdata) {
                 client *nc = nsc->c;
                 client_cb = (clientSwapFinishedCallback)nc->client_swap_finished_cb;
                 client_pd = nc->client_swap_finished_pd;
+
+                sds dump = swappingClientsDump(scs);
+                serverLog(LL_DEBUG, "-.client(id=%ld,cmd=%s,key=%s): %s",
+                        nc->id, nc->cmd->name, (sds)key->ptr, dump);
+                sdsfree(dump);
+
                 if (client_cb) client_cb(nc, nsc->s.key, client_pd);
                 swappingClientsPop(scs);
                 swapClientRelease(nsc);
@@ -413,6 +483,7 @@ int clientSwapProceed(client *c, swap *s, swappingClients **pscs) {
 
 /* NOTE: swaps is swap intentions analyzed according to command (without query
  * keyspace). whether to start swap action is determined later in swapAna. */
+
 int clientSwapSwaps(client *c, getSwapsResult *result, clientSwapFinishedCallback cb, void *pd) {
     int nswaps = 0, i;
 
@@ -420,6 +491,7 @@ int clientSwapSwaps(client *c, getSwapsResult *result, clientSwapFinishedCallbac
     c->client_swap_finished_pd = pd;
 
     for (i = 0; i < result->numswaps; i++) {
+        int oswaps = nswaps;
         swappingClients *scs;
         swap *s = &result->swaps[i];
 
@@ -434,13 +506,31 @@ int clientSwapSwaps(client *c, getSwapsResult *result, clientSwapFinishedCallbac
             swappingClientsPush(scs, swapClientCreate(c, s));
             nswaps++; 
         } else {
-            /* no need to swap, but still we need to hold keys because client
-             * might swap other keys. */
-            if (s->key) clientHoldKey(c, s->key);
+            /* no need to swap */
         }
+
+        /* Hold key if:
+         * - this is a normal client and ANY key swap needed. (note that we hold
+         *   whether swap needed or not for now, will unhold all if no swap needed).
+         * - this is a shared swap client and CURRENT key swap needed
+         * - this is a repl worker client (no matter swap or not, keys will unhold in processRepl)
+         * - Dont' hold if there is no cb (otherwise key will not unhold) */
+        if (cb && s->key && ((c->client_hold_mode == CLIENT_HOLD_MODE_CMD) ||
+                    (c->client_hold_mode == CLIENT_HOLD_MODE_EVICT && nswaps > oswaps) ||
+                    (c->client_hold_mode == CLIENT_HOLD_MODE_REPL))) {
+            clientHoldKey(c, s->key);
+        }
+
+        char *sign = nswaps > oswaps ? "+" : "=";
+        sds dump = scs ? swappingClientsDump(scs) : sdsempty();
+        serverLog(LL_DEBUG, "%s client(id=%ld,cmd=%s,key=%s): %s",
+                sign, c->id, c->cmd->name, s->key ? (sds)s->key->ptr:"", dump);
+        sdsfree(dump);
     }
 
-    if (!nswaps) clientUnholdKeys(c);
+    if (cb && !nswaps && c->client_hold_mode == CLIENT_HOLD_MODE_CMD)
+        clientUnholdKeys(c);
+
     c->swapping_count = nswaps;
 
     return nswaps;
@@ -448,11 +538,10 @@ int clientSwapSwaps(client *c, getSwapsResult *result, clientSwapFinishedCallbac
 
 void clientSwapFinished(client *c, robj *key, void *pd) {
     UNUSED(pd);
-    if (key) clientHoldKey(c, key);
+    UNUSED(key);
     c->swapping_count--;
     if (c->swapping_count == 0) {
         if (!c->CLIENT_DEFERED_CLOSING) continueProcessCommand(c);
-        clientUnholdKeys(c);
     }
 }
 
@@ -477,6 +566,7 @@ int clientSwap(client *c) {
 
 /* ----------------------------- repl swap ------------------------------ */
 static void replDispatch(client *wc, client *c) {
+    int reserved_flags = wc->flags & CLIENT_MULTI;
     /* Move command from repl client to repl worker client, also reset repl
      * client args so it will not be freed by resetClient. */
     if (wc->argv) zfree(wc->argv);
@@ -485,6 +575,7 @@ static void replDispatch(client *wc, client *c) {
     wc->cmd = c->cmd;
     wc->lastcmd = c->lastcmd;
     wc->flags = c->flags;
+    wc->flags |= reserved_flags;
     wc->cmd_reploff = c->read_reploff - sdslen(c->querybuf);
     wc->repl_client = c;
     wc->gid = c->gid;
@@ -493,10 +584,12 @@ static void replDispatch(client *wc, client *c) {
      * multi command whether preceeding commands processed or not. */
     if (c->cmd->proc == multiCommand) {
         wc->CLIENT_REPL_DISPATCHING = 1;
+        wc->flags |= CLIENT_MULTI;
         resetClient(wc);
     } else if (wc->CLIENT_REPL_DISPATCHING) {
         if (c->cmd->proc == execCommand || c->cmd->proc == crdtExecCommand) {
             wc->CLIENT_REPL_DISPATCHING = 0;
+            c->swapping_count++;
         } else {
             queueMultiCommand(wc);
             resetClient(wc);
@@ -512,6 +605,9 @@ static void processRepl() {
     listNode *ln;
     client *wc, *c;
     struct redisCommand *backup_cmd;
+    int is_connected_crdt_master;
+
+    serverLog(LL_DEBUG, "> processRepl");
 
     while ((ln = listFirst(server.repl_worker_clients_used))) {
         wc = listNodeValue(ln);
@@ -524,7 +620,8 @@ static void processRepl() {
         listDelNode(server.repl_worker_clients_used, ln);
         listAddNodeTail(server.repl_worker_clients_free, wc);
 
-        clientUnholdKeys(wc);
+        is_connected_crdt_master = (c->flags & CLIENT_CRDT_MASTER) &&
+            getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED;
 
         backup_cmd = c->cmd;
         c->cmd = wc->cmd;
@@ -543,6 +640,9 @@ static void processRepl() {
         c->cmd = backup_cmd;
 
         commandProcessed(wc);
+
+        serverAssert(wc->client_hold_mode == CLIENT_HOLD_MODE_REPL);
+        clientUnholdKeys(wc);
 
         /* update peer backlog or offset. */
         if ((c->flags & CLIENT_MASTER) && iAmMaster() != C_OK) {
@@ -569,7 +669,7 @@ static void processRepl() {
         if (((c->flags & CLIENT_MASTER)
                     || ((c->flags & CLIENT_CRDT_MASTER) &&
                         getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED))
-                && !(c->flags & CLIENT_MULTI)) {
+                && !(wc->flags & CLIENT_MULTI)) {
             /* Update the applied replication offset of our master. */
             c->reploff = wc->cmd_reploff;
         }
@@ -583,20 +683,30 @@ static void processRepl() {
          * a crdt(peer) master, as we wish our slaves to keeper align with peer master's
          * repl offset, so that, when a failover happend locally, the globally repl_offset
          * will not be any different */
-        if (((c->flags & CLIENT_MASTER) && iAmMaster() != C_OK) ||
-                ((c->flags & CLIENT_CRDT_MASTER) && 
-                 getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED)) {
-            long long applied = c->reploff - prev_offset;
-            if (applied) {
-                if(server.slaveseldb != c->db->id) {
-                    sendSelectCommandToSlave(c->db->id);
-                }
-                replicationFeedSlavesFromMasterStream(server.slaves,
-                        c->pending_querybuf,applied);
-                sdsrange(c->pending_querybuf,applied,-1);
-            }
-        }
+		if (c->flags & CLIENT_MASTER && iAmMaster() != C_OK) {
+			size_t applied = c->reploff - prev_offset;
+			if (applied) {
+				if(!server.repl_slave_repl_all){
+					replicationFeedSlavesFromMasterStream(server.slaves,
+							c->pending_querybuf, applied);
+				}
+				sdsrange(c->pending_querybuf,applied,-1);
+			}
+		} else if(is_connected_crdt_master) {
+			int dictid = c->db->id;
+			size_t applied = c->reploff - prev_offset;
+			if (applied) {
+				if(server.slaveseldb != dictid) {
+					sendSelectCommandToSlave(dictid);
+				}    
+				replicationFeedSlavesFromMasterStream(server.slaves,
+						c->pending_querybuf, applied);
+				sdsrange(c->pending_querybuf,applied,-1);
+			}  
+		}
     }
+    //server.current_client = NULL;
+    serverLog(LL_DEBUG, "< processRepl");
 }
 
 void replSwapFinished(client *wc, robj *key, void *pd) {
@@ -605,8 +715,10 @@ void replSwapFinished(client *wc, robj *key, void *pd) {
     list *repl_swapping_clients;
 
     UNUSED(pd);
+    UNUSED(key);
 
-    if (key) clientHoldKey(wc, key);
+    serverLog(LL_DEBUG, "> replSwapFinished client(id=%ld,cmd=%s,key=%s)",
+        wc->id,wc->cmd->name,wc->argc <= 1 ? "": (sds)wc->argv[1]->ptr);
 
     /* Flag swap finished, note that command processing will be defered to
      * processRepl becasue there might be unfinished preceeding swap. */
@@ -619,6 +731,7 @@ void replSwapFinished(client *wc, robj *key, void *pd) {
      * worker repl client. */
     if (!listFirst(server.repl_swapping_clients) ||
             !listFirst(server.repl_worker_clients_free)) {
+        serverLog(LL_DEBUG, "< replSwapFinished");
         return;
     }
 
@@ -634,13 +747,15 @@ void replSwapFinished(client *wc, robj *key, void *pd) {
         listDelNode(repl_swapping_clients,ln);
     }
     listRelease(repl_swapping_clients);
+
+    serverLog(LL_DEBUG, "< replSwapFinished");
 }
 
-int replSwap(client *c) {
+int replSwap(client *wc) {
     int swap_count;
     getSwapsResult result = GETSWAPS_RESULT_INIT;
-    getSwaps(c, &result);
-    swap_count = clientSwapSwaps(c, &result, replSwapFinished, NULL);
+    getSwaps(wc, &result);
+    swap_count = clientSwapSwaps(wc, &result, replSwapFinished, NULL);
     releaseSwaps(&result);
     getSwapsFreeResult(&result);
     return swap_count;
@@ -663,7 +778,7 @@ int replClientSwap(client *c) {
 
     wc = listNodeValue(ln);
     serverAssert(wc);
-    serverAssert(!wc->CLIENT_REPL_SWAPPING || wc->flags & CLIENT_MULTI);
+    serverAssert(!wc->CLIENT_REPL_SWAPPING || (wc->flags & CLIENT_MULTI));
 
     /* dispatch repl commands to worker clients */
     replDispatch(wc, c);
@@ -693,7 +808,7 @@ int rocksDeleteNoReply(client *c, robj *key) {
     int swap_count;
     getSwapsResult result = GETSWAPS_RESULT_INIT;
     getExpireSwaps(c, key, &result);
-    swap_count = clientSwapSwaps(c, &result, NULL, NULL);
+    swap_count = clientSwapSwaps(c, &result, sharedSwapClientUnholdKey, NULL);
     releaseSwaps(&result);
     getSwapsFreeResult(&result);
     return swap_count;
@@ -709,6 +824,9 @@ void expireKey(client *c, robj *key, void *pd) {
     UNUSED(pd);
     redisDb *db = c->db;
     mstime_t when = getExpire(db, key);
+
+    serverAssert(c->client_hold_mode == CLIENT_HOLD_MODE_EVICT);
+    clientUnholdKey(c, key);
 
     if (crdtPropagateExpire(db,key,server.lazyfree_lazy_expire,when) != C_OK) {
         return;
@@ -747,7 +865,7 @@ int clientExpireNoReply(client *c, robj *key) {
  *    DEL swap appended to scs tail rather than scs head, but because PUT
  *    will not happend if scs is not empty, so PUT will not happen if DEL
  *    append to tail, thus key would not be evicted to before DEL. so DEL
- *    is technically started right away.
+ *    is started right away.
  *
  * Note that currently we can only generate ONE action for each swap, so we
  * can't do both GET+propagate & DEL+nop in step 1, so rocks DEL+nop is
@@ -777,7 +895,7 @@ int clientEvictNoReply(client *c, robj *key) {
     int swap_count;
     getSwapsResult result = GETSWAPS_RESULT_INIT;
     getEvictionSwaps(c, key, &result);
-    swap_count = clientSwapSwaps(c, &result, NULL, NULL);
+    swap_count = clientSwapSwaps(c, &result, sharedSwapClientUnholdKey, NULL);
     releaseSwaps(&result);
     getSwapsFreeResult(&result);
     return swap_count;
@@ -793,7 +911,7 @@ int dbEvict(redisDb *db, robj *key) {
 
     /* Trigger evict only if key is PRESENT && !SWAPPING && !HOLDED */
     if ((o = lookupKey(db, key, LOOKUP_NOTOUCH)) == NULL ||
-            o->refcount > 1 ||
+            keyIsHolded(db, key) ||
             lookupEvict(db, key)) {
         return 0;
     }
@@ -907,6 +1025,7 @@ void swapInit() {
         client *c = createClient(-1);
         c->cmd = lookupCommandByCString("EVICT");
         c->db = server.db+i;
+        c->client_hold_mode = CLIENT_HOLD_MODE_EVICT;
         server.evict_clients[i] = c;
     }
 
@@ -915,6 +1034,7 @@ void swapInit() {
         client *c = createClient(-1);
         c->db = server.db+i;
         c->cmd = lookupCommandByCString("RKSDEL");
+        c->client_hold_mode = CLIENT_HOLD_MODE_EVICT;
         server.rksdel_clients[i] = c;
     }
 
@@ -923,6 +1043,7 @@ void swapInit() {
         client *c = createClient(-1);
         c->db = server.db+i;
         c->cmd = lookupCommandByCString("RKSGET");
+        c->client_hold_mode = CLIENT_HOLD_MODE_EVICT;
         server.rksget_clients[i] = c;
     }
 
@@ -930,6 +1051,7 @@ void swapInit() {
     for (i = 0; i < server.dbnum; i++) {
         client *c = createClient(-1);
         c->db = server.db+i;
+        c->client_hold_mode = CLIENT_HOLD_MODE_EVICT;
         server.dummy_clients[i] = c;
     }
 
@@ -941,6 +1063,7 @@ void swapInit() {
     server.repl_worker_clients_used = listCreate();
     for (i = 0; i < server.repl_workers; i++) {
         client *c = createClient(-1);
+        c->client_hold_mode = CLIENT_HOLD_MODE_REPL;
         listAddNodeTail(server.repl_worker_clients_free, c);
     }
 }

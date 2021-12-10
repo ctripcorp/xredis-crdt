@@ -221,20 +221,22 @@ start_server {tags {"multi"} overrides {crdt-gid 1} config {crdt.conf} module {c
         r exec
     } {PONG}
 
-    test {WATCH is able to remember the DB a key belongs to} {
-        r select 5
-        r set x 30
-        r watch x
-        r select 1
-        r set x 10
-        r select 5
-        r multi
-        r ping
-        set res [r exec]
-        # Restore original DB
-        r select 9
-        set res
-    } {PONG}
+    if {!$::swap} {
+        test {WATCH is able to remember the DB a key belongs to} {
+            r select 5
+            r set x 30
+            r watch x
+            r select 1
+            r set x 10
+            r select 5
+            r multi
+            r ping
+            set res [r exec]
+            # Restore original DB
+            r select 9
+            set res
+        } {PONG}
+    }
 
     test {WATCH will consider touched keys target of EXPIRE} {
         r del x
@@ -286,7 +288,7 @@ start_server {tags {"multi"} overrides {crdt-gid 1} config {crdt.conf} module {c
         r set foo bar
         r exec
         assert_replication_stream $repl {
-            {crdt.select 1 9}
+            {crdt.select 1 *}
             {crdt.multi 1}
             {crdt.set foo bar 1 * * -1}
             {crdt.exec 1}
@@ -668,6 +670,7 @@ slave-peer-offset "maste-slave" {
         assert_equal [crdt_repl $master master_repl_offset] [crdt_repl $slave_slave master_repl_offset]
         assert_equal [crdt_repl $peer master_repl_offset] [crdt_repl $peer_slave master_repl_offset]
     }
+    if {!$::swap} {
     test "master and peer simultaneously exec" {
         
         $master multi
@@ -798,6 +801,7 @@ slave-peer-offset "maste-slave" {
         assert_equal [crdt_repl $master master_repl_offset] [crdt_repl $slave master_repl_offset]
         assert_equal [crdt_repl $master master_repl_offset] [crdt_repl $slave_slave master_repl_offset]
         assert_equal [crdt_repl $peer master_repl_offset] [crdt_repl $peer_slave master_repl_offset]
+    }
     }
     test "multi slaveof" {
         set master_crdt_sync_full [crdt_stats $master sync_full] 

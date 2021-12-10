@@ -88,6 +88,8 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                 $master peerof $peer_gid $peer_host $peer_port
                 $peer peerof $master_gid $master_host $master_port
                 write_batch_data $master_host $master_port 10000
+                puts "master:$master_port, slave:$slave_port, peer:$peer_port"
+                if {$::swap} after 60000
                 $peer peerof $slave_gid 127.0.0.1 0
 
                 # puts [$slave crdt.info replication]
@@ -99,7 +101,11 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                 # puts [$slave crdt.info stats]
                 set sync_partial_ok [ crdt_status $slave "sync_partial_ok" ]
                 if {$sync_partial_ok==0} {
+                    puts "=== slave ==="
                     print_log_content $slave_stdout
+                    puts "=== peer ==="
+                    print_log_content $peer_stdout
+                    puts "=== master ==="
                     print_log_content $master_stdout
                     fail "crdt sync_partial_error"
                 }
