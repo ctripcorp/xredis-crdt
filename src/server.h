@@ -647,7 +647,8 @@ typedef struct redisObject { //16
                             * and most significant 16 bits access time). */
     unsigned scs:1;
     unsigned evicted:1;
-    unsigned reserved:6;
+    unsigned dirty:1;
+    unsigned reserved:5;
     int refcount;
     void *ptr;
 } robj;
@@ -2009,6 +2010,7 @@ int pubsubPublishMessage(struct redisServer* srv,robj *channel, robj *message);
 
 /* Keyspace events notification */
 void notifyKeyspaceEvent(int type, char *event, robj *key, int dbid);
+void notifyKeyspaceEventDirty(int type, char *event, robj *key, int dbid, ...);
 int keyspaceEventsStringToFlags(char *classes);
 sds keyspaceEventsFlagsToString(int flags);
 

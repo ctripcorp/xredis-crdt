@@ -3816,6 +3816,18 @@ void *RM_ModuleTypeGetTombstone(RedisModuleKey *key) {
     return mv->value;
 }
 
+int RM_ModuleTypeGetDirty(RedisModuleKey *key) {
+    if (key == NULL ||
+        key->value == NULL ||
+        !key->value->dirty) return 0;
+    else return 1;
+}
+
+void RM_DbSetDirty(RedisModuleCtx *ctx, robj *keyname) {
+    robj *o = lookupKey(ctx->client->db, keyname, LOOKUP_NOTOUCH);
+    if (o) o->dirty = 1;
+}
+
 /* Replace the value assigned to a module type.
  *
  * The key must be open for writing, have an existing value, and have a moduleType
@@ -3964,6 +3976,7 @@ int RM_ModuleTypeSwapIn(RedisModuleKey *key, void *new_value) {
     mv->value = new_value;
     key->value->evicted = 0;
     key->value->scs = 0;
+    key->value->dirty = 0;
 
     return REDISMODULE_OK;
 }
@@ -4036,6 +4049,19 @@ void* RM_ModuleGetTombstone(RedisModuleCtx* ctx, RedisModuleString* keyname) {
  * 'dbid' is the database ID where the key lives.  */
 void RM_NotifyKeyspaceEvent(RedisModuleCtx *ctx,int type, char *event, robj *key) {
     notifyKeyspaceEvent(type, event, key, ctx->client->db->id);
+}
+
+void RM_NotifyKeyspaceEventDirty(RedisModuleCtx *ctx,int type, char *event, robj *keyobj, ...) {
+    va_list ap;
+    RedisModuleKey *key;
+
+    va_start(ap, keyobj);
+    while ((key = va_arg(ap, RedisModuleKey*))) {
+        if (key->value)  key->value->dirty = 1;
+    }
+    va_end(ap);
+
+    notifyKeyspaceEvent(type, event, keyobj, ctx->client->db->id);
 }
 
 int RM_CrdtPubsubPublishMessage(robj* channel, robj *message) {
@@ -5182,6 +5208,8 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(ModuleTypeLoadRdbAddValue);
     REGISTER_API(ModuleTypeGetType);
     REGISTER_API(ModuleTypeGetValue);
+    REGISTER_API(ModuleTypeGetDirty);
+    REGISTER_API(DbSetDirty);
     REGISTER_API(ModuleTypeSwapIn);
     REGISTER_API(ModuleTypeSwapOut);
     REGISTER_API(ModuleTypeReplaceValue);
@@ -5246,5 +5274,6 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(ModuleTombstoneLoadRdbAddValue);
     REGISTER_API(ModuleTypeGetTombstone);
     REGISTER_API(NotifyKeyspaceEvent);
+    REGISTER_API(NotifyKeyspaceEventDirty);
     REGISTER_API(CrdtPubsubPublishMessage);
 }

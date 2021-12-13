@@ -46,6 +46,8 @@ robj *createObject(int type, void *ptr) {
     o->refcount = 1;
     o->scs = 0;
     o->evicted = 0;
+    o->dirty = 1;
+    o->reserved = 0;
 
     /* Set the LRU to the current lruclock (minutes resolution), or
      * alternatively the LFU counter. */

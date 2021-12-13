@@ -28,6 +28,7 @@
  */
 
 #include "server.h"
+#include <stdarg.h>
 
 /* This file implements keyspace events notification via Pub/Sub ad
  * described at http://redis.io/topics/keyspace-events. */
@@ -127,4 +128,15 @@ void notifyKeyspaceEvent(int type, char *event, robj *key, int dbid) {
         decrRefCount(chanobj);
     }
     decrRefCount(eventobj);
+}
+
+void notifyKeyspaceEventDirty(int type, char *event, robj *key, int dbid, ...) {
+    robj *o;
+    va_list ap;
+
+    va_start(ap, dbid);
+    while ((o = va_arg(ap, robj*))) o->dirty = 1;
+    va_end(ap);
+
+    notifyKeyspaceEvent(type,event,key,dbid);
 }

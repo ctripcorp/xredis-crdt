@@ -312,6 +312,8 @@ int REDISMODULE_API_FUNC(RedisModule_ModuleTypeSetValue)(RedisModuleKey *key, Re
 int REDISMODULE_API_FUNC(RedisModule_ModuleTypeLoadRdbAddValue)(RedisModuleKey *key, RedisModuleType *mt, void *value);
 RedisModuleType *REDISMODULE_API_FUNC(RedisModule_ModuleTypeGetType)(RedisModuleKey *key);
 void *REDISMODULE_API_FUNC(RedisModule_ModuleTypeGetValue)(RedisModuleKey *key);
+int REDISMODULE_API_FUNC(RedisModule_ModuleTypeGetDirty)(RedisModuleKey *key);
+void REDISMODULE_API_FUNC(RedisModule_DbSetDirty)(RedisModuleCtx *ctx, RedisModuleString *name);
 int REDISMODULE_API_FUNC(RedisModule_ModuleTypeReplaceValue)(RedisModuleKey *key, RedisModuleType *mt, void *new_value, void **old_value);
 int REDISMODULE_API_FUNC(RedisModule_DeleteEvict)(RedisModuleKey *key);
 void *REDISMODULE_API_FUNC(RedisModule_ModuleTypeAddEvict)(RedisModuleKey *key);
@@ -366,7 +368,8 @@ void REDISMODULE_API_FUNC(RedisModule_MergeVectorClock) (int gid, long long vclo
 int REDISMODULE_API_FUNC(RedisModule_ModuleTombstoneSetValue) (RedisModuleKey *key, RedisModuleType *mt, void *value);
 int REDISMODULE_API_FUNC(RedisModule_ModuleTombstoneLoadRdbAddValue) (RedisModuleKey *key, RedisModuleType *mt, void *value);
 void *REDISMODULE_API_FUNC(RedisModule_ModuleTypeGetTombstone)(RedisModuleKey *key);
-void REDISMODULE_API_FUNC(RedisModule_NotifyKeyspaceEvent)(RedisModuleCtx *ctx,int type, char *event, RedisModuleString *key);
+void REDISMODULE_API_FUNC(RedisModule_NotifyKeyspaceEvent)(RedisModuleCtx *ctx,int type,char *event,RedisModuleString *key);
+void REDISMODULE_API_FUNC(RedisModule_NotifyKeyspaceEventDirty)(RedisModuleCtx *ctx,int type,char *event,RedisModuleString *key,...);
 int REDISMODULE_API_FUNC(RedisModule_CrdtPubsubPublishMessage)(RedisModuleString *channel, RedisModuleString *message);
 
 /* Experimental APIs */
@@ -513,6 +516,8 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(ModuleTypeLoadRdbAddValue);
     REDISMODULE_GET_API(ModuleTypeGetType);
     REDISMODULE_GET_API(ModuleTypeGetValue);
+    REDISMODULE_GET_API(ModuleTypeGetDirty);
+    REDISMODULE_GET_API(DbSetDirty);
     REDISMODULE_GET_API(ModuleTypeSwapIn);
     REDISMODULE_GET_API(ModuleTypeSwapOut);
     REDISMODULE_GET_API(ModuleTypeReplaceValue);
@@ -562,6 +567,7 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(ModuleTombstoneLoadRdbAddValue);
     REDISMODULE_GET_API(ModuleTypeGetTombstone);
     REDISMODULE_GET_API(NotifyKeyspaceEvent);
+    REDISMODULE_GET_API(NotifyKeyspaceEventDirty);
     REDISMODULE_GET_API(CrdtPubsubPublishMessage);
 
 #ifdef REDISMODULE_EXPERIMENTAL_API
