@@ -186,6 +186,7 @@ start_server {tags {"backstream, can't  write and read"} overrides {crdt-gid 1} 
             $master peerof 2 127.0.0.1 0 backstream 0
             $master peerof $peer_gid $peer_host $peer_port
             wait_for_peer_sync $master 
+            after 1000
             assert_equal [$master get key] v1
         }
     }

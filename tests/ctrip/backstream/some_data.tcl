@@ -266,6 +266,7 @@ test "peerof over" {
                 wait_for_peers_sync 1 $master 
                 $master slaveof $slave_host $slave_port
                 wait_for_sync $master 
+                after 3000
                 assert_equal [$master dbsize ] [$peer dbsize]
                 assert_equal [$slave dbsize] [$master dbsize]
 
