@@ -17,6 +17,7 @@ start_redis [list overrides [list "dir" $server_path "dbfilename" "zset-ziplist.
     assert_match "*ziplist*" [r debug object zset]
     assert_equal 2 [r zcard zset]
     r bgsave
+    after 1000
     exec cp $server_path/zset-ziplist.rdb z.rdb
 }
 start_redis [list overrides [list "dir" $server_path "dbfilename" "zset-skiplist.rdb" "zset-max-ziplist-entries" 1]] {
@@ -25,6 +26,7 @@ start_redis [list overrides [list "dir" $server_path "dbfilename" "zset-skiplist
     # assert_match "*ziplist*" [r debug object zset]
     assert_equal 2 [r zcard zset1]
     r bgsave
+    after 1000
     exec cp $server_path/zset-skiplist.rdb s.rdb
 }
 
@@ -34,5 +36,6 @@ start_redis [list overrides [list "dir" $server_path "dbfilename" "zset-skiplist
     # assert_match "*ziplist*" [r debug object zset]
     assert_equal 2 [r zcard zset2]
     r bgsave
+    after 1000
     exec cp $server_path/zset-skiplist2.rdb s2.rdb
 }

@@ -17,4 +17,4 @@ jobs:
     - name: make
       run: make
     - name: make crdt-test
-      run: make crdt-test TEST=tcl
+      run: make crdt-test
