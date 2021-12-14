@@ -24,6 +24,8 @@ set ::ci_failed_tests {
     ctrip/integration/master-slave/slave-update-peer-offset-when-master-slave-full-sync
     ctrip/master-not-crdt/slave-update-peer-repl-offset
     ctrip/unit/multi
+    ctrip/unit/gc
+    ctrip/integration/master-slave/psync2
     # macos failed
     ctrip/unit/memefficiency
     ctrip/unit/merge_different_type
@@ -68,7 +70,6 @@ set ::all_tests {
     ctrip/unit/crdt_zset4 
     ctrip/unit/crdt_command
     ctrip/basic/set
-    ctrip/unit/gc
     ctrip/readonly/basic_crdt_type_del
     ctrip/basic/basic_crdt_type_del
     ctrip/basic/basic_type
@@ -142,7 +143,6 @@ set ::all_tests {
     ctrip/unit/crdt_del_conflict
     
     ctrip/integration/master-slave/rdb2
-    ctrip/integration/master-slave/psync2
     ctrip/integration/master-slave/replication-psync
 
     ctrip/unit/crdt_del

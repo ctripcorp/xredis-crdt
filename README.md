@@ -1,3 +1,5 @@
+[![CRDT-Redis CI](https://github.com/ctripcorp/xredis-crdt/actions/workflows/crdt-redis.yml/badge.svg)](https://github.com/ctripcorp/xredis-crdt/actions/workflows/crdt-redis.yml)
+
 <!-- MarkdownTOC -->
 
 - [Introduction](#introduction)
