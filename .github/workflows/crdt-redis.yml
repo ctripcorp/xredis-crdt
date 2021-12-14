@@ -1,0 +1,37 @@
+name: mem CI
+
+on:
+  push:
+    branches: [ feature/swap ]
+  pull_request:
+    branches: [ feature/swap ]
+
+jobs:
+   mem:
+    strategy:
+      matrix:
+        platform: [ubuntu-latest]
+    runs-on: ${{ matrix.platform }}
+    steps:
+    - uses: actions/checkout@v2
+    - name: make
+      run: |
+          sudo apt-get update
+          sudo apt-get -y install librocksdb-dev libsnappy-dev zlib1g-dev libgflags-dev libstdc++6
+          make
+    - name: make crdt-test
+      run: ./runtest-crdt --swap
+   swap:
+    strategy:
+      matrix:
+        platform: [ubuntu-latest]
+    runs-on: ${{ matrix.platform }}
+    steps:
+    - uses: actions/checkout@v2
+    - name: make
+      run: |
+          sudo apt-get update
+          sudo apt-get -y install librocksdb-dev libsnappy-dev zlib1g-dev libgflags-dev libstdc++6
+          make
+    - name: make crdt-test
+      run: ./runtest-crdt --swap --debug-evict-keys -1
