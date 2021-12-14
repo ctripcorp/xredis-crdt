@@ -1,10 +1,10 @@
-name: CRDT-Redis CI
+name: swap CI
 
 on:
   push:
-    branches: [ master ]
+    branches: [ feature/swap ]
   pull_request:
-    branches: [ master ]
+    branches: [ feature/swap ]
 
 jobs:
    build:
@@ -17,4 +17,4 @@ jobs:
     - name: make
       run: make
     - name: make crdt-test
-      run: make crdt-test
+      run: ./runtest-crdt --swap --debug-evict-keys -1
