@@ -284,6 +284,7 @@ void clientUnholdKeys(client *c) {
         }
         serverLog(LL_DEBUG, "u. %s (%ld)", (sds) ((robj*)dictGetKey(cde))->ptr, hold_count);
     }
+    dictReleaseIterator(di);
 
     dictEmpty(c->hold_keys, NULL);
 }
