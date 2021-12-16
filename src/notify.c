@@ -135,7 +135,7 @@ void notifyKeyspaceEventDirty(int type, char *event, robj *key, int dbid, ...) {
     va_list ap;
 
     va_start(ap, dbid);
-    while ((o = va_arg(ap, robj*))) o->dirty = 1;
+    while ((o = va_arg(ap, robj*))) setObjectDirty(o);
     va_end(ap);
 
     notifyKeyspaceEvent(type,event,key,dbid);

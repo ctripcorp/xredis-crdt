@@ -1,4 +1,4 @@
-name: mem CI
+name: xredis-crdt CI
 
 on:
   push:

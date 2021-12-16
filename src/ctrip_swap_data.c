@@ -30,7 +30,7 @@
 /* ------- swap related api for different object type(polymorphic)  ------- */
 
 /* look up on which scs client should block. client should block on uppper
- * level scs it's not empty, otherwise . */
+ * level scs if it's not empty. */
 swappingClients *lookupSwappingClients(client *c, robj *key, robj *subkey) {
     dictEntry *de;
     robj *e;

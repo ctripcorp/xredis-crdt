@@ -51,7 +51,7 @@ void swapClientRelease(swapClient *sc) {
     zfree(sc);
 }
 
-swappingClients *swappingClientsCreate(redisDb *db, robj *key, robj *subkey, swappingClients *parent) {
+static swappingClients *swappingClientsCreate(redisDb *db, robj *key, robj *subkey, swappingClients *parent) {
     swappingClients *scs = zmalloc(sizeof(struct swappingClients));
     scs->db = db;
     if (key) incrRefCount(key);
@@ -97,9 +97,10 @@ swappingClients *swappingClientsCreateP(client *c, robj *key, robj *subkey) {
 
     /* create scs from root down, starting from global level. */
     if (scs == NULL) {
-        swappingClientsCreate(c->db, NULL, NULL, NULL);
+        scs = swappingClientsCreate(NULL, NULL, NULL, NULL);
         server.scs = scs;
     }
+
     if (key == NULL) return scs;
 
     /* then key level */
@@ -146,11 +147,11 @@ swapClient *swappingClientsPeek(swappingClients *scs) {
     return sc;
 }
 
-/* return true if current client should directly block on scs (without trying
- * to proceed). */
-int swappingClientsBlocking(swappingClients *scs) {
-    /* if scs has pending swapclients or child scs, client should directly
-     * block untill all pending child scs swap finish. */
+/* return true if current or lower level scs not finished (a.k.a treeblocking).
+ * - swap should not proceed if current or lower level scs exists. (e.g. flushdb
+ *   shoul not proceed if SWAP GET key exits.)
+ * - can't release scs if current or lower level scs exists.  */
+static inline int swappingClientsTreeBlocking(swappingClients *scs) {
     if (scs && (listLength(scs->swapclients) || scs->nchild > 0)) {
         return 1;
     } else {
@@ -311,7 +312,9 @@ void continueProcessCommand(client *c) {
 
 	c->flags &= ~CLIENT_SWAPPING;
     server.current_client = c;
+    server.in_swap_cb = 1;
 	call(c,CMD_CALL_FULL);
+    server.in_swap_cb = 0;
     /* post call */
     c->woff = server.master_repl_offset;
     if (listLength(server.ready_keys))
@@ -382,18 +385,21 @@ void rocksSwapFinished(int action, sds rawkey, sds rawval, void *privdata) {
                 sdsfree(dump);
 
                 if (client_cb) client_cb(nc, nsc->s.key, client_pd);
+
                 swappingClientsPop(scs);
                 swapClientRelease(nsc);
             }
         }
 
         if (scs->key == NULL) {
-            /* Never released or reset global scs (scs->key == NULL). */
+            /* If current scs is the global scs:
+             * - no need to proceed upper level scs (this is the top).
+             * - must not released or reset global scs */
             break;
-        } else if (!swappingClientsBlocking(scs)) {
+        } else if (!swappingClientsTreeBlocking(scs)) {
             nscs = scs->parent;
             setupSwappingClients(c, scs->key, scs->subkey, NULL);
-            swappingClientsRelease(scs);
+            swappingClientsRelease(scs); /* Note nchild changed here */
             if (nscs->nchild > 0)  {
                 /* Can't process parent scs if sibiling scs exists. */
                 break;
@@ -484,7 +490,6 @@ int clientSwapProceed(client *c, swap *s, swappingClients **pscs) {
 
 /* NOTE: swaps is swap intentions analyzed according to command (without query
  * keyspace). whether to start swap action is determined later in swapAna. */
-
 int clientSwapSwaps(client *c, getSwapsResult *result, clientSwapFinishedCallback cb, void *pd) {
     int nswaps = 0, i;
 
@@ -499,7 +504,7 @@ int clientSwapSwaps(client *c, getSwapsResult *result, clientSwapFinishedCallbac
         scs = lookupSwappingClients(c, s->key, s->subkey);
 
         /* defer command processsing if there are preceeding swap clients. */
-        if (swappingClientsBlocking(scs)) {
+        if (swappingClientsTreeBlocking(scs)) {
             swappingClientsPush(scs, swapClientCreate(c,s));
             nswaps++;
         } else if (clientSwapProceed(c, s, &scs)) {
@@ -873,8 +878,13 @@ int clientExpireNoReply(client *c, robj *key) {
  * defered untill GET+propagate finished.
  */
 int dbExpire(redisDb *db, robj *key) {
+    int nswap = 0;
     client *c = server.rksget_clients[db->id];
-    int nswap = clientExpireNoReply(c, key);
+
+    /* No need to do SWAP GET if called in swap callback(keys should have already
+     * been swapped in) */
+    if (!server.in_swap_cb) nswap = clientExpireNoReply(c, key);
+
     /* when expiring key is in db.dict, we don't need to swapin key, but still
      * we need to do expireKey to remove key from db and rocksdb. */
     if (nswap == 0) expireKey(c, key, NULL);
@@ -1056,7 +1066,7 @@ void swapInit() {
         server.dummy_clients[i] = c;
     }
 
-    server.scs = swappingClientsCreate(NULL, NULL, NULL, NULL);
+    server.scs = swappingClientsCreateP(NULL, NULL, NULL);
 
     server.repl_workers = 64;
     server.repl_swapping_clients = listCreate();

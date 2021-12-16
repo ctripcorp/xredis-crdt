@@ -653,6 +653,10 @@ typedef struct redisObject { //16
     void *ptr;
 } robj;
 
+#define setObjectDirty(o) do { \
+    if (o) o->dirty = 1; \
+} while(0)
+
 /* Macro used to initialize a Redis object allocated on the stack.
  * Note that this macro is taken near the structure definition to make sure
  * we'll update it when the structure is changed, to avoid bugs like
@@ -1386,6 +1390,7 @@ struct redisServer {
 	struct rocks *rocks;
     unsigned long long rocksdb_disk_used; /* rocksd disk usage bytes, updated every 1 minute. */
 	/* swaps */
+    int in_swap_cb; /* flag whether call is in swap callback */
     client **evict_clients; /* array of evict clients (one for each db). */
     client **rksdel_clients; /* array of rocks del clients (one for each db). */
     client **rksget_clients; /* array of rocks get clients (one for each db). */

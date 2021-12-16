@@ -2131,6 +2131,7 @@ void initServer(struct redisServer *srv) {
     srv->swap_memory_inflight = 0;
     srv->swap_memory_slowdown = 128*1024*1024;
     srv->swap_memory_stop = 512*1024*1024;
+    srv->in_swap_cb = 0;
 
     updateCachedTime(srv);
 

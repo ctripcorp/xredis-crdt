@@ -3825,7 +3825,7 @@ int RM_ModuleTypeGetDirty(RedisModuleKey *key) {
 
 void RM_DbSetDirty(RedisModuleCtx *ctx, robj *keyname) {
     robj *o = lookupKey(ctx->client->db, keyname, LOOKUP_NOTOUCH);
-    if (o) o->dirty = 1;
+    if (o) setObjectDirty(o);
 }
 
 /* Replace the value assigned to a module type.
@@ -4057,7 +4057,7 @@ void RM_NotifyKeyspaceEventDirty(RedisModuleCtx *ctx,int type, char *event, robj
 
     va_start(ap, keyobj);
     while ((key = va_arg(ap, RedisModuleKey*))) {
-        if (key->value)  key->value->dirty = 1;
+        if (key->value)  setObjectDirty(key->value);
     }
     va_end(ap);
 

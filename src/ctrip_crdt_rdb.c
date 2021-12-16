@@ -656,6 +656,7 @@ int crdtMergeTomstoneCommand(client* c, DictFindFunc findtombstone, DictAddFunc 
         } else {
             serverLog(LL_WARNING, "[crdtMergeTomstoneCommand] key:%s ,tombstone and value  purge error", (sds)key->ptr);
         }
+        setObjectDirty(currentVal);
     }
     
     server.dirty++;
