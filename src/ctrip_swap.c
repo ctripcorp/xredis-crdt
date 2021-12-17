@@ -77,11 +77,11 @@ sds swappingClientsDump(swappingClients *scs) {
         swapClient *sc = listNodeValue(ln);
         if (ln != listFirst(scs->swapclients)) result = sdscat(result,",");
         result = sdscat(result,"("); 
-        if (sc->c->cmd)  result = sdscat(result,actions[sc->c->cmd->swap_action]); 
+        if (sc->c->cmd) result = sdscat(result,actions[sc->c->cmd->swap_action]); 
         result = sdscat(result,":"); 
         if (sc->s.key) result = sdscatsds(result,sc->s.key->ptr); 
         result = sdscat(result,":"); 
-        result = sdscat(result,sc->c->cmd->name); 
+        if (sc->c->cmd) result = sdscat(result,sc->c->cmd->name); 
         result = sdscat(result,")"); 
     }
     result = sdscat(result, "]");
@@ -754,7 +754,7 @@ void replWorkerClientSwapFinished(client *wc, robj *key, void *pd) {
          * - in server.repl_swapping_client list
          * - flag have CLIENT_SWAPPING */
         serverAssert(c->argc);
-        serverAssert(c->flags &CLIENT_SWAPPING);
+        serverAssert(c->flags & CLIENT_SWAPPING);
 
         /* Must make sure swapping clients satistity above constrains. also
          * note that repl client never call(only dispatch). */

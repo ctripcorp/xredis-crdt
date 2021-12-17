@@ -830,7 +830,6 @@ typedef struct client {
     VectorClock vectorClock; // used for slave client only, when the client is a master, use crdtMasterInstance
     // struct CRDT_Master_Instance* peer_master;
     int gid;
-    long long pending_used_offset; /* applied offset of pending_querybuf */
     VectorClock filterVectorClock;
 
     /* swap */
