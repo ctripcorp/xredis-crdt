@@ -519,7 +519,7 @@ int clientSwapSwaps(client *c, getSwapsResult *result, clientSwapFinishedCallbac
          * - this is a normal client and ANY key swap needed. (note that we hold
          *   whether swap needed or not for now, will unhold all if no swap needed).
          * - this is a shared swap client and CURRENT key swap needed
-         * - this is a repl worker client (no matter swap or not, keys will unhold in processRepl)
+         * - this is a repl worker client (no matter swap or not, keys will unhold in processFinishedReplCommands)
          * - Dont' hold if there is no cb (otherwise key will not unhold) */
         if (cb && s->key && ((c->client_hold_mode == CLIENT_HOLD_MODE_CMD) ||
                     (c->client_hold_mode == CLIENT_HOLD_MODE_EVICT && nswaps > oswaps) ||
@@ -571,7 +571,7 @@ int clientSwap(client *c) {
 }
 
 /* ----------------------------- repl swap ------------------------------ */
-static void replDispatch(client *wc, client *c) {
+static void replCommandDispatch(client *wc, client *c) {
     int reserved_flags = wc->flags & CLIENT_MULTI;
     /* Move command from repl client to repl worker client, also reset repl
      * client args so it will not be freed by resetClient. */
@@ -607,13 +607,13 @@ static void replDispatch(client *wc, client *c) {
     }
 }
 
-static void processRepl() {
+static void processFinishedReplCommands() {
     listNode *ln;
     client *wc, *c;
     struct redisCommand *backup_cmd;
     int is_connected_crdt_master;
 
-    serverLog(LL_DEBUG, "> processRepl");
+    serverLog(LL_DEBUG, "> processFinishedReplCommands");
 
     while ((ln = listFirst(server.repl_worker_clients_used))) {
         wc = listNodeValue(ln);
@@ -712,10 +712,10 @@ static void processRepl() {
 		}
     }
     //server.current_client = NULL;
-    serverLog(LL_DEBUG, "< processRepl");
+    serverLog(LL_DEBUG, "< processFinishedReplCommands");
 }
 
-void replSwapFinished(client *wc, robj *key, void *pd) {
+void replWorkerClientSwapFinished(client *wc, robj *key, void *pd) {
     client *c;
     listNode *ln;
     list *repl_swapping_clients;
@@ -723,45 +723,66 @@ void replSwapFinished(client *wc, robj *key, void *pd) {
     UNUSED(pd);
     UNUSED(key);
 
-    serverLog(LL_DEBUG, "> replSwapFinished client(id=%ld,cmd=%s,key=%s)",
+    serverLog(LL_DEBUG, "> replWorkerClientSwapFinished client(id=%ld,cmd=%s,key=%s)",
         wc->id,wc->cmd->name,wc->argc <= 1 ? "": (sds)wc->argv[1]->ptr);
 
     /* Flag swap finished, note that command processing will be defered to
-     * processRepl becasue there might be unfinished preceeding swap. */
+     * processFinishedReplCommands becasue there might be unfinished preceeding swap. */
     wc->swapping_count--;
     if (wc->swapping_count == 0) wc->CLIENT_REPL_SWAPPING = 0;
 
-    processRepl();
+    processFinishedReplCommands();
 
     /* Dispatch repl command again for repl client blocked waiting free
-     * worker repl client. */
+     * worker repl client, because repl client might already read repl requests
+     * into querybuf, read event will not trigger if we do not parse and
+     * process again.  */
     if (!listFirst(server.repl_swapping_clients) ||
             !listFirst(server.repl_worker_clients_free)) {
-        serverLog(LL_DEBUG, "< replSwapFinished");
+        serverLog(LL_DEBUG, "< replWorkerClientSwapFinished");
         return;
     }
 
     repl_swapping_clients = server.repl_swapping_clients;
     server.repl_swapping_clients = listCreate();
     while ((ln = listFirst(repl_swapping_clients))) {
-        c = listNodeValue(ln);
+        int swap_result;
 
+        c = listNodeValue(ln);
+        /* Swapping repl clients are bound to:
+         * - have pending parsed but not processed commands
+         * - in server.repl_swapping_client list
+         * - flag have CLIENT_SWAPPING */
+        serverAssert(c->argc);
+        serverAssert(c->flags &CLIENT_SWAPPING);
+
+        /* Must make sure swapping clients satistity above constrains. also
+         * note that repl client never call(only dispatch). */
         c->flags &= ~CLIENT_SWAPPING;
-        replClientSwap(c);
+        swap_result = replClientSwap(c);
+        /* replClientSwap return 1 on dispatch fail, -1 on dispatch success,
+         * never return 0. */
+        if (swap_result > 0) {
+            c->flags |= CLIENT_SWAPPING;
+        } else {
+            commandProcessed(c);
+        }
+
+        /* TODO confirm whether server.current_client == NULL possible */
         processInputBuffer(c);
 
         listDelNode(repl_swapping_clients,ln);
     }
     listRelease(repl_swapping_clients);
 
-    serverLog(LL_DEBUG, "< replSwapFinished");
+    serverLog(LL_DEBUG, "< replWorkerClientSwapFinished");
 }
 
-int replSwap(client *wc) {
+int replWorkerClientSwap(client *wc) {
     int swap_count;
     getSwapsResult result = GETSWAPS_RESULT_INIT;
     getSwaps(wc, &result);
-    swap_count = clientSwapSwaps(wc, &result, replSwapFinished, NULL);
+    swap_count = clientSwapSwaps(wc, &result, replWorkerClientSwapFinished, NULL);
     releaseSwaps(&result);
     getSwapsFreeResult(&result);
     return swap_count;
@@ -779,6 +800,7 @@ int replClientSwap(client *c) {
          * Note that peer client might register no rocks callback but repl
          * stream read and parsed, we need to processInputBuffer again. */
         listAddNodeTail(server.repl_swapping_clients, c);
+        /* Note repl client will be flagged CLIENT_SWAPPING when return. */
         return 1;
     }
 
@@ -787,12 +809,12 @@ int replClientSwap(client *c) {
     serverAssert(!wc->CLIENT_REPL_SWAPPING || (wc->flags & CLIENT_MULTI));
 
     /* dispatch repl commands to worker clients */
-    replDispatch(wc, c);
+    replCommandDispatch(wc, c);
 
     /* swap data for command, note that replicated commands would be processed
-     * later in processRepl when all preceeding commands finished. */
+     * later in processFinishedReplCommands when all preceeding commands finished. */
     if (!wc->CLIENT_REPL_DISPATCHING) {
-        wc->CLIENT_REPL_SWAPPING = replSwap(wc);
+        wc->CLIENT_REPL_SWAPPING = replWorkerClientSwap(wc);
 
         listDelNode(server.repl_worker_clients_free, ln);
         listAddNodeTail(server.repl_worker_clients_used, wc);
@@ -800,7 +822,7 @@ int replClientSwap(client *c) {
 
     /* process repl commands in received order (regardless of swap finished
      * order) to make sure slave is consistent with master. */
-    processRepl();
+    processFinishedReplCommands();
 
     /* return dispatched(-1) when repl dispatched command to workers, caller
      * should skip call and continue command processing loop. */
