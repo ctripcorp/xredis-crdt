@@ -3176,6 +3176,7 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
             "# Server\r\n"
             "redis_version:%s\r\n"
         	"xredis_crdt_version:%s\r\n"
+            "swap_version:%s\r\n"
             "redis_git_sha1:%s\r\n"
             "redis_git_dirty:%d\r\n"
             "redis_build_id:%llx\r\n"
@@ -3196,6 +3197,7 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
             "config_file:%s\r\n",
             REDIS_VERSION,
 			XREDIS_CRDT_VERSION,
+            SWAP_VERSION,
             redisGitSHA1(),
             strtol(redisGitDirty(),NULL,10) > 0,
             (unsigned long long) redisBuildId(),
