@@ -545,12 +545,14 @@ int freeMemoryIfNeeded(void) {
              * AOF and Output buffer memory will be freed eventually so
              * we only care about memory used by the key space. */
             latencyStartMonitor(eviction_latency);
+            /* Note that dbEvict might directly free key if it's not dirty,
+             * so we need to compute key size before dbEvict. */
+            mem_freed += keyComputeSize(db, keyobj);
             /* Trigger swap key from memory to rocksdb */
             swap_trigged += dbEvict(db, keyobj);
             latencyEndMonitor(eviction_latency);
             latencyAddSampleIfNeeded("eviction-swap",eviction_latency);
             latencyRemoveNestedEvent(latency,eviction_latency);
-            mem_freed += keyComputeSize(db, keyobj);
             server.stat_evictedkeys++;
             notifyKeyspaceEvent(NOTIFY_EVICTED, "evicted", keyobj, db->id);
             decrRefCount(keyobj);
