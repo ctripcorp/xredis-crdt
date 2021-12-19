@@ -417,7 +417,7 @@ int performRateLimiting() {
 }
 
 int freeMemoryIfNeeded(void) {
-    int keys_freed = 0, swap_trigged = 0;
+    int keys_scanned = 0, swap_trigged = 0;
     size_t mem_reported, mem_used, mem_tofree, mem_freed;
     mstime_t latency, eviction_latency;
     int slaves = listLength(server.slaves) + listLength(crdtServer.slaves);
@@ -450,7 +450,7 @@ int freeMemoryIfNeeded(void) {
 
     latencyStartMonitor(latency);
     while (mem_freed < mem_tofree) {
-        int j, k, i;
+        int j, k, i, keys_freed = 0;
         static unsigned int next_db = 0;
         sds bestkey = NULL;
         int bestdbid;
@@ -554,7 +554,7 @@ int freeMemoryIfNeeded(void) {
             server.stat_evictedkeys++;
             notifyKeyspaceEvent(NOTIFY_EVICTED, "evicted", keyobj, db->id);
             decrRefCount(keyobj);
-            keys_freed++;
+            keys_freed++, keys_scanned++;
 
             /* When the memory to free starts to be big enough, we may
              * start spending so much time here that is impossible to
@@ -589,7 +589,7 @@ int freeMemoryIfNeeded(void) {
     static size_t nscaned, nloop, nswap;
     static mstime_t prev;
     nloop ++;
-    nscaned += keys_freed;
+    nscaned += keys_scanned;
     nswap += swap_trigged;
     if (server.mstime - prev > 1000) {
         serverLog(LL_VERBOSE,
