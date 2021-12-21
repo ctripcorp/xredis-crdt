@@ -142,6 +142,9 @@ int doRIODel(RIO *rio) {
 }
 
 int doRIO(RIO *rio) {
+
+    if (server.debug_rio_latency) usleep(server.debug_rio_latency*1000);
+
     switch (rio->type) {
     case ROCKS_GET:
         return doRIORead(rio);

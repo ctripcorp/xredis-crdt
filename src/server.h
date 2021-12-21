@@ -172,6 +172,10 @@ long long get_min_backstream_vcu();
 #define CONFIG_DEFAULT_VECTORCLOCK_UNIT -1
 #define CONFIG_DEFAULT_MAXDISK 0
 #define CONFIG_DEFAULT_DEBUG_EVICT_KEYS 0
+#define CONFIG_DEFAULT_SWAP_MEMORY_SLOWDOWN 64*1024*1024
+#define CONFIG_DEFAULT_SWAP_MEMORY_STOP 128*1024*1024
+#define CONFIG_DEFAULT_MAXMEMORY_OOM_PERCENTAGE 200
+#define CONFIG_DEFAULT_DEBUG_RIO_LATENCY 0
 
 #define ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP 20 /* Loopkups per loop. */
 #define ACTIVE_EXPIRE_CYCLE_FAST_DURATION 1000 /* Microseconds */
@@ -844,6 +848,7 @@ typedef struct client {
     int CLIENT_REPL_DISPATCHING;
     long long cmd_reploff; /* Command replication offset when dispatch if this is a repl worker */
     struct client *repl_client; /* Master or peer client if this is a repl worker */
+    long long swap_rl_until; /* client should not read or swap untill swap_rl_untill */
 } client;
 
 struct saveparam {
@@ -1398,9 +1403,12 @@ struct redisServer {
     int debug_evict_keys; /* num of keys to evict before calling cmd. */
     struct swappingClients *scs; /* global scs for flushdb/flushall */
     /* swap rate limiting */
-    size_t swap_memory_inflight;  /* rocks inflight memory bytes */
-    size_t swap_memory_slowdown; /* MB of memory to slowdown command process */
-    size_t swap_memory_stop; /* MB of memory to (almost) stop command process */
+    size_t swap_memory;     /* swap consumed memory in bytes */
+    unsigned long long swap_memory_slowdown; /* swap memory to slowdown swap requests */
+    unsigned long long swap_memory_stop; /* swap memory to (almost) stop swap requests */
+    int maxmemory_oom_percentage; /* reject denyoom commands if server used more memory than
+                                  maxmemory*maxmemory_oom_percentage */
+    int debug_rio_latency; /* sleep debug_rio_latency ms to simulate ssd latency. */
     /* repl swap */
     int repl_workers;   /* num of repl worker clients */
     list *repl_worker_clients_free; /* free clients for repl(slaveof & peerof) swap. */
@@ -2472,9 +2480,16 @@ int getSwapsGlobal(struct redisCommand *cmd, robj **argv, int argc, getSwapsResu
 void updateStatsSwapStart(int type, sds rawkey, sds rawval);
 void updateStatsSwapFinish(int type, sds rawkey, sds rawval);
 int swapsPendingOfType(int type);
-int performRateLimiting();
 size_t objectComputeSize(robj *o, size_t sample_size);
 size_t keyComputeSize(redisDb *db, robj *key);
+
+#define SWAP_RL_NO      0
+#define SWAP_RL_SLOW    1
+#define SWAP_RL_STOP    2
+
+int swapRateLimitState();
+int swapRateLimit(client *c);
+int swapRateLimited(client *c);
 
 /* parallel swap */
 typedef int (*parallelSwapFinishedCb)(sds rawkey, sds rawval, void *pd);

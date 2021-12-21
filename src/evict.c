@@ -380,40 +380,35 @@ size_t freeMemoryGetNotCountedMemory(void) {
     return overhead;
 }
 
+/* The evictionTimeProc is started when "maxmemory" has been breached and
+ * could not immediately be resolved.  This will spin the event loop with short
+ * eviction cycles until the "maxmemory" condition has resolved or there are no
+ * more evictable items.  */
+static int isEvictionSwapPaused = 0;
+
+static int isEvictionProcRunning = 0;
+static int evictionTimeProc(
+		struct aeEventLoop *eventLoop, long long id, void *clientData) {
+	UNUSED(eventLoop);
+	UNUSED(id);
+	UNUSED(clientData);
+
+	freeMemoryIfNeeded();
+	if (isEvictionSwapPaused) return 0;  /* keep evicting */
+
+	/* For EVICT_OK - things are good, no need to keep evicting.
+	 * For EVICT_FAIL - there is nothing left to evict.  */
+	isEvictionProcRunning = 0;
+	return AE_NOMORE;
+}
+
 size_t keyComputeSize(redisDb *db, robj *key) {
     robj *val = lookupKey(db, key, LOOKUP_NOTOUCH);
     return val ? objectComputeSize(val, 5): 0;
 }
 
 static inline size_t getUsedMemory() {
-    return zmalloc_used_memory() - server.swap_memory_inflight;
-}
-
-/* sleep 100us~100ms if current swap inflight memory is (slowdown, stop). */
-#define RATELIMIT_SLEEP_MIN 100
-#define RATELIMIT_SLEEP_MAX 100000
-
-int performRateLimiting() {
-    unsigned long time_tosleep;
-
-    if (server.swap_memory_inflight <= server.swap_memory_slowdown) {
-        time_tosleep = 0;
-    } else if (server.swap_memory_inflight >= server.swap_memory_stop) {
-        time_tosleep = RATELIMIT_SLEEP_MAX;
-    } else {
-        float pct = ((float)server.swap_memory_inflight - server.swap_memory_slowdown) /
-            ((float)server.swap_memory_stop - server.swap_memory_slowdown);
-        time_tosleep = (unsigned long)(RATELIMIT_SLEEP_MIN + pct * (RATELIMIT_SLEEP_MAX - RATELIMIT_SLEEP_MIN));
-    }
-
-    if (time_tosleep <= 0) {
-        return 0;
-    } else {
-        serverLog(LL_VERBOSE, "ratelimit swap_memory_inflight(%ld) sleep (%ld)us",
-                server.swap_memory_inflight, time_tosleep);
-        usleep(time_tosleep);
-        return time_tosleep;
-    }
+    return zmalloc_used_memory() - server.swap_memory;
 }
 
 int freeMemoryIfNeeded(void) {
@@ -421,6 +416,15 @@ int freeMemoryIfNeeded(void) {
     size_t mem_reported, mem_used, mem_tofree, mem_freed;
     mstime_t latency, eviction_latency;
     int slaves = listLength(server.slaves) + listLength(crdtServer.slaves);
+
+
+    int eviction_swap_pause = swapRateLimitState() == SWAP_RL_STOP;
+    if (eviction_swap_pause != isEvictionSwapPaused) {
+        isEvictionSwapPaused = eviction_swap_pause;
+        serverLog(LL_NOTICE, "[ratelimit] Eviction %s: redis_mem(%ld) swap_mem(%ld)",
+                eviction_swap_pause ? "paused" : "resumed",
+				getUsedMemory(), server.swap_memory);
+    }
 
     /* When clients are paused the dataset should be static not just from the
      * POV of clients not being able to write, but also from the POV of
@@ -447,6 +451,30 @@ int freeMemoryIfNeeded(void) {
 
     if (server.maxmemory_policy == MAXMEMORY_NO_EVICTION)
         goto cant_free; /* We need to free memory, but policy forbids. */
+
+    /* Pause eviction if there are too much swap in progress, Note:
+     * - reject only when swapping inflight, otherwise server won't recover.
+     * - reject only if master, otherwise data might be inconsistent. */
+    if (eviction_swap_pause) {
+        unsigned long long limit = server.maxmemory_oom_percentage*server.maxmemory/100;
+
+		if (!isEvictionProcRunning) {
+			isEvictionProcRunning = 1;
+			aeCreateTimeEvent(server.el, 0, evictionTimeProc, NULL, NULL);
+		}
+
+        if (iAmMaster() == C_OK && mem_used > limit) {
+            static int prevlog_unixtime = 0;
+            if (server.unixtime > prevlog_unixtime) {
+                prevlog_unixtime = server.unixtime;
+                serverLog(LL_NOTICE, "[ratelimit] Rejecting, redis_mem(%ld) > limit(%llu)",
+                        mem_used, limit);
+            }
+            return C_ERR;
+        } else {
+            return C_OK;
+        }
+    }
 
     latencyStartMonitor(latency);
     while (mem_freed < mem_tofree) {
@@ -552,7 +580,7 @@ int freeMemoryIfNeeded(void) {
             swap_trigged += dbEvict(db, keyobj);
             latencyEndMonitor(eviction_latency);
             latencyAddSampleIfNeeded("eviction-swap",eviction_latency);
-            latencyRemoveNestedEvent(latency,eviction_latency);
+            // latencyRemoveNestedEvent(latency,eviction_latency);
             server.stat_evictedkeys++;
             notifyKeyspaceEvent(NOTIFY_EVICTED, "evicted", keyobj, db->id);
             decrRefCount(keyobj);
@@ -571,12 +599,29 @@ int freeMemoryIfNeeded(void) {
              * memory, since the "mem_freed" amount is computed only
              * across the dbAsyncDelete() call, while the thread can
              * release the memory all the time. */
-            if (server.lazyfree_lazy_eviction && !(keys_freed % 16)) {
+            if (server.lazyfree_lazy_eviction && !(keys_scanned % 16)) {
                 overhead = freeMemoryGetNotCountedMemory();
                 mem_used = getUsedMemory();
                 mem_used = (mem_used > overhead) ? mem_used-overhead : 0;
                 if (mem_used <= server.maxmemory) {
                     mem_freed = mem_tofree;
+                }
+            }
+
+            /* check swap ratelimit state from time to time to make sure
+             * won't exceeds swap memory limit  too much. */
+            if (!(keys_scanned % 16)) {
+                if (swapRateLimitState() == SWAP_RL_STOP) {
+                    isEvictionSwapPaused = 1;
+
+					if (!isEvictionProcRunning) {
+						isEvictionProcRunning = 1;
+						aeCreateTimeEvent(server.el, 0, evictionTimeProc, NULL, NULL);
+					}
+
+                    serverLog(LL_NOTICE, "[ratelimit] Eviction paused(in-loop): redis_mem(%ld) swap_mem(%ld)",
+                            mem_used, server.swap_memory);
+                    break;
                 }
             }
         }
@@ -595,8 +640,8 @@ int freeMemoryIfNeeded(void) {
     nswap += swap_trigged;
     if (server.mstime - prev > 1000) {
         serverLog(LL_VERBOSE,
-                "Eviction loop=%ld,scaned=%ld,swapped=%ld,mem_used=%ld,mem_inflight=%ld",
-                nloop, nscaned, nswap, mem_used, server.swap_memory_inflight);
+                "Eviction loop=%ld,scaned=%ld,swapped=%ld,redis_mem=%ld,swap_mem=%ld",
+                nloop, nscaned, nswap, mem_used, server.swap_memory);
         prev = server.mstime;
         nscaned = 0, nloop = 0, nswap = 0;
     }
@@ -609,8 +654,7 @@ cant_free:
     /* We are here if we are not able to reclaim memory. There is only one
      * last thing we can try: check if the lazyfree thread has jobs in queue
      * and wait... */
-    while(bioPendingJobsOfType(BIO_LAZY_FREE) ||
-            swapsPendingOfType(SWAP_DEL) || swapsPendingOfType(SWAP_PUT)) {
+    while(bioPendingJobsOfType(BIO_LAZY_FREE)) {
         if (((mem_reported - zmalloc_used_memory()) + mem_freed) >= mem_tofree)
             break;
         usleep(1000);

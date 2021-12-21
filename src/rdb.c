@@ -1834,24 +1834,26 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
         }
 
         /* slowdown rdbLoad if evicting faster than ssd can handle. */
-        size_t memory_inflight = server.swap_memory_inflight;
-        if (!performRateLimiting()) {
+        size_t swap_memory = server.swap_memory;
+        int delay = swapRateLimit(NULL);
+        if (!delay) {
             /* perform eviction while loading to control memory peak. */
             freeMemoryIfNeeded();
-            if (server.swap_memory_inflight - memory_inflight >
+            if (server.swap_memory - swap_memory >
                     (size_t)server.loading_process_events_interval_bytes) {
                 rdbLoadProgress();
             }
 		} else {
             /* rdb load paused for quite a while, we should progress a bit to
              * avoid being flagged down by sentinel. */
+            usleep(delay*1000);
             rdbLoadProgress();
         }
 
-        memory_inflight = server.swap_memory_inflight;
+        swap_memory = server.swap_memory;
         /* process completed rocks IO to avoid io requests accumulate. */
         rocksProcessCompleteQueue(server.rocks);
-        if (memory_inflight - server.swap_memory_inflight >
+        if (swap_memory - server.swap_memory >
                 (size_t)server.loading_process_events_interval_bytes) {
             rdbLoadProgress();
         }

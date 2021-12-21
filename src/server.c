@@ -1386,9 +1386,6 @@ void beforeSleep(struct aeEventLoop *eventLoop) {
     /* Handle writes with pending output buffers. */
     handleClientsWithPendingWrites();
 
-    /* Slow down event processing when too much swap memory inflight. */
-    performRateLimiting();
-
     /* Before we are going to sleep, let the threads access the dataset by
      * releasing the GIL. Redis main thread will not touch anything at this
      * time. */
@@ -1727,6 +1724,12 @@ void initServerConfig(struct redisServer *srv) {
         srv->repl_timeout = CONFIG_DEFAULT_REPL_TIMEOUT;
         srv->repl_backlog_size = CRDT_CONFIG_DEFAULT_REPL_BACKLOG_SIZE;
     }
+
+    /* swap related configs */
+    srv->swap_memory_slowdown = CONFIG_DEFAULT_SWAP_MEMORY_SLOWDOWN;
+    srv->swap_memory_stop = CONFIG_DEFAULT_SWAP_MEMORY_STOP;
+    srv->maxmemory_oom_percentage = CONFIG_DEFAULT_MAXMEMORY_OOM_PERCENTAGE;
+    srv->debug_rio_latency = CONFIG_DEFAULT_DEBUG_RIO_LATENCY;
 }
 
 extern char **environ;
@@ -2128,9 +2131,9 @@ void initServer(struct redisServer *srv) {
     srv->aof_last_write_status = C_OK;
     srv->aof_last_write_errno = 0;
     srv->repl_good_slaves_count = 0;
-    srv->swap_memory_inflight = 0;
-    srv->swap_memory_slowdown = 128*1024*1024;
-    srv->swap_memory_stop = 512*1024*1024;
+    srv->swap_memory = 0;
+    srv->swap_memory_slowdown = CONFIG_DEFAULT_SWAP_MEMORY_SLOWDOWN;
+    srv->swap_memory_stop = CONFIG_DEFAULT_SWAP_MEMORY_STOP;
     srv->in_swap_cb = 0;
 
     updateCachedTime(srv);
@@ -3844,11 +3847,11 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                 "swap_inprogress:%lld\r\n"
                 "swap_last_start:%ld\r\n"
                 "swap_last_finish:%ld\r\n"
-                "swap_memory_inflight:%ld\r\n",
+                "swap_memory:%ld\r\n",
                 swap_inprogress,
                 swap_last_start/1000,
                 swap_last_finish/1000,
-                server.swap_memory_inflight);
+                server.swap_memory);
 
         for (j = 1; j < SWAP_TYPES; j++) {
             swapStat *s = &server.swap_stats[j];

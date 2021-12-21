@@ -228,7 +228,7 @@ typedef struct {
     moduleSwapFinishedCallback module_cb;
     void *module_pd;
     swappingClients *scs;
-    size_t memory_inflight;
+    size_t swap_memory;
 } rocksPrivData;
 
 void clientHoldKey(client *c, robj *key) {
@@ -339,7 +339,7 @@ void rocksSwapFinished(int action, sds rawkey, sds rawval, void *privdata) {
     clientSwapFinishedCallback client_cb = (clientSwapFinishedCallback)c->client_swap_finished_cb;
     void *client_pd = c->client_swap_finished_pd;
 
-    server.swap_memory_inflight -= rocks_pd->memory_inflight;
+    server.swap_memory -= rocks_pd->swap_memory;
     updateStatsSwapFinish(R2S(action), rawkey, rawval);
 
     /* Current swapping client should be the head of swapping_clents. */
@@ -432,7 +432,7 @@ void rocksSwapFinished(int action, sds rawkey, sds rawval, void *privdata) {
         sizeof(RIO) +                                               \
         /* link in scs, pending_rios, processing_rios */            \
         (sizeof(list) + sizeof(listNode))*3 )
-static inline size_t estimateSwapMemoryInflight(sds rawkey, sds rawval, rocksPrivData *pd) {
+static inline size_t estimateSwapMemory(sds rawkey, sds rawval, rocksPrivData *pd) {
     size_t result = 0;
     if (rawkey) result += sdsalloc(rawkey);
     if (rawval) result += sdsalloc(rawval);
@@ -480,8 +480,8 @@ int clientSwapProceed(client *c, swap *s, swappingClients **pscs) {
     rocks_pd->module_pd = module_pd;
     rocks_pd->scs = *pscs;
 
-    rocks_pd->memory_inflight = estimateSwapMemoryInflight(rawkey, rawval, rocks_pd);
-    server.swap_memory_inflight += rocks_pd->memory_inflight;
+    rocks_pd->swap_memory = estimateSwapMemory(rawkey, rawval, rocks_pd);
+    server.swap_memory += rocks_pd->swap_memory;
     updateStatsSwapStart(action, rawkey, rawval);
     rocksIOSubmitAsync(crc16(rawkey, sdslen(rawkey)), S2R(action), rawkey,
            rawval, rocksSwapFinished, rocks_pd);
@@ -910,6 +910,7 @@ int dbExpire(redisDb *db, robj *key) {
     /* when expiring key is in db.dict, we don't need to swapin key, but still
      * we need to do expireKey to remove key from db and rocksdb. */
     if (nswap == 0) expireKey(c, key, NULL);
+
     return nswap;
 }
 
@@ -935,8 +936,9 @@ int clientEvictNoReply(client *c, robj *key) {
 }
 
 int dbEvict(redisDb *db, robj *key) {
-    client *c = server.evict_clients[db->id];
     robj *o;
+    int swap_result;
+    client *c = server.evict_clients[db->id];
 
     if (server.scs && listLength(server.scs->swapclients)) {
         return 0;
@@ -991,6 +993,58 @@ void updateStatsSwapFinish(int type, sds rawkey, sds rawval) {
     server.swap_stats[type].finished_rawval_bytes += rawval_bytes;
 }
 
+
+/* ----------------------------- ratelimit ------------------------------ */
+/* sleep 100us~100ms if current swap memory is (slowdown, stop). */
+#define SWAP_RATELIMIT_DELAY_SLOW 1
+#define SWAP_RATELIMIT_DELAY_STOP 10
+
+int swapRateLimitState() {
+    if (server.swap_memory < server.swap_memory_slowdown) {
+        return SWAP_RL_NO;
+    } else if (server.swap_memory < server.swap_memory_stop) {
+        return SWAP_RL_SLOW;
+    } else {
+        return SWAP_RL_STOP;
+    }
+    return SWAP_RL_NO;
+}
+
+int swapRateLimit(client *c) {
+    float pct;
+    int delay;
+
+    switch(swapRateLimitState()) {
+    case SWAP_RL_NO:
+        delay = 0;
+        break;
+    case SWAP_RL_SLOW:
+        pct = ((float)server.swap_memory - server.swap_memory_slowdown) / ((float)server.swap_memory_stop - server.swap_memory_slowdown);
+        delay = (int)(SWAP_RATELIMIT_DELAY_SLOW + pct*(SWAP_RATELIMIT_DELAY_STOP - SWAP_RATELIMIT_DELAY_SLOW));
+        break;
+    case SWAP_RL_STOP:
+        delay = SWAP_RATELIMIT_DELAY_STOP;
+        break;
+    default:
+        delay = 0;
+        break;
+    }
+
+    if (delay > 0) {
+        if (c) c->swap_rl_until = server.mstime + delay;
+        serverLog(LL_VERBOSE, "[ratelimit] client(%d) swap_memory(%ld) delay(%d)ms",
+                c ? c->fd:-2, server.swap_memory, delay);
+    } else {
+        if (c) c->swap_rl_until = 0;
+    }
+    
+    return delay;
+}
+
+int swapRateLimited(client *c) {
+    return c->swap_rl_until >= server.mstime;
+}
+
 /*  WHY do we need both getswaps & getdataswaps?
  *  - getswaps return swap intentions analyzed from command without querying
  *  keyspace; while getdataswaps return swaps based on data type (e.g.
@@ -1027,13 +1081,19 @@ int getSwapsGlobal(struct redisCommand *cmd, robj **argv, int argc, getSwapsResu
  * rocks IO finishes. Note that replicated commands swap in-parallel but we
  * still processed in received order. */
 int dbSwap(client *c) {
+    int swap_result;
+
     if (!(c->flags & CLIENT_MASTER) && !(c->flags & CLIENT_CRDT_MASTER)) {
         /* normal client swap */
-        return clientSwap(c);
+        swap_result = clientSwap(c);
     } else {
         /* repl client swap */
-        return replClientSwap(c);
+        swap_result = replClientSwap(c);
     }
+
+    if (swap_result) swapRateLimit(c);
+
+    return swap_result;
 }
 
 void swapInit() {

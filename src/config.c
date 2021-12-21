@@ -323,6 +323,16 @@ void loadServerConfigFromString(char *config) {
             server.debug_evict_keys = atoi(argv[1]);
         } else if (!strcasecmp(argv[0],"maxdisk") && argc == 2) {
             server.maxdisk = memtoll(argv[1],NULL);
+        } else if (!strcasecmp(argv[0],"swap-memory-slowdown") && argc == 2) {
+            server.swap_memory_slowdown = memtoll(argv[1],NULL);
+        } else if (!strcasecmp(argv[0],"swap-memory-stop") && argc == 2) {
+            server.swap_memory_stop = memtoll(argv[1],NULL);
+        } else if (!strcasecmp(argv[0],"maxmemory-oom-percentage") && argc == 2) {
+            server.maxmemory_oom_percentage = atoi(argv[1]);
+            if (server.maxmemory_oom_percentage <= 100) {
+                err = "maxmemory-oom-percentage must greater than 100";
+                goto loaderr;
+            }
         } else if (!strcasecmp(argv[0],"maxmemory") && argc == 2) {
             server.maxmemory = memtoll(argv[1],NULL);
         } else if (!strcasecmp(argv[0],"maxmemory-policy") && argc == 2) {
@@ -1155,6 +1165,8 @@ void configSetCommand(client *c, struct redisServer *srv) {
     } config_set_numerical_field(
       "auto-aof-rewrite-percentage",srv->aof_rewrite_perc,0,LLONG_MAX){
     } config_set_numerical_field(
+      "maxmemory-oom-percentage",srv->maxmemory_oom_percentage,100,LLONG_MAX){
+    } config_set_numerical_field(
       "hash-max-ziplist-entries",srv->hash_max_ziplist_entries,0,LLONG_MAX) {
     } config_set_numerical_field(
       "hash-max-ziplist-value",srv->hash_max_ziplist_value,0,LLONG_MAX) {
@@ -1227,6 +1239,10 @@ void configSetCommand(client *c, struct redisServer *srv) {
      * config_set_memory_field(name,var) */
     } config_set_memory_field(
             "maxdisk",srv->maxdisk) {
+    } config_set_memory_field(
+            "swap-memory-slowdown",srv->swap_memory_slowdown) {
+    } config_set_memory_field(
+            "swap-memory-stop",srv->swap_memory_stop) {
     } config_set_memory_field("maxmemory",srv->maxmemory) {
         if (srv->maxmemory) {
             if (srv->maxmemory < zmalloc_used_memory()) {
@@ -1327,6 +1343,9 @@ void configGetCommand(client *c, struct redisServer *srv) {
     /* Numerical values */
     config_get_numerical_field("debug-evict-keys",srv->debug_evict_keys);
     config_get_numerical_field("maxdisk",srv->maxdisk);
+    config_get_numerical_field("swap-memory-slowdown",srv->swap_memory_slowdown);
+    config_get_numerical_field("swap-memory-stop",srv->swap_memory_stop);
+    config_get_numerical_field("maxmemory-oom-percent",srv->maxmemory_oom_percentage);
     config_get_numerical_field("maxmemory",srv->maxmemory);
     config_get_numerical_field("proto-max-bulk-len",srv->proto_max_bulk_len);
     config_get_numerical_field("client-query-buffer-limit",srv->client_max_querybuf_len);
@@ -2180,6 +2199,9 @@ int rewriteConfig(char *path) {
     rewriteConfigNumericalOption(state,"maxclients",server.maxclients,CONFIG_DEFAULT_MAX_CLIENTS);
     rewriteConfigBytesOption(state,"debug-evict-keys",server.debug_evict_keys,CONFIG_DEFAULT_DEBUG_EVICT_KEYS);
     rewriteConfigBytesOption(state,"maxdisk",server.maxdisk,CONFIG_DEFAULT_MAXDISK);
+    rewriteConfigBytesOption(state,"swap-memory-slowdown",server.swap_memory_slowdown,CONFIG_DEFAULT_SWAP_MEMORY_SLOWDOWN);
+    rewriteConfigBytesOption(state,"swap-memory-stop",server.swap_memory_stop,CONFIG_DEFAULT_SWAP_MEMORY_STOP);
+    rewriteConfigBytesOption(state,"maxmemory-oom-percentage",server.maxmemory_oom_percentage,CONFIG_DEFAULT_MAXMEMORY_OOM_PERCENTAGE);
     rewriteConfigBytesOption(state,"maxmemory",server.maxmemory,CONFIG_DEFAULT_MAXMEMORY);
     rewriteConfigBytesOption(state,"proto-max-bulk-len",server.proto_max_bulk_len,CONFIG_DEFAULT_PROTO_MAX_BULK_LEN);
     rewriteConfigBytesOption(state,"client-query-buffer-limit",server.client_max_querybuf_len,PROTO_MAX_QUERYBUF_LEN);

@@ -147,6 +147,7 @@ client *createClient(int fd) {
     c->CLIENT_DEFERED_CLOSING = 0;
     c->CLIENT_REPL_SWAPPING = 0;
     c->CLIENT_REPL_DISPATCHING = 0;
+    c->swap_rl_until = 0;
     listSetFreeMethod(c->pubsub_patterns,decrRefCountVoid);
     listSetMatchMethod(c->pubsub_patterns,listMatchObjects);
     listSetFreeMethod(c->crdt_pubsub_patterns,decrRefCountVoid);
@@ -1469,7 +1470,7 @@ void processInputBuffer(client *c) {
         if (c->flags & CLIENT_BLOCKED) break;
 
         /* Also abort if the client is swapping. */
-        if (c->flags & CLIENT_SWAPPING) break;
+        if (swapRateLimited(c) || (c->flags & CLIENT_SWAPPING)) break;
 
         /* CLIENT_CLOSE_AFTER_REPLY closes the connection once the reply is
          * written to the client. Make sure to not let the reply grow after
@@ -1523,6 +1524,8 @@ void readQueryFromClient(aeEventLoop *el, int fd, void *privdata, int mask) {
     size_t qblen;
     UNUSED(el);
     UNUSED(mask);
+
+    if (swapRateLimited(c) || (c->flags&CLIENT_SWAPPING)) return;
 
     readlen = PROTO_IOBUF_LEN;
     /* If this is a multi bulk request, and we are processing a bulk reply
