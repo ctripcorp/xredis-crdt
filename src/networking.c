@@ -145,7 +145,6 @@ client *createClient(int fd) {
     c->swapping_count = 0;
     c->client_hold_mode = CLIENT_HOLD_MODE_CMD;
     c->CLIENT_DEFERED_CLOSING = 0;
-    c->defered_flags = 0;
     c->CLIENT_REPL_SWAPPING = 0;
     c->CLIENT_REPL_DISPATCHING = 0;
     c->swap_rl_until = 0;
@@ -803,7 +802,7 @@ static void deferFreeClient(client *c) {
     serverAssert(c->swapping_count);
 
     client_desc = catClientInfoString(sdsempty(), c);
-    serverLog(LL_NOTICE, "Client close defered: %s", client_desc);
+    serverLog(LL_NOTICE, "Defer client close: %s", client_desc);
     sdsfree(client_desc);
 
     c->CLIENT_DEFERED_CLOSING = 1;
@@ -815,15 +814,18 @@ static void deferFreeClient(client *c) {
 
 void freeClientsInDeferedQueue(void) {
     sds client_desc;
-    while (listLength(server.clients_to_free)) {
-        listNode *ln = listFirst(server.clients_to_free);
+    listIter li;
+    listNode *ln;
+
+    listRewind(server.clients_to_free, &li);
+    while ((ln = listNext(&li))) {
         client *c = listNodeValue(ln);
         if (!c->swapping_count) {
             client_desc = catClientInfoString(sdsempty(), c);
-            serverLog(LL_NOTICE, "Defered client closing: %s", client_desc);
             c->CLIENT_DEFERED_CLOSING = 0;
             freeClient(c);
             listDelNode(server.clients_to_free,ln);
+            serverLog(LL_NOTICE, "Defered client closed: %s", client_desc);
             sdsfree(client_desc);
         }
     }

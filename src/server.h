@@ -844,9 +844,6 @@ typedef struct client {
     void *client_swap_finished_pd;
     int client_hold_mode; /* indicates how client should hold key */
     int CLIENT_DEFERED_CLOSING;
-    int defered_flags; /* defered closing client might still use client flags
-                          in swap callback, which could be changed by server,
-                          defered_flags are used to reserve those flags. */
     int CLIENT_REPL_SWAPPING;
     int CLIENT_REPL_DISPATCHING;
     long long cmd_reploff; /* Command replication offset when dispatch if this is a repl worker */

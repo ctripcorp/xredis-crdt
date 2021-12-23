@@ -618,14 +618,22 @@ static void processFinishedReplCommands() {
         if (wc->CLIENT_REPL_SWAPPING) break;
         c = wc->repl_client;
 
-        serverAssert((c->flags&CLIENT_MASTER || c->defered_flags&CLIENT_MASTER) ||
-                (c->flags&CLIENT_CRDT_MASTER || c->defered_flags&CLIENT_CRDT_MASTER));
-
         wc->flags &= ~CLIENT_SWAPPING;
+        c->swapping_count--;
         listDelNode(server.repl_worker_clients_used, ln);
         listAddNodeTail(server.repl_worker_clients_free, wc);
 
-        is_connected_crdt_master = (c->flags&CLIENT_CRDT_MASTER || c->defered_flags&CLIENT_CRDT_MASTER) &&
+        /* Discard dispatched but not executed commands if repl_client closing. */
+        if (c->CLIENT_DEFERED_CLOSING) {
+            commandProcessed(wc);
+            serverAssert(wc->client_hold_mode == CLIENT_HOLD_MODE_REPL);
+            clientUnholdKeys(wc);
+            continue;
+        } else {
+            serverAssert(c->flags&CLIENT_MASTER || c->flags&CLIENT_CRDT_MASTER);
+        }
+
+        is_connected_crdt_master = (c->flags&CLIENT_CRDT_MASTER) &&
             getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED;
 
         backup_cmd = c->cmd;
@@ -639,7 +647,6 @@ static void processFinishedReplCommands() {
         if (listLength(server.ready_keys))
             handleClientsBlockedOnLists();
 
-        c->swapping_count--;
         c->db = wc->db;
         c->gid = wc->gid;
         c->cmd = backup_cmd;
@@ -650,7 +657,7 @@ static void processFinishedReplCommands() {
         clientUnholdKeys(wc);
 
         /* update peer backlog or offset. */
-        if ((c->flags&CLIENT_MASTER || c->defered_flags&CLIENT_MASTER) && iAmMaster() != C_OK) {
+        if ((c->flags&CLIENT_MASTER ) && iAmMaster() != C_OK) {
             if(c->gid == crdtServer.crdt_gid) {
                 /* Recover peer-backlog from repl-stream so that when this slave
                    promoted as new master, other peers could PSYNC, Note that
@@ -671,8 +678,8 @@ static void processFinishedReplCommands() {
 
         long long prev_offset = c->reploff;
         /* update reploff */
-        if (((c->flags&CLIENT_MASTER || c->defered_flags&CLIENT_MASTER)
-                    || ((c->flags&CLIENT_CRDT_MASTER || c->defered_flags&CLIENT_CRDT_MASTER) &&
+        if (((c->flags&CLIENT_MASTER)
+                    || ((c->flags&CLIENT_CRDT_MASTER) &&
                         getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED))
                 && !(wc->flags & CLIENT_MULTI)) {
             /* Update the applied replication offset of our master. */
@@ -688,7 +695,7 @@ static void processFinishedReplCommands() {
          * a crdt(peer) master, as we wish our slaves to keeper align with peer master's
          * repl offset, so that, when a failover happend locally, the globally repl_offset
          * will not be any different */
-		if ((c->flags&CLIENT_MASTER || c->defered_flags&CLIENT_MASTER) && iAmMaster() != C_OK) {
+		if ((c->flags&CLIENT_MASTER) && iAmMaster() != C_OK) {
 			size_t applied = c->reploff - prev_offset;
 			if (applied) {
 				if(!server.repl_slave_repl_all){

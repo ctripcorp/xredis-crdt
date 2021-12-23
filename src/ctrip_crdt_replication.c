@@ -92,13 +92,11 @@ void freePeerMaster(CRDT_Master_Instance *masterInstance) {
     }
     if (masterInstance->master) {
         masterInstance->master->flags &= ~CLIENT_CRDT_MASTER;
-        masterInstance->master->defered_flags |= CLIENT_CRDT_MASTER;
         freeClient(masterInstance->master);
         masterInstance->master = NULL;
     }
     if (masterInstance->cached_master) {
         masterInstance->cached_master->flags &= ~CLIENT_CRDT_MASTER;
-        masterInstance->cached_master->defered_flags |= CLIENT_CRDT_MASTER;
         freeClient(masterInstance->cached_master);
         masterInstance->cached_master = NULL;
     }
@@ -348,14 +346,12 @@ crdtMergeStartCommand(client *c) {
     //clear cache_master and master
     if(peerMaster->cached_master) {
         peerMaster->cached_master->flags &= ~CLIENT_CRDT_MASTER;
-        peerMaster->cached_master->defered_flags |= CLIENT_CRDT_MASTER;
         freeClient(peerMaster->cached_master);
         peerMaster->cached_master = NULL;
     }
     if(iAmMaster() != C_OK) {
         if(peerMaster->master) {
             peerMaster->master->flags &= ~CLIENT_CRDT_MASTER;
-            peerMaster->master->defered_flags |= CLIENT_CRDT_MASTER;
             freeClient(peerMaster->master);
             peerMaster->master = NULL;
         }
@@ -1226,7 +1222,6 @@ void crdtReplicationAbortSyncTransfer(CRDT_Master_Instance *masterInstance) {
     crdtUndoConnectWithMaster(masterInstance);
     if(masterInstance->master != NULL) { 
         masterInstance->master->flags &= ~CLIENT_CRDT_MASTER;
-        masterInstance->master->defered_flags |= CLIENT_CRDT_MASTER;
         freeClient(masterInstance->master); 
         masterInstance->master = NULL;
     }
@@ -1297,7 +1292,6 @@ void crdtReplicationDiscardCachedMaster(CRDT_Master_Instance *crdtMaster) {
 
     serverLog(LL_NOTICE,"[CRDT]Discarding previously cached master state.");
     crdtMaster->cached_master->flags &= ~CLIENT_CRDT_MASTER;
-    crdtMaster->cached_master->defered_flags |= CLIENT_CRDT_MASTER;
     freeClient(crdtMaster->cached_master);
     crdtMaster->cached_master = NULL;
 }
@@ -1325,7 +1319,6 @@ void crdtReplicationAllPeersStateReset() {
         if(crdtMaster->repl_state == REPL_STATE_CONNECTED) {
             if(crdtMaster->master) {
                 crdtMaster->master->flags &= ~CLIENT_CRDT_MASTER;
-                crdtMaster->master->defered_flags |= CLIENT_CRDT_MASTER;
                 freeClient(crdtMaster->master);
                 crdtMaster->master = NULL;
             }
