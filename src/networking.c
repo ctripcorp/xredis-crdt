@@ -145,6 +145,7 @@ client *createClient(int fd) {
     c->swapping_count = 0;
     c->client_hold_mode = CLIENT_HOLD_MODE_CMD;
     c->CLIENT_DEFERED_CLOSING = 0;
+    c->defered_flags = 0;
     c->CLIENT_REPL_SWAPPING = 0;
     c->CLIENT_REPL_DISPATCHING = 0;
     c->swap_rl_until = 0;

@@ -1234,8 +1234,11 @@ int crdtPropagateExpire(redisDb *db, robj *key, int lazy, long long expireTime) 
                 return C_OK;
             }
         }
+    } else {
+        /* if evicted key was scaned multiple times by active-expire cycle,
+         * only the first time will delete key, others will be ignored. */
+        serverLog(LL_DEBUG, "[crdtPropagateExpire]key %s can't find value", (char*)key->ptr);
     }
-    serverLog(LL_WARNING, "[crdtPropagateExpire]key %s can't find value", (char*)key->ptr);
     return C_ERR;
 }
 
