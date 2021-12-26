@@ -845,6 +845,7 @@ typedef struct client {
     int client_hold_mode; /* indicates how client should hold key */
     int CLIENT_DEFERED_CLOSING;
     int CLIENT_REPL_SWAPPING;
+    int CLIENT_REPL_CMD_DISCARDED;
     int CLIENT_REPL_DISPATCHING;
     long long cmd_reploff; /* Command replication offset when dispatch if this is a repl worker */
     struct client *repl_client; /* Master or peer client if this is a repl worker */
@@ -2428,7 +2429,6 @@ int rocksEvictionsInprogress(void);
 int rocksDelete(redisDb *db, robj *key);
 int rocksFlushAll();
 rocksdb_t *rocksGetDb(struct rocks *rocks);
-rocksdb_memory_consumers_t *rocksGetMemConsumer(struct rocks *rocks);
 int rocksProcessCompleteQueue(struct rocks *rocks);
 void rocksCron();
 
@@ -2482,6 +2482,7 @@ void updateStatsSwapFinish(int type, sds rawkey, sds rawval);
 int swapsPendingOfType(int type);
 size_t objectComputeSize(robj *o, size_t sample_size);
 size_t keyComputeSize(redisDb *db, robj *key);
+int replDiscardClientDispatchedCommands(client *c);
 
 #define SWAP_RL_NO      0
 #define SWAP_RL_SLOW    1

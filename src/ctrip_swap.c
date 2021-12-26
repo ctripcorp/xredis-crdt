@@ -569,6 +569,33 @@ int clientSwap(client *c) {
 }
 
 /* ----------------------------- repl swap ------------------------------ */
+int replDiscardClientDispatchedCommands(client *c) {
+    int discarded = 0, scanned = 0;
+    listIter li;
+    listNode *ln;
+
+    serverAssert(c);
+
+    listRewind(server.repl_worker_clients_used,&li);
+    while ((ln = listNext(&li))) {
+        client *wc = listNodeValue(ln);
+        if (wc->repl_client == c) {
+            wc->CLIENT_REPL_CMD_DISCARDED = 1;
+            discarded++;
+            serverLog(LL_NOTICE, "discarded: cmd_reploff(%lld)", wc->cmd_reploff);
+        }
+        scanned++;
+    }
+
+    if (discarded) {
+        serverLog(LL_NOTICE,
+            "discard (%d/%d) dispatched but not executed commands for repl client(reploff:%lld, read_reploff:%lld)",
+            discarded, scanned, c->reploff, c->read_reploff);
+    }
+
+    return discarded;
+}
+
 static void replCommandDispatch(client *wc, client *c) {
     int reserved_flags = wc->flags & CLIENT_MULTI;
     /* Move command from repl client to repl worker client, also reset repl
@@ -623,11 +650,16 @@ static void processFinishedReplCommands() {
         listDelNode(server.repl_worker_clients_used, ln);
         listAddNodeTail(server.repl_worker_clients_free, wc);
 
-        /* Discard dispatched but not executed commands if repl_client closing. */
-        if (c->CLIENT_DEFERED_CLOSING) {
+        /* Discard dispatched but not executed commands like we never reveived, if
+         * - repl client is closing: client close defered untill all swapping
+         *   dispatched cmds finished, those cmds will be discarded.
+         * - repl client is cached: client cached but read_reploff will shirnk
+         *   back and dispatched cmd will be discared. */
+        if (wc->CLIENT_REPL_CMD_DISCARDED) {
             commandProcessed(wc);
             serverAssert(wc->client_hold_mode == CLIENT_HOLD_MODE_REPL);
             clientUnholdKeys(wc);
+            wc->CLIENT_REPL_CMD_DISCARDED = 0;
             continue;
         } else {
             serverAssert(c->flags&CLIENT_MASTER || c->flags&CLIENT_CRDT_MASTER);
@@ -943,7 +975,6 @@ int clientEvictNoReply(client *c, robj *key) {
 
 int dbEvict(redisDb *db, robj *key) {
     robj *o;
-    int swap_result;
     client *c = server.evict_clients[db->id];
 
     if (server.scs && listLength(server.scs->swapclients)) {
@@ -1156,7 +1187,7 @@ void swapInit() {
 
     server.scs = swappingClientsCreateP(NULL, NULL, NULL);
 
-    server.repl_workers = 64;
+    server.repl_workers = 256;
     server.repl_swapping_clients = listCreate();
     server.repl_worker_clients_free = listCreate();
     server.repl_worker_clients_used = listCreate();

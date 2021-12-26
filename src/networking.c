@@ -146,6 +146,7 @@ client *createClient(int fd) {
     c->client_hold_mode = CLIENT_HOLD_MODE_CMD;
     c->CLIENT_DEFERED_CLOSING = 0;
     c->CLIENT_REPL_SWAPPING = 0;
+    c->CLIENT_REPL_CMD_DISCARDED = 0;
     c->CLIENT_REPL_DISPATCHING = 0;
     c->swap_rl_until = 0;
     listSetFreeMethod(c->pubsub_patterns,decrRefCountVoid);
@@ -824,9 +825,9 @@ void freeClientsInDeferedQueue(void) {
             client_desc = catClientInfoString(sdsempty(), c);
             c->CLIENT_DEFERED_CLOSING = 0;
             freeClient(c);
-            listDelNode(server.clients_to_free,ln);
             serverLog(LL_NOTICE, "Defered client closed: %s", client_desc);
             sdsfree(client_desc);
+            listDelNode(server.clients_to_free,ln);
         }
     }
 }
@@ -834,10 +835,10 @@ void freeClientsInDeferedQueue(void) {
 void freeClient(client *c) {
     listNode *ln;
 
-    if (c->swapping_count) {
-        deferFreeClient(c);
-        return;
-    }
+    /* if client is (or was) a repl client, dispatched commands will be
+     * discared, otherwise this is a no-op. */
+    replDiscardClientDispatchedCommands(c);
+
     /* If it is our master that's beging disconnected we should make sure
      * to cache the state to try a partial resynchronization later.
      *
@@ -865,6 +866,11 @@ void freeClient(client *c) {
             crdtReplicationCacheMaster(c);
             return;
         }
+    }
+    
+    if (c->swapping_count) {
+        deferFreeClient(c);
+        return;
     }
 
     /* Log link disconnection with slave */
