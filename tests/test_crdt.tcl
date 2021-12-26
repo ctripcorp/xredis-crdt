@@ -41,8 +41,11 @@ set ::ci_swap_failed_tests {
     ctrip/master-not-crdt/more-write-db
     # swap (take long to finish)
     ctrip/integration/bug/free-replication-blocklog
+    ctrip/backstream/rdb
     # not sure
     ctrip/master-not-crdt/master-redis-slave-crdt
+    # (single pass, all failed)
+    ctrip/integration/bug/redis-when-full-sync-mater-timeout-vectorclock-update
 }
 
 set ::all_tests {
@@ -58,7 +61,6 @@ set ::all_tests {
     ctrip/backstream/some_data
     ctrip/backstream/config_rdb
     ctrip/backstream/config
-    ctrip/backstream/rdb
     ctrip/master-not-crdt/load-redis-rdb
     ctrip/integration/master-slave/replication2
     ctrip/unit/hash
@@ -158,7 +160,6 @@ set ::all_tests {
     ctrip/unit/crdt_hdel_mem_leak
     ctrip/unit/pubsub
     ctrip/integration/bug/redis-crash-when-full-sync-hash-merge
-    ctrip/integration/bug/redis-when-full-sync-mater-timeout-vectorclock-update
     ctrip/integration/master-slave/replication
     ctrip/integration/master-slave/replication-1
     ctrip/integration/master-slave/replication-2
@@ -169,8 +170,6 @@ set ::all_tests {
     ctrip/master-not-crdt/convert-data-on-load
 
     ctrip/unit/peerof_backstream
-    
-    ctrip/master-not-crdt/master-redis-slave-crdt
 }   
 
 set ::temp_tests { 

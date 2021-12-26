@@ -217,6 +217,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
         r psetex key1 500 a
         r psetex key2 500 a
         r psetex key3 500 a
+        after 200
         set size1 [r dbsize]
         # Redis expires random keys ten times every second so we are
         # fairly sure that all the three keys should be evicted after
@@ -232,6 +233,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
         r psetex key1 500 a
         r psetex key2 500 a
         r psetex key3 500 a
+        after 200
         set size1 [r dbsize]
         # Redis expires random keys ten times every second so we are
         # fairly sure that all the three keys should be evicted after

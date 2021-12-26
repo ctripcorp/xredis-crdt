@@ -65,6 +65,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
                 [lindex $peers 0] set [lindex $keys [expr $n -$j]] $j
             }
             set keys2 [[lindex $peers 0] scan $scan_n]
+            after 1000
             for {set j 0} {$j <= $scan_n} {incr j} { 
                 if {[lindex $keys $j] != [lindex $keys2 $j]} {
                     puts $j
