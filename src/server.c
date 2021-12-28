@@ -1097,13 +1097,16 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     /* Show some info about non-empty databases */
     run_with_period(5000) {
         for (j = 0; j < server.dbnum; j++) {
-            long long size, used, vkeys;
+            long long size, esize, used, eused, tused, vkeys;
 
             size = dictSlots(server.db[j].dict);
+            esize = dictSlots(server.db[j].evict);
             used = dictSize(server.db[j].dict);
+            eused = dictSize(server.db[j].evict);
+            tused = used+eused;
             vkeys = dictSize(server.db[j].expires);
-            if (used || vkeys) {
-                serverLog(LL_VERBOSE,"DB %d: %lld keys (%lld volatile) in %lld slots HT.",j,used,vkeys,size);
+            if (tused || vkeys) {
+                serverLog(LL_VERBOSE,"DB %d %lld(%lld,%lld) keys (%lld volatile) in (%lld,%lld) slots HT.",j,used,eused,tused,vkeys,size,esize);
                 /* dictPrintStats(server.dict); */
             }
         }
