@@ -568,6 +568,14 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
     return C_ERR;
 }
 
+sds dumpCrdtInfo(CrdtObject *x, sds dump) {
+    dump = sdscatprintf(dump, "  isData: %d\n", isData(x));
+    dump = sdscatprintf(dump, "  isTombstone: %d\n", isTombstone(x));
+    dump = sdscatprintf(dump, "  getDataType: %d\n", getDataType(x));
+    dump = sdscatprintf(dump, "  type: %d\n", x->type);
+    return dump;
+}
+
 /**---------------------------CRDT Merge Command--------------------------------*/
 static int updateReplTransferLastio(int gid) {
     CRDT_Master_Instance *peerMasterServer = getPeerMaster(gid);

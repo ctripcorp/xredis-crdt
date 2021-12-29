@@ -1092,6 +1092,7 @@ robj *objectCommandLookupOrReply(client *c, robj *key, robj *reply) {
     return o;
 }
 
+sds dumpCrdtInfo(CrdtObject *x, sds dump);
 /* Object command allows to inspect the internals of an Redis Object.
  * Usage: OBJECT <refcount|encoding|idletime|freq> <key> */
 void objectCommand(client *c) {
@@ -1139,6 +1140,43 @@ void objectCommand(client *c) {
          * because we update the access time only
          * when the key is read or overwritten. */
         addReplyLongLong(c,LFUDecrAndReturn(o));
+    } else if (!strcasecmp(c->argv[1]->ptr,"crdt") && c->argc == 3) {
+        dictEntry *de;
+        robj *v, *t, *key = c->argv[2];
+        CrdtObject *tt, *vv;
+        sds dump;
+
+        de = dictFind(c->db->dict, key->ptr);
+        v = de == NULL ? NULL : dictGetVal(de);
+
+        de = dictFind(c->db->deleted_keys, key->ptr);
+        t = de == NULL ? NULL : dictGetVal(de);
+
+        if (!v && !t) {
+            addReplyError(c, "key not found.");
+            return;
+        }
+
+        if ((v && v->type != OBJ_MODULE) || (t && t->type != OBJ_MODULE)) {
+            addReplyError(c,"key is not module type");
+            return;
+        }
+
+        tt = t ? ((moduleValue*)t->ptr)->value : NULL;
+        vv = v ? ((moduleValue*)v->ptr)->value : NULL;
+    
+        dump = sdsempty();
+        dump = sdscatprintf(dump, "%s:\n", (sds)key->ptr);
+        if (vv) {
+            dump = sdscatprintf(dump, " vv:");
+            dump = dumpCrdtInfo(vv, dump);
+        }
+        if (tt) {
+            dump = sdscatprintf(dump, " tt:");
+            dump = dumpCrdtInfo(tt, dump);
+        }
+        addReplyBulkSds(c,dump); 
+        return;
     } else {
         addReplyErrorFormat(c, "Unknown subcommand or wrong number of arguments for '%s'. Try OBJECT help",
             (char *)c->argv[1]->ptr);
