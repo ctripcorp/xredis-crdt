@@ -56,3 +56,4 @@ cmake-build-debug/
 crdt-module/
 !tests/assets/linux/crdt.so
 
+*/node_modules/*
