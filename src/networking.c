@@ -1508,9 +1508,6 @@ void processInputBuffer(client *c) {
         if (c->argc == 0) {
             resetClient(c);
         } else {
-            if (c->flags & CLIENT_MASTER && iAmMaster() != C_OK) {
-                c->gid = -1;
-            }
             if (server.verbosity == LL_DEBUG) {
                 printCommand(c);
             }

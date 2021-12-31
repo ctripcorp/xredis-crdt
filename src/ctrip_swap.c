@@ -609,8 +609,20 @@ static void replCommandDispatch(client *wc, client *c) {
     wc->flags |= reserved_flags;
     wc->cmd_reploff = c->read_reploff - sdslen(c->querybuf);
     wc->repl_client = c;
+
+    /* set gid to -1 so that:
+     * - PING/publish/crdt.merge will not be recovered as peer stream by slave
+     * - client gid will be set after peer stream get called, otherwise client
+     *   gid will remain untouched.
+     * Note that replClientSwap could be chain-called after
+     * replWorkerClientSwapFinished, we should reset gid before
+     * replCommandDispatch instead of processCommand.
+     */
+    if (c->flags & CLIENT_MASTER && iAmMaster() != C_OK) {
+        c->gid = -1;
+    }
     wc->gid = c->gid;
-    
+
     /* In order to dispatch transaction to the same worker client, process
      * multi command whether preceeding commands processed or not. */
     if (c->cmd->proc == multiCommand) {
