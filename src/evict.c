@@ -411,8 +411,13 @@ static inline size_t getUsedMemory() {
     return zmalloc_used_memory() - server.swap_memory;
 }
 
+#define MAX_EVICT_FAIL_INROW 16
+int evictionTombstone(int index, robj *key);
+void evictionTombstonePoolPopulate(int dbid, dict *sampledict, struct evictionPoolEntry *pool);
+
 int freeMemoryIfNeeded(void) {
-    int keys_scanned = 0, swap_trigged = 0;
+    static long long evict_failed_inrow = 0;
+    int keys_scanned = 0, swap_trigged = 0, tombstones_freed = 0;
     size_t mem_reported, mem_used, mem_tofree, mem_freed;
     mstime_t latency, eviction_latency;
     int slaves = listLength(server.slaves) + listLength(crdtServer.slaves);
@@ -476,9 +481,12 @@ int freeMemoryIfNeeded(void) {
         }
     }
 
+    static size_t nscaned, nloop, nswap, tomb_freed;
+    static mstime_t prev;
+
     latencyStartMonitor(latency);
     while (mem_freed < mem_tofree) {
-        int j, k, i, keys_freed = 0;
+        int j, k, i;
         static unsigned int next_db = 0;
         sds bestkey = NULL;
         int bestdbid;
@@ -562,6 +570,7 @@ int freeMemoryIfNeeded(void) {
 
         /* Finally remove the selected key. */
         if (bestkey) {
+            int evict_result;
             db = server.db+bestdbid;
             robj *keyobj = createStringObject(bestkey,sdslen(bestkey));
             /* We compute the amount of memory freed by db*Delete() alone.
@@ -577,14 +586,19 @@ int freeMemoryIfNeeded(void) {
              * so we need to compute key size before dbEvict. */
             mem_freed += keyComputeSize(db, keyobj);
             /* Trigger swap key from memory to rocksdb */
-            swap_trigged += dbEvict(db, keyobj);
+            swap_trigged += dbEvict(db, keyobj, &evict_result);
+            if (evict_result < 0) {
+                evict_failed_inrow++;
+            } else {
+                evict_failed_inrow = 0;
+            }
+
             latencyEndMonitor(eviction_latency);
             latencyAddSampleIfNeeded("eviction-swap",eviction_latency);
-            // latencyRemoveNestedEvent(latency,eviction_latency);
             server.stat_evictedkeys++;
             notifyKeyspaceEvent(NOTIFY_EVICTED, "evicted", keyobj, db->id);
             decrRefCount(keyobj);
-            keys_freed++, keys_scanned++;
+            keys_scanned++;
 
             /* When the memory to free starts to be big enough, we may
              * start spending so much time here that is impossible to
@@ -621,29 +635,107 @@ int freeMemoryIfNeeded(void) {
 
                     serverLog(LL_NOTICE, "[ratelimit] Eviction paused(in-loop): redis_mem(%ld) swap_mem(%ld)",
                             mem_used, server.swap_memory);
+
+                    /* we have been evicting too hard, swap more will only make it
+                     * worse. pause swap to wait in-flight tombstone finish. */
+                    goto end;
+                }
+            }
+
+            if (evict_failed_inrow > MAX_EVICT_FAIL_INROW) {
+                /* evict failed too much continously, continue evict are most
+                 * likely to fail again. */
+                break;
+            }
+        } else {
+            break; /* no key to evict... */
+        }
+    }
+
+    /* we have failed to free memory from db.dict if we reached here, now
+     * it's time to try tombstone gc. */
+    if (mem_freed < mem_tofree) {
+        serverLog(LL_DEBUG, "Eviction main db failed, trying tombstone gc: evict_failed_inrow=%lld." , evict_failed_inrow);
+    }
+
+    while (mem_freed < mem_tofree) {
+        unsigned long total_tombstones, tombstone;
+        long long delta;
+        int k, i;
+        sds bestkey = NULL;
+        int bestdbid;
+        redisDb *db;
+        dict *dict;
+        dictEntry *de;
+        struct evictionPoolEntry *pool = EvictionPoolLRU;
+
+        while(bestkey == NULL) {
+            total_tombstones = 0;
+            for (i = 0; i < server.dbnum; i++) {
+                db = server.db+i;
+                dict = db->deleted_keys;
+                if ((tombstone = dictSize(dict)) != 0) {
+                    evictionTombstonePoolPopulate(i, dict, pool);
+                    total_tombstones += tombstone;
+                }
+            }
+            if(!total_tombstones) break;
+
+            /* Go backward from best to worst element to evict. */
+            for (k = EVPOOL_SIZE-1; k >= 0; k--) {
+                if (pool[k].key == NULL) continue;
+                bestdbid = pool[k].dbid;
+                de = dictFind(server.db[bestdbid].deleted_keys, pool[k].key);
+                /* Remove the entry from the pool. */
+                if (pool[k].key != pool[k].cached)
+                    sdsfree(pool[k].key);
+                pool[k].key = NULL;
+                pool[k].idle = 0;
+                /* If the key exists, is our pick. Otherwise it is
+                 * a ghost and we need to try the next element. */
+                if (de) {
+                    bestkey = dictGetKey(de);
                     break;
+                } else {
+                    /* Ghost... Iterate again. */
                 }
             }
         }
 
-        if (!keys_freed) {
-            latencyEndMonitor(latency);
-            latencyAddSampleIfNeeded("eviction-cycle",latency);
-            goto cant_free; /* nothing to free... */
+        /* Finally remove the selected key. */
+        if (bestkey) {
+            db = server.db+bestdbid;
+            robj *keyobj = createStringObject(bestkey,sdslen(bestkey));
+            evictionTombstone(bestdbid, keyobj);
+
+            delta = (long long) zmalloc_used_memory();
+            dictDelete(db->deleted_keys, bestkey);
+            delta -= (long long) zmalloc_used_memory();
+            mem_freed += delta;
+            crdtServer.stat_evictedtombstones++;
+            decrRefCount(keyobj);
+            tombstones_freed++;
+            /* When the memory to free starts to be big enough, we may
+             * start spending so much time here that is impossible to
+             * deliver data to the slaves fast enough, so we force the
+             * transmission here inside the loop. */
+            if (slaves) flushSlavesOutputBuffers();
+        } else {
+            goto cant_free; /* both evict & gc failed, really can't free ... */
         }
     }
 
-    static size_t nscaned, nloop, nswap;
-    static mstime_t prev;
+end:
     nloop ++;
     nscaned += keys_scanned;
     nswap += swap_trigged;
+    tomb_freed += tombstones_freed;
     if (server.mstime - prev > 1000) {
         serverLog(LL_VERBOSE,
-                "Eviction loop=%ld,scaned=%ld,swapped=%ld,redis_mem=%ld,swap_mem=%ld",
-                nloop, nscaned, nswap, mem_used, server.swap_memory);
+                "Eviction loop=%ld,scaned=%ld,swapped=%ld,redis_mem=%ld,swap_mem=%ld,tomb_freed=%ld",
+                nloop, nscaned, nswap, mem_used, server.swap_memory, tomb_freed);
         prev = server.mstime;
-        nscaned = 0, nloop = 0, nswap = 0;
+        nscaned = 0, nloop = 0, nswap = 0, tomb_freed = 0;
     }
 
     latencyEndMonitor(latency);
@@ -660,5 +752,142 @@ cant_free:
         usleep(1000);
     }
     return C_ERR;
+}
+
+/* ------------------------ tombstone eviction ------------------------- */
+void propagateGcTombstone(int index, robj* key, VectorClock vc) {
+    robj *argv[4];
+    argv[0] = shared.crdtevictiontombstone;
+    argv[1] = key;
+    argv[2] = createStringObjectFromLongLong(server.crdt_gid);
+    sds vcstr = vectorClockToSds(vc);
+    argv[3] = createStringObject(vcstr, sdslen(vcstr));
+    replicationFeedAllSlaves(index,argv,4);
+    decrRefCount(argv[2]);
+    decrRefCount(argv[3]);
+    sdsfree(vcstr);
+}
+
+int evictionTombstone(int index, robj *key) {
+    redisDb* db = server.db + index;
+    dictEntry* de = dictFind(db->deleted_keys, key->ptr);
+    robj* o = dictGetVal(de);
+    CrdtObject *common = retrieveCrdtObject(o);
+    CrdtTombstoneMethod* method = getCrdtTombstoneMethod(common);
+    VectorClock vc = method->getVc(common);
+    propagateGcTombstone(index, key, vc);
+    freeVectorClock(vc);
+    return C_OK;
+}
+
+void evictionTombstoneCommand(client* c) {
+    sds key = c->argv[1]->ptr;
+    long long gid = -1;
+    if (getLongLongFromObjectOrReply(c, c->argv[2], &gid, NULL) != C_OK) return;
+    VectorClock vclock = sdsToVectorClock(c->argv[3]->ptr);
+    dictEntry* de = dictFind(c->db->deleted_keys, key);
+    if(de == NULL) {
+        addReplyBulkLongLong(c, 0);
+        return;
+    }
+    robj* o = dictGetVal(de);
+    CrdtObject *common = retrieveCrdtObject(o);
+    CrdtTombstoneMethod* method = getCrdtTombstoneMethod(common);
+    if(method->gc(common, vclock)) {
+        assert(dictDelete(c->db->deleted_keys, key) == DICT_OK);
+        crdtServer.stat_evictedtombstones++;
+        addReplyBulkLongLong(c, 1);
+        return;
+    } 
+    addReplyBulkLongLong(c, 2);
+}
+
+#define gid_idle_max  1073741824
+long long tombstoneGetIdle(VectorClock vc, VectorClock processVc) {
+    int len = get_len(processVc);
+    long long idle = 1;
+    for(int i = 0; i < len; i++) {
+        clk* c = get_clock_unit_by_index(&processVc, i);
+        long long vcu = get_logic_clock(*c);
+        int gid = get_gid(*c);
+        long long tvcu = get_vcu_from_vc(vc, gid, NULL);
+        long long weights = gid == server.crdt_gid? len: 1;
+        idle += 1073741824  * weights  / ( vcu - tvcu > 0 ? vcu - tvcu + 1: 1) ;
+    }
+    return idle;
+}
+
+void evictionTombstonePoolPopulate(int dbid, dict *sampledict, struct evictionPoolEntry *pool) {
+    int j, k, count;
+    dictEntry *samples[server.maxmemory_samples];
+
+    count = dictGetSomeKeys(sampledict,samples,server.maxmemory_samples);
+    for(j = 0; j < count; j++) {
+        unsigned long long idle;
+        sds key;
+        robj *o;
+        dictEntry *de;
+
+        de = samples[j];
+        key = dictGetKey(de);
+
+        o = dictGetVal(de);
+        CrdtObject *common = retrieveCrdtObject(o);
+        CrdtTombstoneMethod* method = getCrdtTombstoneMethod(common);
+        VectorClock vc = method->getVc(common);
+        idle = tombstoneGetIdle(vc, crdtServer.vectorClock);
+        freeVectorClock(vc);
+
+        /* Insert the element inside the pool.
+         * First, find the first empty bucket or the first populated
+         * bucket that has an idle time smaller than our idle time. */
+        k = 0;
+        while (k < EVPOOL_SIZE &&
+               pool[k].key &&
+               pool[k].idle < idle) k++;
+        if (k == 0 && pool[EVPOOL_SIZE-1].key != NULL) {
+            /* Can't insert if the element is < the worst element we have
+             * and there are no empty buckets. */
+            continue;
+        } else if (k < EVPOOL_SIZE && pool[k].key == NULL) {
+            /* Inserting into empty position. No setup needed before insert. */
+        } else {
+            /* Inserting in the middle. Now k points to the first element
+             * greater than the element to insert.  */
+            if (pool[EVPOOL_SIZE-1].key == NULL) {
+                /* Free space on the right? Insert at k shifting
+                 * all the elements from k to end to the right. */
+
+                /* Save SDS before overwriting. */
+                sds cached = pool[EVPOOL_SIZE-1].cached;
+                memmove(pool+k+1,pool+k,
+                    sizeof(pool[0])*(EVPOOL_SIZE-k-1));
+                pool[k].cached = cached;
+            } else {
+                /* No free space on right? Insert at k-1 */
+                k--;
+                /* Shift all elements on the left of k (included) to the
+                 * left, so we discard the element with smaller idle time. */
+                sds cached = pool[0].cached; /* Save SDS before overwriting. */
+                if (pool[0].key != pool[0].cached) sdsfree(pool[0].key);
+                memmove(pool,pool+1,sizeof(pool[0])*k);
+                pool[k].cached = cached;
+            }
+        }
+        /* Try to reuse the cached SDS string allocated in the pool entry,
+         * because allocating and deallocating this object is costly
+         * (according to the profiler, not my fantasy. Remember:
+         * premature optimizbla bla bla bla. */
+        int klen = sdslen(key);
+        if (klen > EVPOOL_CACHED_SDS_SIZE) {
+            pool[k].key = sdsdup(key);
+        } else {
+            memcpy(pool[k].cached,key,klen+1);
+            sdssetlen(pool[k].cached,klen);
+            pool[k].key = pool[k].cached;
+        }
+        pool[k].idle = idle;
+        pool[k].dbid = dbid;
+    }
 }
 

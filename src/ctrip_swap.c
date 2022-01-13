@@ -996,22 +996,46 @@ int clientEvictNoReply(client *c, robj *key) {
     return swap_count;
 }
 
-int dbEvict(redisDb *db, robj *key) {
+int dbEvict(redisDb *db, robj *key, int *evict_result) {
+    int nswap, dirty;
     robj *o;
     client *c = server.evict_clients[db->id];
 
     if (server.scs && listLength(server.scs->swapclients)) {
+        if (evict_result) *evict_result = EVICT_FAIL_SWAPPING;
+        return 0;
+    }
+
+    if ((o = lookupKey(db, key, LOOKUP_NOTOUCH)) == NULL) {
+        if (evict_result) *evict_result = EVICT_FAIL_ABSENT;
+        return 0;
+    }
+
+    if (keyIsHolded(db, key)) {
+        if (evict_result) *evict_result = EVICT_FAIL_HOLDED;
+        return 0;
+    }
+
+    if (lookupEvict(db, key)) {
+        if (evict_result) *evict_result = EVICT_FAIL_SWAPPING;
         return 0;
     }
 
     /* Trigger evict only if key is PRESENT && !SWAPPING && !HOLDED */
-    if ((o = lookupKey(db, key, LOOKUP_NOTOUCH)) == NULL ||
-            keyIsHolded(db, key) ||
-            lookupEvict(db, key)) {
-        return 0;
+    dirty = o->dirty;
+    nswap = clientEvictNoReply(c, key);
+    if (!nswap) {
+        /* Note that all unsupported object is dirty. */
+        if (dirty) {
+            if (evict_result) *evict_result = EVICT_FAIL_UNSUPPORTED;
+        } else {
+            if (evict_result) *evict_result = EVICT_SUCC_FREED;
+        }
+    } else {
+        if (evict_result) *evict_result = EVICT_SUCC_SWAPPED;
     }
-    
-    return clientEvictNoReply(c, key);
+
+    return nswap;
 }
 
 /* EVICT is a special command that getswaps returns nothing ('cause we don't
@@ -1020,7 +1044,7 @@ int dbEvict(redisDb *db, robj *key) {
 void evictCommand(client *c) {
     int i, nevict = 0;
     for (i = 1; i < c->argc; i++) {
-        nevict += dbEvict(c->db, c->argv[i]);
+        nevict += dbEvict(c->db, c->argv[i], NULL);
     }
     addReplyLongLong(c, nevict);
 }

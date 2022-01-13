@@ -1491,6 +1491,7 @@ void createSharedObjects(void) {
     shared.hset = createStringObject("HSET", 4);
     shared.sadd = createStringObject("SADD", 4);
     shared.zadd = createStringObject("ZADD", 4);
+    shared.crdtevictiontombstone = createStringObject("CRDT.EVICTIONTOMBSTONE",22);
     shared.crdtexec = createStringObject("CRDT.EXEC", 9);
     shared.pexpireat = createStringObject("PEXPIREAt", 9);
     for (j = 0; j < OBJ_SHARED_INTEGERS; j++) {
@@ -2590,7 +2591,7 @@ void debugEvictKeys() {
         while ((de = dictNext(di)) && i++ < debug_evict_keys) {
             sds key = dictGetKey(de);
             robj *keyobj = createStringObject(key,sdslen(key));
-            dbEvict(db, keyobj);
+            dbEvict(db, keyobj, NULL);
             decrRefCount(keyobj);
         }
         dictReleaseIterator(di);

@@ -2471,8 +2471,6 @@ void swapInit();
 int dbSwap(client *c);
 int clientSwap(client *c);
 int replClientSwap(client *c);
-int dbEvict(redisDb *db, robj *key);
-int dbExpire(redisDb *db, robj *key);
 void continueProcessCommand(client *c);
 void evictCommand(client *c);
 int getSwapsNone(struct redisCommand *cmd, robj **argv, int argc, getSwapsResult *result);
@@ -2484,6 +2482,15 @@ size_t objectComputeSize(robj *o, size_t sample_size);
 size_t keyComputeSize(redisDb *db, robj *key);
 int replClientDiscardDispatchedCommands(client *c);
 void replClientDiscardSwappingState(client *c);
+
+#define EVICT_SUCC_SWAPPED      1
+#define EVICT_SUCC_FREED        2
+#define EVICT_FAIL_ABSENT       -1
+#define EVICT_FAIL_SWAPPING     -2
+#define EVICT_FAIL_HOLDED       -3
+#define EVICT_FAIL_UNSUPPORTED  -4
+int dbEvict(redisDb *db, robj *key, int *evict_result);
+int dbExpire(redisDb *db, robj *key);
 
 #define SWAP_RL_NO      0
 #define SWAP_RL_SLOW    1
