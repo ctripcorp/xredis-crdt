@@ -569,7 +569,7 @@ int clientSwap(client *c) {
 }
 
 /* ----------------------------- repl swap ------------------------------ */
-int replDiscardClientDispatchedCommands(client *c) {
+int replClientDiscardDispatchedCommands(client *c) {
     int discarded = 0, scanned = 0;
     listIter li;
     listNode *ln;
@@ -594,6 +594,17 @@ int replDiscardClientDispatchedCommands(client *c) {
     }
 
     return discarded;
+}
+
+void replClientDiscardSwappingState(client *c) {
+    listNode *ln;
+
+    ln = listSearchKey(server.repl_swapping_clients, c);
+    if (ln == NULL) return;
+
+    listDelNode(server.repl_swapping_clients,ln);
+    c->flags &= ~CLIENT_SWAPPING;
+    serverLog(LL_NOTICE, "discarded: swapping repl client (reploff=%lld, read_reploff=%lld)", c->reploff, c->read_reploff);
 }
 
 static void replCommandDispatch(client *wc, client *c) {

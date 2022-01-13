@@ -2482,7 +2482,8 @@ void updateStatsSwapFinish(int type, sds rawkey, sds rawval);
 int swapsPendingOfType(int type);
 size_t objectComputeSize(robj *o, size_t sample_size);
 size_t keyComputeSize(redisDb *db, robj *key);
-int replDiscardClientDispatchedCommands(client *c);
+int replClientDiscardDispatchedCommands(client *c);
+void replClientDiscardSwappingState(client *c);
 
 #define SWAP_RL_NO      0
 #define SWAP_RL_SLOW    1

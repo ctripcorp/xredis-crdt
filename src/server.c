@@ -3657,7 +3657,7 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                 peer_replid = masterInstance->cached_master->replid;
             }
 
-            
+            sds peerVectorClockStr = vectorClockToSds(masterInstance->vectorClock);
             info = sdscatprintf(info,
                                 "#Peer_Master_%d\r\n"
                                 "peer%d_host:%s\r\n"
@@ -3668,7 +3668,8 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                                 "peer%d_last_io_seconds_ago:%d\r\n"
                                 "peer%d_sync_in_progress:%d\r\n"
                                 "peer%d_repl_offset:%lld\r\n"
-                                "peer%d_replid:%s\r\n",
+                                "peer%d_replid:%s\r\n"
+                                "peer%d_ovc:%s\r\n",
                                 masterid,
                                 masterid, masterInstance->masterhost,
                                 masterid, masterInstance->masterport,
@@ -3680,8 +3681,10 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                                 ((int) (server.unixtime - masterInstance->master->lastinteraction)) : -1,
                                 masterid, masterInstance->repl_state == REPL_STATE_TRANSFER,
                                 masterid, peer_repl_offset,
-                                masterid, peer_replid
+                                masterid, peer_replid,
+                                masterid, peerVectorClockStr
             );
+            sdsfree(peerVectorClockStr);
             if(!isNullVectorClock(masterInstance->backstream_vc)) {
                 sds backstream_vc_str = vectorClockToSds(masterInstance->backstream_vc);
                 info = sdscatprintf(info, 

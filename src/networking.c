@@ -835,9 +835,11 @@ void freeClientsInDeferedQueue(void) {
 void freeClient(client *c) {
     listNode *ln;
 
-    /* if client is (or was) a repl client, dispatched commands will be
-     * discared, otherwise this is a no-op. */
-    replDiscardClientDispatchedCommands(c);
+    /* discard dispatched commands if client is (or was) a repl client. */ 
+    replClientDiscardDispatchedCommands(c);
+
+    /* unlinked repl client from server.repl_swapping_clients. */
+    replClientDiscardSwappingState(c);
 
     /* If it is our master that's beging disconnected we should make sure
      * to cache the state to try a partial resynchronization later.
