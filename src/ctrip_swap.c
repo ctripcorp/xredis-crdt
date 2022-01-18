@@ -231,59 +231,140 @@ typedef struct {
     size_t swap_memory;
 } rocksPrivData;
 
-void clientHoldKey(client *c, robj *key) {
+#define HC_HOLD_BITS        32
+#define HC_HOLD_MASK        ((1L<<HC_HOLD_BITS)-1)
+#define HC_INIT(hold, swap) ((swap << HC_HOLD_BITS) + hold)
+#define HC_HOLD(hc, swap)   (hc + (swap << HC_HOLD_BITS) + 1)
+#define HC_UNHOLD(hc)       (hc - 1)
+#define HC_HOLD_COUNT(hc)   ((hc) & HC_HOLD_MASK)
+#define HC_SWAP_COUNT(hc)   ((hc) >> HC_HOLD_BITS)
+
+void clientHoldKey(client *c, robj *key, int64_t swap) {
     dictEntry *de;
     redisDb *db = c->db;
-    int64_t hold_count;
+    int64_t hc;
 
     /* No need to hold key if it has already been holded */
     if (dictFind(c->hold_keys, key)) return;
     incrRefCount(key);
-    dictAdd(c->hold_keys, key, (void*)1);
+    dictAdd(c->hold_keys, key, (void*)HC_INIT(1, swap));
 
     /* Add key to server & client hold_keys */
     if ((de = dictFind(db->hold_keys, key))) {
-        hold_count = dictGetSignedIntegerVal(de)+1;
-        dictSetSignedIntegerVal(de, hold_count);
-        serverLog(LL_DEBUG, "h %s (%ld)", (sds)key->ptr, hold_count);
+        hc = dictGetSignedIntegerVal(de);
+        dictSetSignedIntegerVal(de, HC_HOLD(hc, swap));
+        serverLog(LL_DEBUG, "h %s (%ld,%ld)", (sds)key->ptr, HC_HOLD_COUNT(hc), HC_SWAP_COUNT(hc));
     } else {
         incrRefCount(key);
-        dictAdd(db->hold_keys, key, (void*)1);
-        serverLog(LL_DEBUG, "h %s (%ld)", (sds)key->ptr, (int64_t)1);
+        dictAdd(db->hold_keys, key, (void*)HC_INIT(1, swap));
+        serverLog(LL_DEBUG, "h %s (%ld,%ld)", (sds)key->ptr, (int64_t)1, swap);
+    }
+}
+
+void dbEvictAsapLater(redisDb *db, robj *key) {
+    incrRefCount(key);
+    listAddNodeTail(db->evict_asap, key);
+}
+
+static int dbEvictAsap(redisDb *db) {
+    int evicted = 0;
+    listIter li;
+    listNode *ln;
+
+    listRewind(db->evict_asap, &li);
+    while ((ln = listNext(&li))) {
+        int evict_result;
+        robj *key = listNodeValue(ln);
+
+        dbEvict(db, key, &evict_result);
+
+        if (evict_result == EVICT_FAIL_HOLDED ||
+                evict_result == EVICT_FAIL_SWAPPING) {
+            /* Try evict again if key is holded or swapping */
+            listAddNodeHead(db->evict_asap, key);
+        } else {
+            decrRefCount(key);
+            evicted++;
+        }
+        listDelNode(db->evict_asap, ln);
+    }
+    return evicted;
+}
+
+int evictAsap() {
+    static mstime_t stat_mstime;
+    static long stat_evict, stat_scan, stat_loop;
+    int i, evicted = 0;
+
+    for (i = 0; i < server.dbnum; i++) {
+        redisDb *db = server.db+i;
+        if (listLength(db->evict_asap)) {
+            stat_scan += listLength(db->evict_asap);
+            evicted += dbEvictAsap(db);
+        }
+    }
+
+    stat_loop++;
+    stat_evict += evicted;
+
+    if (server.mstime - stat_mstime > 1000) {
+        if (stat_scan > 0) {
+            serverLog(LL_VERBOSE, "EvictAsap loop=%ld,scaned=%ld,swapped=%ld",
+                    stat_loop, stat_scan, stat_evict);
+        }
+        stat_mstime = server.mstime;
+        stat_loop = 0, stat_evict = 0, stat_scan = 0;
+    }
+
+    return evicted;
+}
+
+inline static void dbUnholdKey(redisDb *db, robj *key, int64_t hc) {
+    dictDelete(db->hold_keys, key);
+
+    /* Evict key as soon as command finishs and there is a saving child,
+     * so that keys won't be swapped in and out frequently and causing
+     * copy on write madness. */
+    if (HC_SWAP_COUNT(hc) > 0 && (server.rdb_child_pid != -1 ||
+                server.aof_child_pid != -1 ||
+                crdtServer.rdb_child_pid != -1)) {
+        dbEvictAsapLater(db, key);
     }
 }
 
 void clientUnholdKey(client *c, robj *key) {
     dictEntry *de;
-    int64_t hold_count;
+    int64_t hc;
     redisDb *db = c->db;
 
     if (dictDelete(c->hold_keys, key) == DICT_ERR) return;
     serverAssert(de = dictFind(db->hold_keys, key));
-    hold_count = dictGetSignedIntegerVal(de)-1;
-    if (hold_count > 0) {
-        dictSetSignedIntegerVal(de, hold_count);
+    hc = HC_UNHOLD(dictGetSignedIntegerVal(de));
+
+    if (HC_HOLD_COUNT(hc) > 0) {
+        dictSetSignedIntegerVal(de, hc);
     } else {
-        dictDelete(db->hold_keys, key);
+        dbUnholdKey(db, key, hc);
     }
-    serverLog(LL_DEBUG, "u %s (%ld)", (sds)key->ptr, hold_count);
+    serverLog(LL_DEBUG, "u %s (%ld,%ld)", (sds)key->ptr, HC_HOLD_COUNT(hc), HC_SWAP_COUNT(hc));
 }
 
 void clientUnholdKeys(client *c) {
     dictIterator *di;
     dictEntry *cde, *dde;
-    int64_t hold_count;
+    int64_t hc;
+    redisDb *db = c->db;
 
     di = dictGetIterator(c->hold_keys);
     while ((cde = dictNext(di))) {
-        serverAssert(dde = dictFind(c->db->hold_keys, dictGetKey(cde)));
-        hold_count = dictGetSignedIntegerVal(dde)-1;
-        if (hold_count > 0) {
-            dictSetSignedIntegerVal(dde, hold_count);
+        serverAssert(dde = dictFind(db->hold_keys, dictGetKey(cde)));
+        hc = HC_UNHOLD(dictGetSignedIntegerVal(dde));
+        if (HC_HOLD_COUNT(hc) > 0) {
+            dictSetSignedIntegerVal(dde, hc);
         } else {
-            dictDelete(c->db->hold_keys, dictGetKey(cde));
+            dbUnholdKey(db, dictGetKey(cde), hc);
         }
-        serverLog(LL_DEBUG, "u. %s (%ld)", (sds) ((robj*)dictGetKey(cde))->ptr, hold_count);
+        serverLog(LL_DEBUG, "u. %s (%ld,%ld)", (sds) ((robj*)dictGetKey(cde))->ptr, HC_HOLD_COUNT(hc), HC_SWAP_COUNT(hc));
     }
     dictReleaseIterator(di);
 
@@ -522,7 +603,7 @@ int clientSwapSwaps(client *c, getSwapsResult *result, clientSwapFinishedCallbac
         if (cb && s->key && ((c->client_hold_mode == CLIENT_HOLD_MODE_CMD) ||
                     (c->client_hold_mode == CLIENT_HOLD_MODE_EVICT && nswaps > oswaps) ||
                     (c->client_hold_mode == CLIENT_HOLD_MODE_REPL))) {
-            clientHoldKey(c, s->key);
+            clientHoldKey(c, s->key, nswaps - oswaps);
         }
 
         char *sign = nswaps > oswaps ? "+" : "=";
@@ -998,7 +1079,7 @@ int clientEvictNoReply(client *c, robj *key) {
 
 int dbEvict(redisDb *db, robj *key, int *evict_result) {
     int nswap, dirty;
-    robj *o;
+    robj *o, *e;
     client *c = server.evict_clients[db->id];
 
     if (server.scs && listLength(server.scs->swapclients)) {
@@ -1016,8 +1097,12 @@ int dbEvict(redisDb *db, robj *key, int *evict_result) {
         return 0;
     }
 
-    if (lookupEvict(db, key)) {
-        if (evict_result) *evict_result = EVICT_FAIL_SWAPPING;
+    if ((e = lookupEvict(db, key))) {
+        if (e->evicted) {
+            if (evict_result) *evict_result = EVICT_FAIL_EVICTED;
+        } else {
+            if (evict_result) *evict_result = EVICT_FAIL_SWAPPING;
+        }
         return 0;
     }
 

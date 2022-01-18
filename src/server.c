@@ -2093,6 +2093,7 @@ void initServer(struct redisServer *srv) {
             srv->db[j].dict = dictCreate(&dbDictType, NULL);
             srv->db[j].evict = dictCreate(&evictDictType, NULL);
             srv->db[j].hold_keys = dictCreate(&objectKeyPointerValueDictType, NULL);
+            srv->db[j].evict_asap = listCreate();
             srv->db[j].expires = dictCreate(&keyptrDictType, NULL);
             srv->db[j].deleted_keys = dictCreate(&dbDictType, NULL);
             srv->db[j].blocking_keys = dictCreate(&keylistDictType, NULL);

@@ -436,6 +436,9 @@ int freeMemoryIfNeeded(void) {
      * expires and evictions of keys not being performed. */
     if (clientsArePaused()) return C_OK;
 
+    /* Evict keys registered to be evicted ASAP. */
+    evictAsap();
+
     /* Check if we are over the memory usage limit. If we are not, no need
      * to subtract the slaves output buffers. We can just return ASAP. */
     mem_reported = getUsedMemory();

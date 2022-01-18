@@ -692,6 +692,7 @@ typedef struct redisDb {
     /* swap */
     dict *evict;                /* evicted keys(or subkeys). */
     dict *hold_keys;            /* holded keys. */
+    list *evict_asap;           /* keys to be evicted asap. */
 } redisDb;
 
 /* Client MULTI/EXEC state */
@@ -2491,11 +2492,14 @@ void replClientDiscardSwappingState(client *c);
 #define EVICT_SUCC_SWAPPED      1
 #define EVICT_SUCC_FREED        2
 #define EVICT_FAIL_ABSENT       -1
-#define EVICT_FAIL_SWAPPING     -2
-#define EVICT_FAIL_HOLDED       -3
-#define EVICT_FAIL_UNSUPPORTED  -4
+#define EVICT_FAIL_EVICTED      -2
+#define EVICT_FAIL_SWAPPING     -3
+#define EVICT_FAIL_HOLDED       -4
+#define EVICT_FAIL_UNSUPPORTED  -5
 int dbEvict(redisDb *db, robj *key, int *evict_result);
 int dbExpire(redisDb *db, robj *key);
+void dbEvictAsapLater(redisDb *db, robj *key);
+int evictAsap();
 
 #define SWAP_RL_NO      0
 #define SWAP_RL_SLOW    1
