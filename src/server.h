@@ -172,6 +172,8 @@ long long get_min_backstream_vcu();
 #define CONFIG_DEFAULT_VECTORCLOCK_UNIT -1
 #define CONFIG_DEFAULT_MAXDISK 0
 #define CONFIG_DEFAULT_DEBUG_EVICT_KEYS 0
+#define CONFIG_DEFAULT_PS_PARALLISM_RDB 32
+#define CONFIG_DEFAULT_PS_PARALLISM_CRDT 32
 #define CONFIG_DEFAULT_SWAP_MEMORY_SLOWDOWN 64*1024*1024
 #define CONFIG_DEFAULT_SWAP_MEMORY_STOP 128*1024*1024
 #define CONFIG_DEFAULT_MAXMEMORY_OOM_PERCENTAGE 200
@@ -543,7 +545,7 @@ typedef void (*moduleTypeGetDataSwapsFunc)(struct RedisModuleCtx *ctx, struct re
 typedef void (*moduleSwapFinishedCallback)(struct RedisModuleCtx *ctx, int action, char *rawkey, char *rawval, void *pd);
 typedef int (*moduleTypeSwapAnaFunc)(struct RedisModuleCtx *ctx, struct redisObject *key, struct redisObject *subkey, int *action, char **rawkey, char **rawval, moduleSwapFinishedCallback *cb, void **pd);
 typedef int (*complementObjectFunc)(void **pdupptr, sds rawkey, sds rawval, void *pd);
-typedef void *(*moduleTypeGetComplementSwapsFunc)(struct RedisModuleCtx *ctx, struct redisObject *key, struct getSwapsResult *result, complementObjectFunc *comp, void **pd);
+typedef void *(*moduleTypeGetComplementSwapsFunc)(struct RedisModuleCtx *ctx, struct redisObject *key, int mode, int *type, struct getSwapsResult *result, complementObjectFunc *comp, void **pd);
 
 /* The module type, which is referenced in each value of a given type, defines
  * the methods and links to the module exporting the type. */
@@ -1415,6 +1417,9 @@ struct redisServer {
     list *repl_worker_clients_free; /* free clients for repl(slaveof & peerof) swap. */
     list *repl_worker_clients_used; /* used clients for repl swap. */
     list *repl_swapping_clients; /* list of repl swapping clients. */
+    /* parallel swap */
+    int ps_parallism_rdb;  /* parallel swap parallelism for rdb save. */
+    int ps_parallism_crdt;  /* parallel swap parallelism for crdt merge. */
 }redisServer;
 
 typedef struct pubsubPattern {
@@ -1575,7 +1580,7 @@ void moduleSetupSwappingClients(moduleValue *mv, client *c, robj *key, robj *sub
 void moduleGetDataSwaps(moduleValue *mv, client *c, robj *key, int mode, getSwapsResult *result);
 int moduleSwapAna(moduleValue *mv, client *c, robj *key, robj *subkey, int *action, char **rawkey, char **rawval, moduleSwapFinishedCallback *cb, void **pd);
 void moduleGetCommandSwaps(struct redisCommand *cmd, robj **argv, int argc, getSwapsResult *result);
-void *moduleGetComplementSwaps(moduleValue *mv, client *c, robj *key, getSwapsResult *result, complementObjectFunc *comp, void **pd);
+void *moduleGetComplementSwaps(moduleValue *mv, client *c, robj *key, int mode, int *type, getSwapsResult *result, complementObjectFunc *comp, void **pd);
 void moduleSwapFinished(client *c, int action, char *rawkey, char *rawval, moduleSwapFinishedCallback cb, void *pd);
 
 /* Utils */
@@ -2522,6 +2527,25 @@ void parallelSwapFree(parallelSwap *ps);
 int parallelSwapSubmit(parallelSwap *ps, sds rawkey, parallelSwapFinishedCb cb, void *pd);
 int parallelSwapDrain(parallelSwap *ps);
 
+/* complement swap */
+#define COMP_MODE_RDB           0
+#define COMP_MODE_CRDT_MERGE    1
+#define COMP_TYPE_OBJ           0
+#define COMP_TYPE_RAW           1
+
+typedef struct {
+    int type;
+    void *value;
+    robj *evict;
+}compVal;
+
+compVal *compValNew(int type, void *value, robj *evict);
+void compValFree(compVal *cv);
+compVal *getComplementSwaps(redisDb *db, robj *key, int mode, getSwapsResult *result, complementObjectFunc *comp, void **pd);
+int complementObj(robj *dup, sds rawkey, sds rawval, complementObjectFunc comp, void *pd);
+int complementCompVal(compVal *cv, sds rawkey, sds rawval, complementObjectFunc comp, void *pd);
+
+
 /* rks */
 struct swappingClients *lookupSwappingClients(client *c, robj *key, robj *subkey);
 void setupSwappingClients(client *c, robj *key, robj *subkey, swappingClients *scs);
@@ -2530,8 +2554,6 @@ void getExpireSwaps(client *c, robj *key, getSwapsResult *result);
 int swapAna(client *c, robj *key, robj *subkey, int *action, char **rawkey, char **rawval, moduleSwapFinishedCallback *cb, void **pd);
 void getSwaps(client *c, getSwapsResult *result);
 void releaseSwaps(getSwapsResult *result);
-robj *getComplementSwaps(redisDb *db, robj *key, getSwapsResult *result, complementObjectFunc *comp, void **pd);
-int complementObject(robj *dup, sds rawkey, sds rawval, complementObjectFunc comp, void *pd);
 
 /* rks string */
 int stringSwapAna(client *c, robj *key, robj *subkey, int *action, char **rawkey, char **rawval, moduleSwapFinishedCallback *cb, void **pd);

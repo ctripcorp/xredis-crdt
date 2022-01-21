@@ -637,13 +637,13 @@ void moduleGetDataSwaps(moduleValue *mv, client *c, robj *key, int mode, getSwap
     moduleFreeContext(&ctx);
 }
 
-void *moduleGetComplementSwaps(moduleValue *mv, client *c, robj *key, getSwapsResult *result, complementObjectFunc *comp, void **pd) {
+void *moduleGetComplementSwaps(moduleValue *mv, client *c, robj *key, int mode, int *type, getSwapsResult *result, complementObjectFunc *comp, void **pd) {
     RedisModuleCtx ctx = REDISMODULE_CTX_INIT;
     
     if (!mv->type->get_complement_swaps) return NULL;
     ctx.module = mv->type->module;
     ctx.client = c;
-    void *dup = mv->type->get_complement_swaps(&ctx, key, result, comp, pd);
+    void *dup = mv->type->get_complement_swaps(&ctx, key, mode, type, result, comp, pd);
     moduleFreeContext(&ctx);
     return dup;
 }
@@ -4022,6 +4022,14 @@ int RM_ModuleTypeSwapOut(RedisModuleKey *key, void **old_value) {
     return REDISMODULE_OK;
 }
 
+void RM_ModuleTypeFreeValue(moduleType *mt, void *value) {
+    mt->free(value);
+}
+
+char *RM_ModuleTypeGetName(moduleType *mt) {
+    return mt->name;
+}
+
 int RM_RocksDelete(RedisModuleCtx *ctx,RedisModuleString *keyname) {
     return rocksDelete(ctx->client->db,keyname);
 }
@@ -4070,6 +4078,30 @@ int RM_CrdtPubsubPublishMessage(robj* channel, robj *message) {
 /* --------------------------------------------------------------------------
  * RDB loading and saving functions
  * -------------------------------------------------------------------------- */
+
+void *RM_RdbEncode(moduleType *mt, void *value) {
+    rio sdsrdb;
+    RedisModuleIO io;
+
+    rioInitWithBuffer(&sdsrdb,sdsempty());
+    moduleInitIOContext(io,mt,&sdsrdb);
+    io.ver = 2;
+    mt->rdb_save(&io, value);
+
+    return sdsrdb.io.buffer.ptr;
+}
+
+void *RM_RdbDecode(moduleType *mt, void *raw) {
+    void *value;
+    rio sdsrdb;
+    RedisModuleIO io;
+
+    rioInitWithBuffer(&sdsrdb,raw);
+    moduleInitIOContext(io,mt,&sdsrdb);
+    io.ver = 2;
+    value = mt->rdb_load(&io, mt->id&1023);
+    return value;
+}
 
 /* Called when there is a load error in the context of a module. This cannot
  * be recovered like for the built-in types. */
@@ -5212,6 +5244,8 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(DbSetDirty);
     REGISTER_API(ModuleTypeSwapIn);
     REGISTER_API(ModuleTypeSwapOut);
+    REGISTER_API(ModuleTypeFreeValue);
+    REGISTER_API(ModuleTypeGetName);
     REGISTER_API(ModuleTypeReplaceValue);
     REGISTER_API(DeleteEvict);
     REGISTER_API(ModuleTypeAddEvict);
@@ -5223,6 +5257,8 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(RocksDelete);
     REGISTER_API(ModuleGetValue);
     REGISTER_API(ModuleGetTombstone);
+    REGISTER_API(RdbEncode);
+    REGISTER_API(RdbDecode);
     REGISTER_API(SaveUnsigned);
     REGISTER_API(LoadUnsigned);
     REGISTER_API(SaveSigned);

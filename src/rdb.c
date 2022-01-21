@@ -802,6 +802,83 @@ size_t rdbSavedObjectLen(robj *o) {
     return len;
 }
 
+/* NOTE: keep crdt &rawcrdt object encoding layout the same. */
+typedef void (*CrdtRdbSaveFunc)(redisDb*, rio*, void*, void*);
+
+int rdbSaveKeyCrdtPair(rio *rdb, redisDb *db, robj *key, robj *val, robj *tomb,
+                        long long expiretime, long long now, CrdtRdbSaveFunc save) {
+    void *moduleKey = NULL;
+    UNUSED(now);
+    if (expiretime != -1) {
+        if (rdbSaveType(rdb,RDB_OPCODE_EXPIRETIME_MS) == -1) return -1;
+        if (rdbSaveMillisecondTime(rdb,expiretime) == -1) return -1;
+    }
+    if (rdbSaveType(rdb,RDB_CRDT_VALUE) == -1) return -1;
+    if (rdbSaveStringObject(rdb,key) == -1) return -1; 
+    moduleKey = createModuleKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE, val, tomb, NULL/*FIXME*/);
+    save(db, rdb, &key, moduleKey);
+    if(moduleKey != NULL) closeModuleKey(moduleKey);
+    return 1;
+}
+
+/* Whole key encoding in rocksdb is the same as in rdb, so we skip encoding
+ * and decoding to reduce cpu usage. */ 
+int rdbSaveKeyRawCrdtPair(rio *rdb, redisDb *db, robj *key, robj *evict, sds raw,
+                        long long expiretime, long long now) {
+    robj *tomb;
+    moduleValue *mv;
+    moduleType *mt;
+    UNUSED(now);
+
+    if (isModuleCrdt(evict) != C_OK) return -1;
+
+    /* save crdt expire/type/key */
+    if (expiretime != -1) {
+        if (rdbSaveType(rdb,RDB_OPCODE_EXPIRETIME_MS) == -1) return -1;
+        if (rdbSaveMillisecondTime(rdb,expiretime) == -1) return -1;
+    }
+
+    if (rdbSaveType(rdb,RDB_CRDT_VALUE) == -1) return -1;
+    if (rdbSaveStringObject(rdb,key) == -1) return -1;
+
+    mv = evict->ptr;
+    mt = mv->type;
+
+    /* save crdt value */
+    if (rdbSaveLen(rdb, mt->id/*crdt_module_type_id*/) == -1) return -1;
+    if (rdbWriteRaw(rdb,raw,sdslen(raw)) == -1) return -1;
+
+    /* save crdt tombstone */
+    tomb = lookupTombstoneKey(db, key);
+    if (tomb != NULL) {
+        RedisModuleIO io;
+
+        mv = tomb->ptr;
+        mt = mv->type;
+        moduleInitIOContext(io,mt,rdb);
+        if (rdbSaveLen(rdb, mt->id/*crdt_module_type_id*/) == -1) return -1;
+        mt->rdb_save(&io, mv->value);
+        if (io.error) return -1;
+    }
+
+    /* save crdt eof */
+    if (rdbSaveLen(rdb, 0/*RDB_CRDT_EOF*/) == -1) return -1;
+    return 1;
+}
+
+int rdbSaveKeyCompValPair(rio *rdb, redisDb *db, robj *key, compVal *cv,
+                        long long expiretime, long long now)
+{
+    switch (cv->type) {
+    case COMP_TYPE_OBJ:
+        return rdbSaveKeyValuePair(rdb,key,cv->value,expiretime,now);
+    case COMP_TYPE_RAW:
+        return rdbSaveKeyRawCrdtPair(rdb,db,key,cv->evict,cv->value,expiretime,now);
+    default:
+        return -1;
+    }
+}
+
 /* Save a key-value pair, with expire time, type, key, value.
  * On error -1 is returned.
  * On success if the key was actually saved 1 is returned, otherwise 0
@@ -896,9 +973,8 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
 
     if (server.rdb_checksum)
         rdb->update_cksum = rioGenericUpdateChecksum;
-    void (*save)(redisDb*, rio*, void*, void*);
-    save = (void (*)(redisDb*, rio*, void*, void*))(unsigned long)getModuleFunction(CRDT_MODULE, SAVE_CRDT_VALUE);
-    if(save == NULL) {
+    CrdtRdbSaveFunc crdt_rdb_save = (CrdtRdbSaveFunc)(unsigned long)getModuleFunction(CRDT_MODULE, SAVE_CRDT_VALUE);
+    if(crdt_rdb_save == NULL) {
         serverLog(LL_WARNING, "crdt module save data function is null");
         return C_ERR;
     }
@@ -953,16 +1029,8 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
                 serverLog(LL_WARNING,"save value is not crdt key: %s", keystr);
                 if (rdbSaveKeyValuePair(rdb,&key,o,expire,now) == -1) goto werr;
             } else {
-                if (expire != -1) {
-                    if (rdbSaveType(rdb,RDB_OPCODE_EXPIRETIME_MS) == -1) return C_ERR;
-                    if (rdbSaveMillisecondTime(rdb,expire) == -1) return C_ERR;
-                }
-                if (rdbSaveType(rdb,RDB_CRDT_VALUE) == -1) return C_ERR;
-
-                if (rdbSaveStringObject(rdb,&key) == -1) return C_ERR; 
                 tombstone = lookupTombstoneKey(db, &key);
-                void* moduleKey = createModuleKey(db, &key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE, o, tombstone, NULL/*FIXME*/);
-                save(db, rdb, &key, moduleKey);
+                if (rdbSaveKeyCrdtPair(rdb,db,&key,o,tombstone,expire,now, crdt_rdb_save) == -1) goto werr;
             }
             
             /* When this RDB is produced as part of an AOF rewrite, move
@@ -983,16 +1051,14 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
         di = dictGetSafeIterator(db->deleted_keys);
         while((de = dictNext(di)) != NULL) {
             sds keystr = dictGetKey(de);
-            robj key, *o = dictGetVal(de);
+            robj key, *tombstone = dictGetVal(de);
             if(dictFind(db->dict,keystr)) {
                 continue;
             }
             initStaticStringObject(key,keystr);
-            if (rdbSaveType(rdb,RDB_CRDT_VALUE) == -1) return C_ERR;
-            if (rdbSaveStringObject(rdb,&key) == -1) return C_ERR;
-            void* moduleKey = createModuleKey(db, &key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE, NULL, o, NULL/*FIXME*/);
-            save(db, rdb, &key, moduleKey);
-            if(moduleKey != NULL) closeModuleKey(moduleKey);
+
+            if (rdbSaveKeyCrdtPair(rdb,db,&key,NULL,tombstone,-1,now,crdt_rdb_save) == -1) goto werr;
+
             if (flags & RDB_SAVE_AOF_PREAMBLE &&
                 rdb->processed_bytes > processed+AOF_READ_DIFF_INTERVAL_BYTES)
             {

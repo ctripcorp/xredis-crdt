@@ -291,9 +291,7 @@ keyCrdtMergeCtx *keyCrdtMergeCtxNew(crdtRdbSaveInfo *rsi, crdtFilterSplitFunc2 f
     ctx->filterFunc = filterFunc;
     ctx->freeFilterFunc = freeFilterfunc;
     ctx->rdb = rdb;
-    if (key) incrRefCount(key);
     ctx->key = key;
-    if (dup) incrRefCount(dup);
     ctx->dup = dup;
     ctx->expire = expire;
     ctx->totalswap = totalswap;
@@ -313,7 +311,7 @@ void keyCrdtMergeCtxFree(keyCrdtMergeCtx *ctx) {
 int crdtMergeSwapFinished(sds rawkey, sds rawval, void *_kvp) {
     keyCrdtMergeCtx *kvp = _kvp;
 
-    if (complementObject(kvp->dup, rawkey, rawval, kvp->comp, kvp->pd)) {
+    if (complementObj(kvp->dup, rawkey, rawval, kvp->comp, kvp->pd)) {
         serverLog(LL_WARNING, "[crdtMerge] comp object failed:%.*s %.*s",
                 (int)sdslen(rawkey), rawkey, (int)sdslen(rawval), rawval);
         goto err;
@@ -344,13 +342,13 @@ int crdtSendEvictMergeRequest2(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di,
     dictEntry *de;
     int num = 0;
 
-    parallelSwap *ps = parallelSwapNew(32);
+    parallelSwap *ps = parallelSwapNew(server.ps_parallism_crdt);
     /* Iterate this DB tombstone writing every entry that is locally changed, but not gc'ed*/
     while((de = dictNext(di)) != NULL) {
         int i;
         long long expire;
         sds keystr = dictGetKey(de);
-        robj *key, *dup, *val = dictGetVal(de);
+        robj *key, *dup = NULL, *val = dictGetVal(de);
         complementObjectFunc comp;
         void *pd;
         keyCrdtMergeCtx *kvp;
@@ -367,24 +365,27 @@ int crdtSendEvictMergeRequest2(rio *rdb, crdtRdbSaveInfo *rsi, dictIterator *di,
 
         /* swap result will be merged into duplicated object, to avoid messing
          * up keyspace and causing drastic COW. */
-        dup = getComplementSwaps(db, key, &result, &comp, &pd);
+        compVal *cv = getComplementSwaps(db, key, COMP_MODE_CRDT_MERGE, &result, &comp, &pd);
 
         /* no need to swap, normally it should not happend, we'are just being
          * protective here. */
-        if (result.numswaps == 0) {
+        if (result.numswaps == 0 || cv == NULL) {
             crdtSendMergeRequestKeyValuePair(rsi, filterFunc, freeFilterFunc,
                     rdb, key, val, expire, cmdname);
             decrRefCount(key);
-            if (dup) decrRefCount(dup);
+            if (cv) compValFree(cv);
             continue;
         }
 
+        /* currently peer replication does not support passthrough, we use only
+         * compVal->value for crdt replication. */
+        serverAssert(cv && cv->type == COMP_TYPE_OBJ);
+        dup = cv->value;
+        if (dup) incrRefCount(dup);
+        compValFree(cv);
+
         kvp = keyCrdtMergeCtxNew(rsi, filterFunc, freeFilterFunc, rdb, key, dup,
                 result.numswaps, expire, cmdname,  comp, pd);
-
-        /* key, dup ownership moved to keyCrdtMergeCtx. */
-        decrRefCount(key);
-        if (dup) decrRefCount(dup);
 
         for (i = 0; i < result.numswaps; i++) {
             swap *s = &result.swaps[i];

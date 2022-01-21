@@ -274,10 +274,43 @@ void getSwaps(client *c, getSwapsResult *result) {
     }
 }
 
-robj *getComplementSwaps(redisDb *db, robj *key, getSwapsResult *result, complementObjectFunc *comp, void **pd) {
-    void *dupptr;
-    robj *dup;
+/* Note value, evict are MOVEed into cv */
+compVal *compValNew(int type, void *cvv, robj *cve) {
+    compVal *cv = zmalloc(sizeof(compVal));
+
+    serverAssert((type == COMP_TYPE_OBJ && cve == NULL) ||
+            (type == COMP_TYPE_RAW && cve != NULL));
+
+    cv->type = type;
+    cv->value = cvv;
+    cv->evict = cve;
+
+    return cv;
+}
+
+void compValFree(compVal *cv) {
+    if (!cv) return;
+
+    switch (cv->type) {
+    case COMP_TYPE_RAW:
+        sdsfree(cv->value);
+        break;
+    case COMP_TYPE_OBJ:
+        decrRefCount(cv->value);
+        break;
+    default:
+        break;
+    }
+    if (cv->evict) decrRefCount(cv->evict);
+    zfree(cv);
+}
+
+compVal *getComplementSwaps(redisDb *db, robj *key, int mode, getSwapsResult *result, complementObjectFunc *comp, void **pd) {
+    void *comp_val;
+    int comp_type;
+    robj *dup = NULL, *cve, *cvv;
     moduleValue *mv;
+    compVal *cv = NULL;
     client *c = server.dummy_clients[db->id];
     robj *o = lookupKey(db, key, LOOKUP_NOTOUCH);
     robj *e = lookupEvict(db, key);
@@ -289,8 +322,15 @@ robj *getComplementSwaps(redisDb *db, robj *key, getSwapsResult *result, complem
     switch (e->type) {
     case OBJ_MODULE:
         mv = e->ptr;
-        dupptr = moduleGetComplementSwaps(mv, c, key, result, comp, pd);
-        dup = createModuleObject(mv->type, dupptr);
+        comp_val = moduleGetComplementSwaps(mv, c, key, mode, &comp_type, result, comp, pd);
+        if (comp_type == COMP_TYPE_OBJ) {
+            dup = createModuleObject(mv->type, comp_val);
+            cvv = dup, cve = NULL;
+        } else {
+            incrRefCount(e);
+            cvv = comp_val, cve = e;
+        }
+        cv = compValNew(comp_type, cvv, cve);
         break;
     case OBJ_STRING:
     case OBJ_LIST:
@@ -300,11 +340,16 @@ robj *getComplementSwaps(redisDb *db, robj *key, getSwapsResult *result, complem
         break;
     }
 
-    if (o) dup->lru = o->lru; /* also reserve the right LFU from db.dict */
-    return dup;
+    if (o && dup) dup->lru = o->lru; /* also reserve the right LFU from db.dict */
+    return cv;
 }
 
-int complementObject(robj *dup, sds rawkey, sds rawval, complementObjectFunc comp, void *pd) {
+int complementRaw(void **raw, sds rawkey, sds rawval, complementObjectFunc comp, void *pd) {
+	serverAssert(*raw == NULL);
+	return comp(raw, rawkey, rawval, pd);
+}
+
+int complementObj(robj *dup, sds rawkey, sds rawval, complementObjectFunc comp, void *pd) {
     moduleValue *mv;
     switch (dup->type) {
     case OBJ_MODULE:
@@ -316,6 +361,16 @@ int complementObject(robj *dup, sds rawkey, sds rawval, complementObjectFunc com
     case OBJ_SET:
     case OBJ_ZSET:
         return comp(&dup->ptr, rawkey, rawval, pd);
+    }
+    return 0;
+}
+
+int complementCompVal(compVal *cv, sds rawkey, sds rawval, complementObjectFunc comp, void *pd) {
+    switch (cv->type) {
+    case COMP_TYPE_OBJ:
+        return complementObj(cv->value, rawkey, rawval, comp, pd);
+    case COMP_TYPE_RAW:
+        return complementRaw(&cv->value, rawkey, rawval, comp, pd); 
     }
     return 0;
 }

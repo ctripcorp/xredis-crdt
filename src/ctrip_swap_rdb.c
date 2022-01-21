@@ -30,8 +30,9 @@
 
 typedef struct {
     rio *rdb;               /* rdb stream */
+    redisDb *db;            /* db */
     robj *key;              /* key object */
-    robj *dup;              /* val object */
+    compVal *cv;            /* comp val */
     long long expire;       /* expire time */
     long long now;          /* now */
     int totalswap;          /* # of needed swaps */
@@ -40,13 +41,14 @@ typedef struct {
     void *pd;               /* comp function private data  */
 } keyValuePairCtx;
 
-keyValuePairCtx *keyValuePairCtxNew(rio *rdb, robj *key, robj *dup,
-        int totalswap, long long expire, long long now,
+keyValuePairCtx *keyValuePairCtxNew(rio *rdb, redisDb *db, robj *key,
+        compVal *cv, int totalswap, long long expire, long long now,
         complementObjectFunc comp, void *pd) {
     keyValuePairCtx *ctx = zmalloc(sizeof(keyValuePairCtx));
     ctx->rdb = rdb;
+    ctx->db = db;
     ctx->key = key;
-    ctx->dup = dup;
+    ctx->cv = cv;
     ctx->expire = expire;
     ctx->now = now;
     ctx->totalswap = totalswap;
@@ -58,22 +60,31 @@ keyValuePairCtx *keyValuePairCtxNew(rio *rdb, robj *key, robj *dup,
 
 void keyValuePairCtxFree(keyValuePairCtx *kvp) {
     decrRefCount(kvp->key);
-    decrRefCount(kvp->dup);
+    compValFree(kvp->cv);
     zfree(kvp);
 }
 
+int rdbSaveKeyCompValPair(rio *rdb, redisDb *db, robj *key, compVal *cv, long long expiretime, long long now);
+
 int rdbSaveSwapFinished(sds rawkey, sds rawval, void *_kvp) {
     keyValuePairCtx *kvp = _kvp;
+    compVal *cv = kvp->cv;
 
-    if (complementObject(kvp->dup, rawkey, rawval, kvp->comp, kvp->pd)) {
+    if (complementCompVal(cv, rawkey, rawval, kvp->comp, kvp->pd)) {
         serverLog(LL_WARNING, "[rdbSaveEvicted] comp object failed:%.*s %.*s",
                 (int)sdslen(rawkey), rawkey, (int)sdslen(rawval), rawval);
         goto err;
     }
 
+    /* ugly hack: rawval is moved into cv if it's a RAW comp, null rawval here
+     * to avoid rawval double free. */
+    if (cv && cv->type == COMP_TYPE_RAW) {
+        rawval = NULL;
+    }
+
     kvp->numswapped++;
     if (kvp->numswapped == kvp->totalswap) {
-        if (rdbSaveKeyValuePair(kvp->rdb, kvp->key, kvp->dup,
+        if (rdbSaveKeyCompValPair(kvp->rdb, kvp->db, kvp->key, kvp->cv,
                     kvp->expire, kvp->now) == -1) {
             keyValuePairCtxFree(kvp);
             goto err;
@@ -97,7 +108,7 @@ int rdbSaveEvictDb(rio *rdb, int *error, redisDb *db) {
     dict *d = db->evict;
     long long now = mstime(), num = 0;
 
-    parallelSwap *ps = parallelSwapNew(32);
+    parallelSwap *ps = parallelSwapNew(server.ps_parallism_rdb);
 
     di = dictGetSafeIterator(d);
     while((de = dictNext(di)) != NULL) {
@@ -105,7 +116,8 @@ int rdbSaveEvictDb(rio *rdb, int *error, redisDb *db) {
         long long expire;
         keyValuePairCtx *kvp;
         sds keystr = dictGetKey(de);
-        robj *key, *dup, *val = dictGetVal(de);
+        robj *key, *val = dictGetVal(de);
+        compVal *cv;
         complementObjectFunc comp;
         void *pd;
         getSwapsResult result = GETSWAPS_RESULT_INIT;
@@ -120,18 +132,18 @@ int rdbSaveEvictDb(rio *rdb, int *error, redisDb *db) {
 
         /* swap result will be merged into duplicated object, to avoid messing
          * up keyspace and causing drastic COW. */
-        dup = getComplementSwaps(db, key, &result, &comp, &pd);
+        cv = getComplementSwaps(db, key, COMP_MODE_RDB, &result, &comp, &pd);
 
         /* no need to swap, normally it should not happend, we'are just being
          * protective here. */
         if (result.numswaps == 0) {
             decrRefCount(key);
-            if (dup) decrRefCount(dup);
+            if (cv) compValFree(cv);
             rdbSaveKeyValuePair(rdb, key, val, expire, now);
             continue;
         }
 
-        kvp = keyValuePairCtxNew(rdb, key, dup, result.numswaps, expire, now,
+        kvp = keyValuePairCtxNew(rdb, db, key, cv, result.numswaps, expire, now,
                 comp, pd);
 
         for (i = 0; i < result.numswaps; i++) {

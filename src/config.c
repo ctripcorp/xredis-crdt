@@ -321,6 +321,10 @@ void loadServerConfigFromString(char *config) {
             }
         } else if (!strcasecmp(argv[0],"debug-evict-keys") && argc == 2) {
             server.debug_evict_keys = atoi(argv[1]);
+        } else if (!strcasecmp(argv[0],"ps-parallism-rdb") && argc == 2) {
+            server.ps_parallism_rdb = atoi(argv[1]);
+        } else if (!strcasecmp(argv[0],"ps-parallism-crdt") && argc == 2) {
+            server.ps_parallism_crdt = atoi(argv[1]);
         } else if (!strcasecmp(argv[0],"maxdisk") && argc == 2) {
             server.maxdisk = memtoll(argv[1],NULL);
         } else if (!strcasecmp(argv[0],"swap-memory-slowdown") && argc == 2) {
@@ -1234,6 +1238,10 @@ void configSetCommand(client *c, struct redisServer *srv) {
             disableWatchdog();
     } config_set_numerical_field(
       "debug-evict-keys",srv->debug_evict_keys,-1,LLONG_MAX) {
+    } config_set_numerical_field(
+      "ps-parallism-rdb",srv->ps_parallism_rdb,4,4096) {
+    } config_set_numerical_field(
+      "ps-parallism-crdt",srv->ps_parallism_crdt,4,4096) {
 
     /* Memory fields.
      * config_set_memory_field(name,var) */
@@ -1342,6 +1350,8 @@ void configGetCommand(client *c, struct redisServer *srv) {
 
     /* Numerical values */
     config_get_numerical_field("debug-evict-keys",srv->debug_evict_keys);
+    config_get_numerical_field("ps-parallism-rdb",srv->ps_parallism_rdb);
+    config_get_numerical_field("ps-parallism-crdt",srv->ps_parallism_crdt);
     config_get_numerical_field("maxdisk",srv->maxdisk);
     config_get_numerical_field("swap-memory-slowdown",srv->swap_memory_slowdown);
     config_get_numerical_field("swap-memory-stop",srv->swap_memory_stop);
@@ -2198,6 +2208,8 @@ int rewriteConfig(char *path) {
     rewriteConfigStringOption(state,"requirepass",server.requirepass,NULL);
     rewriteConfigNumericalOption(state,"maxclients",server.maxclients,CONFIG_DEFAULT_MAX_CLIENTS);
     rewriteConfigBytesOption(state,"debug-evict-keys",server.debug_evict_keys,CONFIG_DEFAULT_DEBUG_EVICT_KEYS);
+    rewriteConfigBytesOption(state,"ps-parallism-rdb",server.ps_parallism_rdb,CONFIG_DEFAULT_PS_PARALLISM_RDB);
+    rewriteConfigBytesOption(state,"ps-parallism-crdt",server.ps_parallism_crdt,CONFIG_DEFAULT_PS_PARALLISM_CRDT);
     rewriteConfigBytesOption(state,"maxdisk",server.maxdisk,CONFIG_DEFAULT_MAXDISK);
     rewriteConfigBytesOption(state,"swap-memory-slowdown",server.swap_memory_slowdown,CONFIG_DEFAULT_SWAP_MEMORY_SLOWDOWN);
     rewriteConfigBytesOption(state,"swap-memory-stop",server.swap_memory_stop,CONFIG_DEFAULT_SWAP_MEMORY_STOP);

@@ -1734,6 +1734,8 @@ void initServerConfig(struct redisServer *srv) {
     srv->swap_memory_stop = CONFIG_DEFAULT_SWAP_MEMORY_STOP;
     srv->maxmemory_oom_percentage = CONFIG_DEFAULT_MAXMEMORY_OOM_PERCENTAGE;
     srv->debug_rio_latency = CONFIG_DEFAULT_DEBUG_RIO_LATENCY;
+    srv->ps_parallism_rdb = CONFIG_DEFAULT_PS_PARALLISM_RDB;
+    srv->ps_parallism_crdt = CONFIG_DEFAULT_PS_PARALLISM_CRDT;
 }
 
 extern char **environ;
