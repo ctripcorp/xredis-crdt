@@ -319,15 +319,19 @@ int evictAsap() {
     return evicted;
 }
 
+int serverForked() {
+    return server.rdb_child_pid != -1 ||
+                server.aof_child_pid != -1 ||
+                crdtServer.rdb_child_pid != -1;
+}
+
 inline static void dbUnholdKey(redisDb *db, robj *key, int64_t hc) {
     dictDelete(db->hold_keys, key);
 
     /* Evict key as soon as command finishs and there is a saving child,
      * so that keys won't be swapped in and out frequently and causing
      * copy on write madness. */
-    if (HC_SWAP_COUNT(hc) > 0 && (server.rdb_child_pid != -1 ||
-                server.aof_child_pid != -1 ||
-                crdtServer.rdb_child_pid != -1)) {
+    if (HC_SWAP_COUNT(hc) > 0 && serverForked()) {
         dbEvictAsapLater(db, key);
     }
 }

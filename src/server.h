@@ -2498,6 +2498,7 @@ void replClientDiscardSwappingState(client *c);
 #define EVICT_FAIL_UNSUPPORTED  -5
 int dbEvict(redisDb *db, robj *key, int *evict_result);
 int dbExpire(redisDb *db, robj *key);
+int serverForked();
 void dbEvictAsapLater(redisDb *db, robj *key);
 int evictAsap();
 

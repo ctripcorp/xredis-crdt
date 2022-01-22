@@ -176,6 +176,8 @@ void dbAdd(redisDb *db, robj *key, robj *val) {
     serverAssertWithInfo(NULL,key,retval == DICT_OK);
     if (val->type == OBJ_LIST) signalListAsReady(db, key);
     if (server.cluster_enabled) slotToKeyAdd(key);
+    /* Newly added key are scheduled to evict asap to reduce cow. */
+    if (serverForked()) dbEvictAsapLater(db, key);
  }
 
 /* Overwrite an existing key with a new value. Incrementing the reference
