@@ -278,8 +278,8 @@ void getSwaps(client *c, getSwapsResult *result) {
 compVal *compValNew(int type, void *cvv, robj *cve) {
     compVal *cv = zmalloc(sizeof(compVal));
 
-    serverAssert((type == COMP_TYPE_OBJ && cve == NULL) ||
-            (type == COMP_TYPE_RAW && cve != NULL));
+    serverAssert((type == COMP_TYPE_OBJ && cvv != NULL && cve == NULL) ||
+            (type == COMP_TYPE_RAW && cvv == NULL && cve != NULL));
 
     cv->type = type;
     cv->value = cvv;
