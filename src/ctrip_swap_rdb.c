@@ -125,8 +125,6 @@ int rdbSaveEvictDb(rio *rdb, int *error, redisDb *db) {
         /* skip if it's just a swapping key(not evicted), already saved it. */
         if (!val->evicted) continue;
 
-        num++;
-
         key = createStringObject(keystr, sdslen(keystr));
         expire = getExpire(db,key);
 
@@ -152,6 +150,10 @@ int rdbSaveEvictDb(rio *rdb, int *error, redisDb *db) {
                 goto werr;
             }
         }
+
+        /* Note that complement swaps are refs to rawkey (moved to rocks). */
+        getSwapsFreeResult(&result);
+        num++;
     }
     dictReleaseIterator(di);
 

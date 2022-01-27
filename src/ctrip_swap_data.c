@@ -301,7 +301,6 @@ void compValFree(compVal *cv) {
     default:
         break;
     }
-    if (cv->evict) decrRefCount(cv->evict);
     zfree(cv);
 }
 
@@ -327,7 +326,6 @@ compVal *getComplementSwaps(redisDb *db, robj *key, int mode, getSwapsResult *re
             dup = createModuleObject(mv->type, comp_val);
             cvv = dup, cve = NULL;
         } else {
-            incrRefCount(e);
             cvv = comp_val, cve = e;
         }
         cv = compValNew(comp_type, cvv, cve);

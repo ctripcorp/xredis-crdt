@@ -328,12 +328,14 @@ robj *dbUnshareStringValue(redisDb *db, robj *key, robj *o) {
 
 void dbPauseRehash(redisDb *db) {
     dictPauseRehashing(db->dict);
+    dictPauseRehashing(db->expires);
     dictPauseRehashing(db->evict);
     dictPauseRehashing(db->deleted_keys);
 }
 
 void dbResumeRehash(redisDb *db) {
     dictResumeRehashing(db->dict);
+    dictResumeRehashing(db->expires);
     dictResumeRehashing(db->evict);
     dictResumeRehashing(db->deleted_keys);
 }

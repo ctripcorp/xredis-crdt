@@ -2543,7 +2543,8 @@ int parallelSwapDrain(parallelSwap *ps);
 typedef struct {
     int type;
     void *value;
-    robj *evict;
+    robj *evict; /* note that evict do not own evict (refcount not incremented
+                    to reduce cow), we have to make sure evict exists. */
 }compVal;
 
 compVal *compValNew(int type, void *value, robj *evict);
