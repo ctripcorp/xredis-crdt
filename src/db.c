@@ -326,6 +326,18 @@ robj *dbUnshareStringValue(redisDb *db, robj *key, robj *o) {
     return o;
 }
 
+void dbPauseRehash(redisDb *db) {
+    dictPauseRehashing(db->dict);
+    dictPauseRehashing(db->evict);
+    dictPauseRehashing(db->deleted_keys);
+}
+
+void dbResumeRehash(redisDb *db) {
+    dictResumeRehashing(db->dict);
+    dictResumeRehashing(db->evict);
+    dictResumeRehashing(db->deleted_keys);
+}
+
 /* Remove all keys from all the databases in a Redis server.
  * If callback is given the function is called from time to time to
  * signal that work is in progress.

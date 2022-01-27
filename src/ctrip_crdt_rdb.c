@@ -504,8 +504,10 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
             dictSize(d) == 0 && dictSize(db->evict) == 0 &&
             dictSize(db->deleted_keys) == 0 
         ) continue;
-        di = dictGetSafeIterator(d);
-        if (!di) return C_ERR;
+
+        /* Pause rehash to reduce cow (iter db.evict might also do dictFind 
+         * db.dict, which might trigger dict rehash) . */
+        dbPauseRehash(db);
 
         /*Send select command first before we send merge command*/
         robj *selectcmd;
@@ -528,6 +530,8 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
         if (needDelete == C_OK) {
             decrRefCount(selectcmd);
         }
+
+        di = dictGetSafeIterator(d);
         if (dictSize(d) != 0) {
             // int num = crdtSendMergeRequest(rdb, rsi, di, "CRDT.Merge", dataFilter, freeDataFilter,db);
             int num = crdtSendMergeRequest2(SEND_MERGE_REQUEST_DICT,
@@ -552,7 +556,6 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
 
         d = db->deleted_keys;
         di = dictGetSafeIterator(d);
-        if (!di) return C_ERR;
         if (dictSize(d) != 0) {
             // int num = crdtSendMergeRequest(rdb, rsi, di, "CRDT.Merge_Del", tombstoneFilter, freeTombstoneFilter ,NULL);
             int num = crdtSendMergeRequest2(SEND_MERGE_REQUEST_TOMBSTONE,
@@ -563,6 +566,8 @@ crdtRdbSaveRio(rio *rdb, int *error, crdtRdbSaveInfo *rsi) {
             serverLog(LL_WARNING, "db :%d ,send crdt tombstone num: %d", j, num);
         }
         dictReleaseIterator(di);        
+
+        dbResumeRehash(db);
     }
     serverLog(LL_NOTICE, "[CRDT] [crdtRdbSaveRio] end");
     return C_OK;

@@ -2073,6 +2073,8 @@ int dbSyncDelete(redisDb *db, robj *key);
 int dbDelete(redisDb *db, robj *key);
 int dbDeleteEvict(redisDb *db, robj *key);
 robj *dbUnshareStringValue(redisDb *db, robj *key, robj *o);
+void dbPauseRehash(redisDb *db);
+void dbResumeRehash(redisDb *db);
 /* Swap */
 robj *lookupEvict(redisDb *db, robj *key);
 robj *lookupEvictKey(redisDb *db, robj *key);

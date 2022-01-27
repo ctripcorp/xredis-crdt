@@ -1012,6 +1012,10 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
         if(crdt_enabled) {
             if(rdbSaveCrdtDbSize(rdb, db) == C_ERR) goto werr;
         }
+
+        /* Pause rehash to reduce cow */
+        dbPauseRehash(db);
+
         /* Iterate this DB.dict writing every entry */
         while((de = dictNext(di)) != NULL) {
             sds keystr = dictGetKey(de);
@@ -1067,8 +1071,11 @@ int rdbSaveRio(rio *rdb, int *error, int flags, rdbSaveInfo *rsi) {
             }
         }
         dictReleaseIterator(di);
+
+        dbResumeRehash(db);
     }
     di = NULL; /* So that we don't release it again on error. */
+
 
     /* If we are storing the replication information on disk, persist
      * the script cache as well: on successful PSYNC after a restart, we need
