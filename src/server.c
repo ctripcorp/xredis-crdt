@@ -1727,6 +1727,7 @@ void initServerConfig(struct redisServer *srv) {
         srv->repl_ping_slave_period = CONFIG_DEFAULT_REPL_PING_SLAVE_PERIOD;
         srv->repl_timeout = CONFIG_DEFAULT_REPL_TIMEOUT;
         srv->repl_backlog_size = CRDT_CONFIG_DEFAULT_REPL_BACKLOG_SIZE;
+        srv->peer_set = 0;
     }
 
     /* swap related configs */
@@ -2050,7 +2051,6 @@ void initServer(struct redisServer *srv) {
     srv->get_ack_from_slaves = 0;
     srv->clients_paused = 0;
     srv->system_memory_size = zmalloc_get_memory_size();
-    srv->peer_set = 0;
     if(srv == &server) {
         createSharedObjects();
         adjustOpenFilesLimit();
