@@ -63,6 +63,7 @@ typedef struct rocks {
     rocksdb_options_t *rocksdb_opts;
     rocksdb_readoptions_t *rocksdb_ropts;
     rocksdb_writeoptions_t *rocksdb_wopts;
+    const rocksdb_snapshot_t *rocksdb_snapshot;
     /* rocksdb io threads */
     int threads_num;
     RIOThread threads[RIO_THREADS_MAX];
@@ -489,6 +490,33 @@ err:
     if (rocks != NULL) zfree(rocks);
     return NULL;
 }
+
+void rocksCreateSnapshot(rocks *rocks) {
+    if (rocks->rocksdb_snapshot) {
+        serverLog(LL_WARNING, "[rocks] release snapshot before create.");
+        rocksdb_release_snapshot(rocks->rocksdb, rocks->rocksdb_snapshot);
+    }
+    rocks->rocksdb_snapshot = rocksdb_create_snapshot(rocks->rocksdb);
+    serverLog(LL_NOTICE, "[rocks] create rocksdb snapshot ok.");
+}
+
+void rocksUseSnapshot(rocks *rocks) {
+    if (rocks->rocksdb_snapshot) {
+        rocksdb_readoptions_set_snapshot(rocks->rocksdb_ropts, rocks->rocksdb_snapshot);
+        serverLog(LL_NOTICE, "[rocks] use snapshot read ok.");
+    } else {
+        serverLog(LL_WARNING, "[rocks] use snapshot read failed: snapshot not exists.");
+    }
+}
+
+void rocksReleaseSnapshot(rocks *rocks) {
+    if (rocks->rocksdb_snapshot) {
+        serverLog(LL_NOTICE, "[rocks] relase snapshot ok.");
+        rocksdb_release_snapshot(rocks->rocksdb, rocks->rocksdb_snapshot);
+        rocks->rocksdb_snapshot = NULL;
+    }
+}
+
 
 void rocksDestroy(rocks *rocks) {
     rocksDeinitThreads(rocks);

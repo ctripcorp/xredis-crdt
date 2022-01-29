@@ -1193,7 +1193,6 @@ werr:
     return C_ERR;
 }
 
-int rocksInitThreads(struct rocks *rocks);
 int rdbSaveBackground(char *filename, rdbSaveInfo *rsi) {
     pid_t childpid;
     long long start;
@@ -1204,6 +1203,7 @@ int rdbSaveBackground(char *filename, rdbSaveInfo *rsi) {
     server.dirty_before_bgsave = server.dirty;
     server.lastbgsave_try = time(NULL);
     openChildInfoPipe(&server);
+    rocksCreateSnapshot(server.rocks);
 
     start = ustime();
     if ((childpid = fork()) == 0) {
@@ -1213,6 +1213,7 @@ int rdbSaveBackground(char *filename, rdbSaveInfo *rsi) {
         closeListeningSockets(0);
         redisSetProcTitle("redis-rdb-bgsave");
         
+        rocksUseSnapshot(server.rocks);
         rocksInitThreads(server.rocks);
 
         retval = rdbSave(filename,rsi);
@@ -2228,7 +2229,9 @@ int rdbSaveToSlavesSockets(void *rsi, struct redisServer *svr) {
     }
 
     /* Create the child process. */
+    rocksCreateSnapshot(server.rocks);
     openChildInfoPipe(svr);
+
     start = ustime();
     if ((childpid = fork()) == 0) {
         /* Child */
@@ -2241,6 +2244,7 @@ int rdbSaveToSlavesSockets(void *rsi, struct redisServer *svr) {
         closeListeningSockets(0);
         redisSetProcTitle("redis-rdb-to-slaves");
 
+        rocksUseSnapshot(server.rocks);
         rocksInitThreads(server.rocks);
 
         if(svr == &server) {

@@ -2438,6 +2438,10 @@ int rocksFlushAll();
 rocksdb_t *rocksGetDb(struct rocks *rocks);
 int rocksProcessCompleteQueue(struct rocks *rocks);
 void rocksCron();
+int rocksInitThreads(struct rocks *rocks);
+void rocksCreateSnapshot(struct rocks *rocks);
+void rocksUseSnapshot(struct rocks *rocks);
+void rocksReleaseSnapshot(struct rocks *rocks);
 
 /* swap */
 #define SWAP_NOP    0

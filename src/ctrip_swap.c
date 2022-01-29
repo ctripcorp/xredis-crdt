@@ -1127,14 +1127,48 @@ int dbEvict(redisDb *db, robj *key, int *evict_result) {
     return nswap;
 }
 
+const char* evictResultToString(int evict_result) {
+    char *errstr;
+    switch (evict_result) {
+    case EVICT_SUCC_SWAPPED:
+        errstr = "swapped";
+        break;
+    case EVICT_SUCC_FREED  :
+        errstr = "freed";
+        break;
+    case EVICT_FAIL_ABSENT :
+        errstr = "absent";
+        break;
+    case EVICT_FAIL_EVICTED:
+        errstr = "evicted";
+        break;
+    case EVICT_FAIL_SWAPPING:
+        errstr = "swapping";
+        break;
+    case EVICT_FAIL_HOLDED :
+        errstr = "holded";
+        break;
+    case EVICT_FAIL_UNSUPPORTED:
+        errstr = "unspported";
+        break;
+    default:
+        errstr = "unexpected";
+        break;
+    }
+    return errstr;
+}
 /* EVICT is a special command that getswaps returns nothing ('cause we don't
  * need to swap anything before command executes) but does swap out(PUT)
  * inside command func. Note that EVICT is the command of fake evict clients */
 void evictCommand(client *c) {
-    int i, nevict = 0;
+    int i, nevict = 0, evict_result;
+
     for (i = 1; i < c->argc; i++) {
-        nevict += dbEvict(c->db, c->argv[i], NULL);
+        evict_result = 0;
+        nevict += dbEvict(c->db, c->argv[i], &evict_result);
+        serverLog(LL_NOTICE, "evict %s: %s.", (sds)c->argv[i]->ptr, evictResultToString(evict_result));
     }
+
     addReplyLongLong(c, nevict);
 }
 

@@ -1161,21 +1161,25 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
                 updateDictResizePolicy();
                 closeChildInfoPipe(&server);
                 closeChildInfoPipe(&crdtServer);
+                rocksReleaseSnapshot(server.rocks);
             } else if (pid == server.rdb_child_pid) {
                 backgroundSaveDoneHandler(&server, exitcode,bysignal);
                 if (!bysignal && exitcode == 0) receiveChildInfo(&server);
                 updateDictResizePolicy();
                 closeChildInfoPipe(&server);
+                rocksReleaseSnapshot(server.rocks);
             } else if (pid == server.aof_child_pid) {
                 backgroundRewriteDoneHandler(exitcode,bysignal);
                 if (!bysignal && exitcode == 0) receiveChildInfo(&server);
                 updateDictResizePolicy();
                 closeChildInfoPipe(&server);
+                rocksReleaseSnapshot(server.rocks);
             } else if (pid == crdtServer.rdb_child_pid) {
                 backgroundSaveDoneHandler(&crdtServer, exitcode,bysignal);
                 if (!bysignal && exitcode == 0) receiveChildInfo(&crdtServer);
                 updateDictResizePolicy();
                 closeChildInfoPipe(&crdtServer);
+                rocksReleaseSnapshot(server.rocks);
             }else {
                 if (!ldbRemoveChild(pid)) {
                     serverLog(LL_WARNING,
@@ -1184,8 +1188,8 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
                 }
                 updateDictResizePolicy();
                 closeChildInfoPipe(&server);
+                rocksReleaseSnapshot(server.rocks);
             }
-            
         }
     } else {
         /* If there is not a background saving/rewrite in progress check if

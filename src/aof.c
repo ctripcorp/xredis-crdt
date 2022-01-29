@@ -1370,6 +1370,7 @@ int rewriteAppendOnlyFileBackground(void) {
 
     if (server.aof_child_pid != -1 || server.rdb_child_pid != -1) return C_ERR;
     if (aofCreatePipes() != C_OK) return C_ERR;
+    rocksCreateSnapshot(server.rocks);
     openChildInfoPipe(&server);
     start = ustime();
     if ((childpid = fork()) == 0) {
