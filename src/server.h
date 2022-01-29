@@ -849,7 +849,6 @@ typedef struct client {
     int CLIENT_DEFERED_CLOSING;
     int CLIENT_REPL_SWAPPING;
     int CLIENT_REPL_CMD_DISCARDED;
-    int CLIENT_REPL_DISPATCHING;
     long long cmd_reploff; /* Command replication offset when dispatch if this is a repl worker */
     struct client *repl_client; /* Master or peer client if this is a repl worker */
     long long swap_rl_until; /* client should not read or swap untill swap_rl_untill */
@@ -2503,6 +2502,7 @@ int dbExpire(redisDb *db, robj *key);
 int serverForked();
 void dbEvictAsapLater(redisDb *db, robj *key);
 int evictAsap();
+void debugEvictKeys();
 
 #define SWAP_RL_NO      0
 #define SWAP_RL_SLOW    1

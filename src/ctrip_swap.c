@@ -692,17 +692,15 @@ void replClientDiscardSwappingState(client *c) {
     serverLog(LL_NOTICE, "discarded: swapping repl client (reploff=%lld, read_reploff=%lld)", c->reploff, c->read_reploff);
 }
 
+/* Move command from repl client to repl worker client. */
 static void replCommandDispatch(client *wc, client *c) {
-    int reserved_flags = wc->flags & CLIENT_MULTI;
-    /* Move command from repl client to repl worker client, also reset repl
-     * client args so it will not be freed by resetClient. */
     if (wc->argv) zfree(wc->argv);
+
     wc->argc = c->argc, c->argc = 0;
     wc->argv = c->argv, c->argv = NULL;
     wc->cmd = c->cmd;
     wc->lastcmd = c->lastcmd;
     wc->flags = c->flags;
-    wc->flags |= reserved_flags;
     wc->cmd_reploff = c->read_reploff - sdslen(c->querybuf);
     wc->repl_client = c;
 
@@ -712,32 +710,22 @@ static void replCommandDispatch(client *wc, client *c) {
      *   gid will remain untouched.
      * Note that replClientSwap could be chain-called after
      * replWorkerClientSwapFinished, we should reset gid before
-     * replCommandDispatch instead of processCommand.
-     */
+     * replCommandDispatch instead of processCommand. */
     if (c->flags & CLIENT_MASTER && iAmMaster() != C_OK) {
         c->gid = -1;
     }
     wc->gid = c->gid;
 
-    /* In order to dispatch transaction to the same worker client, process
-     * multi command whether preceeding commands processed or not. */
-    if (c->cmd->proc == multiCommand) {
-        wc->CLIENT_REPL_DISPATCHING = 1;
-        wc->flags |= CLIENT_MULTI;
-        resetClient(wc);
-    } else if (wc->CLIENT_REPL_DISPATCHING) {
-        if (c->cmd->proc == execCommand || c->cmd->proc == crdtExecCommand) {
-            wc->CLIENT_REPL_DISPATCHING = 0;
-            c->swapping_count++;
-        } else {
-            queueMultiCommand(wc);
-            resetClient(wc);
-        }
-    } else {
-        /* Swapping count is dispatched command count. Note that free repl
-         * client would be defered untill swapping count drops to 0. */
-        c->swapping_count++;
+    /* Move repl client mstate to worker client if needed. */
+    if (c->flags & CLIENT_MULTI) {
+        c->flags &= ~CLIENT_MULTI;
+        wc->mstate = c->mstate;
+        initClientMultiState(c);
     }
+
+    /* Swapping count is dispatched command count. Note that free repl
+     * client would be defered untill swapping count drops to 0. */
+    c->swapping_count++;
 }
 
 static void processFinishedReplCommands() {
@@ -818,10 +806,13 @@ static void processFinishedReplCommands() {
 
         long long prev_offset = c->reploff;
         /* update reploff */
-        if (((c->flags&CLIENT_MASTER)
+        if ((c->flags&CLIENT_MASTER)
                     || ((c->flags&CLIENT_CRDT_MASTER) &&
-                        getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED))
-                && !(wc->flags & CLIENT_MULTI)) {
+                        getPeerMaster(c->gid)->repl_state == REPL_STATE_CONNECTED)) {
+            /* transaction commands wont dispatch to worker client untill
+             * exec/crdt.exec  (queued by repl client), so worker client
+             * wont have CLIENT_MULTI flag after call(). */
+            serverAssert(!(wc->flags & CLIENT_MULTI));
             /* Update the applied replication offset of our master. */
             c->reploff = wc->cmd_reploff;
         }
@@ -939,7 +930,6 @@ int replClientSwap(client *c) {
     listNode *ln;
 
     serverAssert(!(c->flags & CLIENT_SWAPPING));
-
     if (!(ln = listFirst(server.repl_worker_clients_free))) {
         /* return swapping if there are no worker to dispatch, so command
          * processing loop would break out.
@@ -951,23 +941,33 @@ int replClientSwap(client *c) {
     }
 
     wc = listNodeValue(ln);
-    serverAssert(wc);
-    serverAssert(!wc->CLIENT_REPL_SWAPPING || (wc->flags & CLIENT_MULTI));
+    serverAssert(wc && !wc->CLIENT_REPL_SWAPPING);
 
-    /* dispatch repl commands to worker clients */
-    replCommandDispatch(wc, c);
+    /* Because c is a repl client, only normal multi {cmd} exec will be
+     * received (multiple multi, exec without multi, ... will no happen) */
+    if (c->cmd->proc == multiCommand) {
+        serverAssert(!(c->flags & CLIENT_MULTI));
+        c->flags |= CLIENT_MULTI;
+    } else if (c->flags & CLIENT_MULTI &&
+            c->cmd->proc != execCommand &&
+            c->cmd->proc != crdtExecCommand) {
+        serverPanic("command should be already queued.");
+    } else {
+        /* either vanilla command or transaction are stored in client state,
+         * client is ready to dispatch now. */
+        replCommandDispatch(wc, c);
 
-    /* swap data for command, note that replicated commands would be processed
-     * later in processFinishedReplCommands when all preceeding commands finished. */
-    if (!wc->CLIENT_REPL_DISPATCHING) {
+        /* swap data for replicated commands, note that command will be
+         * processed later in processFinishedReplCommands untill all preceeding
+         * commands finished. */
         wc->CLIENT_REPL_SWAPPING = replWorkerClientSwap(wc);
 
         listDelNode(server.repl_worker_clients_free, ln);
         listAddNodeTail(server.repl_worker_clients_used, wc);
     }
 
-    /* process repl commands in received order (regardless of swap finished
-     * order) to make sure slave is consistent with master. */
+    /* process repl commands in received order (not swap finished order) so
+     * that slave is consistent with master. */
     processFinishedReplCommands();
 
     /* return dispatched(-1) when repl dispatched command to workers, caller

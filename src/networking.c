@@ -147,7 +147,6 @@ client *createClient(int fd) {
     c->CLIENT_DEFERED_CLOSING = 0;
     c->CLIENT_REPL_SWAPPING = 0;
     c->CLIENT_REPL_CMD_DISCARDED = 0;
-    c->CLIENT_REPL_DISPATCHING = 0;
     c->swap_rl_until = 0;
     listSetFreeMethod(c->pubsub_patterns,decrRefCountVoid);
     listSetMatchMethod(c->pubsub_patterns,listMatchObjects);
@@ -1446,7 +1445,6 @@ end:
     serverLog(LL_DEBUG, "%s", buf);
 }
 
-void debugEvictKeys();
 void commandProcessed(client *c) {
     serverLog(LL_DEBUG, "> commandProcessed client(id=%ld,cmd=%s,key=%s)",
         c->id,c->cmd ? c->cmd->name: "",c->argc <= 1 ? "": (sds)c->argv[1]->ptr);
