@@ -2429,6 +2429,7 @@ void rocksIOSubmitAsync(uint32_t dist, int type, sds key, sds val, rocksIOCallba
 struct RIO *rocksIOSubmitSync(uint32_t dist, int type, sds key, sds val, int notify_fd);
 void RIOReap(struct RIO *r, sds *key, sds *val);
 unsigned long rocksPendingIOs();
+int rocksIODrain(struct rocks *rocks, mstime_t time_limit);
 
 struct rocks *rocksCreate(void);
 void rocksDestroy(struct rocks *rocks);

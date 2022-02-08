@@ -266,7 +266,7 @@ struct redisCommand redisCommandTable[] = {
     {"slaveof",slaveofCommand,3,"last",0,NULL,0,0,0,0,0,getSwapsGlobal,0},
     {"xslaveof",xslaveofCommand,3,"ast",0,NULL,0,0,0,0,0,getSwapsGlobal,0},
     {"role",roleCommand,1,"lst",0,NULL,0,0,0,0,0,NULL,0},
-    {"debug",debugCommand,-1,"as",0,NULL,0,0,0,0,0,NULL,0},
+    {"debug",debugCommand,-1,"as",0,NULL,0,0,0,0,0,getSwapsGlobal,0},
     {"config",configCommand,-2,"lat",0,NULL,0,0,0,0,0,NULL,0},
    {"subscribe",subscribeCommand,-2,"pslt",0,NULL,0,0,0,0,0,NULL,0},
    {"crdt.subscribe",crdtSubscribeCommand,-2,"pslt",0,NULL,0,0,0,0,0,NULL,0},

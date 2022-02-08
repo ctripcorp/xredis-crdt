@@ -286,6 +286,45 @@ RIO *rocksIOSubmitSync(uint32_t dist, int type, sds key, sds val, int notify_fd)
     return rio;
 }
 
+static int rocksRIODrained(rocks *rocks) {
+    RIOThread *rt;
+    int i, drained = 1;
+
+    for (i = 0; i < rocks->threads_num; i++) {
+        rt = &server.rocks->threads[i];
+
+        pthread_mutex_lock(&rt->lock);
+        if (listLength(rt->pending_rios)) drained = 0;
+        pthread_mutex_unlock(&rt->lock);
+    }
+
+    pthread_mutex_lock(&rocks->CQ.lock);
+    if (listLength(rocks->CQ.complete_queue)) drained = 0;
+    pthread_mutex_unlock(&rocks->CQ.lock);
+
+    return drained;
+}
+
+int rocksIODrain(rocks *rocks, mstime_t time_limit) {
+    int result = 0;
+    mstime_t start = mstime();
+
+    while (!rocksRIODrained(rocks)) {
+        processFinishedRIOInCompleteQueue(&rocks->CQ);
+
+        if (time_limit >= 0 && mstime() - start > time_limit) {
+            result = -1;
+            break;
+        }
+    }
+
+    serverLog(LL_NOTICE,
+            "[rocks] drain IO %s: elapsed (%lldms) limit (%lldms)",
+            result == 0 ? "ok":"failed", mstime() - start, time_limit);
+
+    return result;
+}
+
 void RIOReap(RIO *r, sds *key, sds *val) {
     if (key) *key = r->key;
     if (val) *val = r->val;
@@ -568,6 +607,7 @@ int rocksFlushAll() {
     char odir[ROCKS_DIR_MAX_LEN];
 
     snprintf(odir, ROCKS_DIR_MAX_LEN, "%s/%d", ROCKS_DATA, server.rocks->rocksdb_epoch);
+    rocksIODrain(server.rocks, -1);
     rocksDeinitDB(server.rocks);
     server.rocks->rocksdb_epoch++;
     if (rocksInitDB(server.rocks)) {

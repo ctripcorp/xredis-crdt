@@ -2280,7 +2280,7 @@ long long getSelfVcuFromPeer(CRDT_Master_Instance* inter) {
 int isNullDb() {
     for(int j = 0; j < server.dbnum; j++) {
         redisDb *db = server.db+j;
-        if(dictSize(db->dict) != 0 || dictSize(db->deleted_keys) !=0) {
+        if(dictSize(db->dict) != 0 || dictSize(db->deleted_keys) !=0 || dictSize(db->evict) != 0) {
             return 0;
         }
     }

@@ -1608,6 +1608,12 @@ void startLoading(FILE *fp) {
     } else {
         server.loading_total_bytes = sb.st_size;
     }
+
+    /* Drain rocks IO before Loading DB because: parallel sync RIO could
+     * be sumitted and processed. if there are async RIO in-flight(e.g.
+     * fullresync happend if we are slave and there are clients swapping-in
+     * evictted keys), server might crash. */
+    rocksIODrain(server.rocks, -1);
 }
 
 /* Refresh the loading progress info */
