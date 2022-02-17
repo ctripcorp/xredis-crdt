@@ -3485,6 +3485,7 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                             "sync_backstream:%lld\r\n"
                             "sync_partial_ok:%lld\r\n"
                             "sync_partial_err:%lld\r\n"
+                            "expired_keys:%lld\r\n"
                             "latest_fork_usec:%lld\r\n"
                             "crdt_conflict:type=%lld,set=%lld,del=%lld,set_del=%lld\r\n"
                             "crdt_conflict_op:modify=%lld,merge=%lld\r\n"
@@ -3493,6 +3494,7 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                             crdtServer.stat_sync_backstream,
                             crdtServer.stat_sync_partial_ok,
                             crdtServer.stat_sync_partial_err,
+                            crdtServer.stat_expiredkeys,
                             crdtServer.stat_fork_time,
                             crdtServer.crdt_type_conflict,
                             crdtServer.crdt_set_conflict,
