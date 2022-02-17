@@ -1144,6 +1144,7 @@ int crdtPropagateExpire(redisDb *db, robj *key, int lazy, long long expireTime) 
                     closeModuleKey(mk);
                 }
                 crdtServer.stat_expiredkeys++;
+                server.stat_expiredkeys++;
                 return C_OK;
             } else {
                 propagateExpire(db, key, lazy);

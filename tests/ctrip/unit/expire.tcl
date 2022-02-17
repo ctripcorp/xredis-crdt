@@ -797,3 +797,43 @@ start_server {tags {"full"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
     }
 
 }
+
+proc get_expired_keys {redis command} {
+    set info [$redis $command stats]
+    set regstr [format "\r\n%s:(.*?)\r\n" "expired_keys"]
+    regexp $regstr $info match value 
+    set _ $value
+} 
+start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
+    set master [srv 0 client]
+    set master_gid 1
+    set master_host [srv 0 host]
+    set master_port [srv 0 port]
+    set master_stdout [srv 0 stdout]
+    set master_stderr [srv 0 stderr]
+    
+    test "setex" {
+        set before_expired_keys [get_expired_keys $master info]
+        set before_crdt_expired_keys [get_expired_keys $master crdt.info]
+        $master setex k 1 v 
+        after 1100
+        assert_equal [$master get k] ""
+        set after_expired_keys [get_expired_keys $master info]
+        set after_crdt_expired_keys [get_expired_keys $master crdt.info]
+        assert_equal [expr {$after_expired_keys - $before_expired_keys}] 1
+        assert_equal [expr {$after_crdt_expired_keys - $before_crdt_expired_keys}] 1
+    }
+
+    test "expire" {
+        set before_expired_keys [get_expired_keys $master info]
+        set before_crdt_expired_keys [get_expired_keys $master crdt.info]
+        $master setex k 1 v 
+        $master expire k 1
+        after 1100
+        assert_equal [$master get k] ""
+        set after_expired_keys [get_expired_keys $master info]
+        set after_crdt_expired_keys [get_expired_keys $master crdt.info]
+        assert_equal [expr {$after_expired_keys - $before_expired_keys}] 1
+        assert_equal [expr {$after_crdt_expired_keys - $before_crdt_expired_keys}] 1
+    }
+}
