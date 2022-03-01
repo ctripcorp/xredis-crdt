@@ -937,12 +937,18 @@ int data2CrdtData(client* fakeClient,robj* key, robj* val) {
                     incrRefCount(key);
                     int i = 2;
                     do {
-                        ziplistGet(eptr,&vstr,&vlen,&vlong);
-                        assert(vstr != NULL);                   
+                        vlong = 0;
+                        ziplistGet(eptr,&vstr,&vlen,&vlong);                 
                         double score = zzlGetScore(sptr);
                         fakeClient->argv[i++] = createStringObjectFromLongDouble((long double)score, 1);
                         zzlNext(zl,&eptr,&sptr);
-                        fakeClient->argv[i++] = createObject(OBJ_STRING, sdsnewlen(vstr,vlen));
+                        if(vstr != NULL) {
+                            fakeClient->argv[i++] = createObject(OBJ_STRING, sdsnewlen(vstr,vlen));
+                        } else {
+                            char buf[32];
+                            int buf_len = ll2string(buf, sizeof buf, vlong);
+                            fakeClient->argv[i++] = createObject(OBJ_STRING, sdsnewlen(buf,buf_len));
+                        }
                         len--;
                     } while (eptr != NULL && i < MAX_FAKECLIENT_ARGV);
                     fakeClient->argc = i;
