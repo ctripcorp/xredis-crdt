@@ -146,6 +146,8 @@ set adds(0) {
     $redis set rc4 1.1
     $redis incrbyfloat rc4 1.2
     $redis incrbyfloat rc4 -1.2
+    $redis set 1000 value 
+    $redis set 1001 1
     for {set i 0} {$i < 256} {incr i} {
         set a [i2b $i] 
         $redis set $a $a 
@@ -161,38 +163,51 @@ set adds(0) {
     }
 }
 set checks(0) {
-    assert_equal [$redis get key] value
-    assert_equal [$redis get rc1] 10
-    assert_equal [$redis get rc2] 0
-    assert_equal [$redis get rc3] 5
-    for {set i 0} {$i < 256} {incr i} {
-        set a [i2b $i] 
-        assert_equal [$redis get $a] $a 
-        assert_equal [$redis hget hash_binary $a] $a
-    }
-    for {set i 0} {$i < 256} {incr i} {
-        set argv  [lindex set_argvs $i]
-        assert_equal [$redis get [lindex $argv 0]] [lindex $argv 1]
-        assert_equal [$redis hget hash_random [lindex $argv 0]] [lindex $argv 1]
-    }
+    test "kv" {
+        assert_equal [$redis get key] value
+        assert_equal [$redis get rc1] 10
+        assert_equal [$redis get rc2] 0
+        assert_equal [$redis get rc3] 5
+        assert_equal [$redis get 1000] value
+        assert_equal [$redis get 1001] 1
+        for {set i 0} {$i < 256} {incr i} {
+            set a [i2b $i] 
+            assert_equal [$redis get $a] $a 
+            assert_equal [$redis hget hash_binary $a] $a
+        }
+        for {set i 0} {$i < 256} {incr i} {
+            set argv  [lindex set_argvs $i]
+            assert_equal [$redis get [lindex $argv 0]] [lindex $argv 1]
+            assert_equal [$redis hget hash_random [lindex $argv 0]] [lindex $argv 1]
+        }
+    } 
 }
 set adds(1) {
-    $redis hset hash k1 v1 k2 v2
+
+    $redis hset hash k1 v1 k2 v2 1 2
     $redis hset hash1 k0 v0 k1 v1 k2 v2 k3 v3 k4 v4 k5 v5 k6 v6 k7 v7 k8 v8 k9 v9 
+    $redis hset 10000 1 2 k1 v1 2 v2 k2 1
+    
 }
 set checks(1) {
-    assert_equal [$redis hget hash k1] v1
-    assert_equal [$redis hget hash k2] v2
-    assert_equal [$redis hget hash1 k0] v0
-    assert_equal [$redis hget hash1 k1] v1
-    assert_equal [$redis hget hash1 k2] v2
-    assert_equal [$redis hget hash1 k3] v3
-    assert_equal [$redis hget hash1 k4] v4
-    assert_equal [$redis hget hash1 k5] v5
-    assert_equal [$redis hget hash1 k6] v6
-    assert_equal [$redis hget hash1 k7] v7
-    assert_equal [$redis hget hash1 k8] v8
-    assert_equal [$redis hget hash1 k9] v9
+    test "hash" {
+        assert_equal [$redis hget hash k1] v1
+        assert_equal [$redis hget hash k2] v2
+        assert_equal [$redis hget hash1 k0] v0
+        assert_equal [$redis hget hash1 k1] v1
+        assert_equal [$redis hget hash1 k2] v2
+        assert_equal [$redis hget hash1 k3] v3
+        assert_equal [$redis hget hash1 k4] v4
+        assert_equal [$redis hget hash1 k5] v5
+        assert_equal [$redis hget hash1 k6] v6
+        assert_equal [$redis hget hash1 k7] v7
+        assert_equal [$redis hget hash1 k8] v8
+        assert_equal [$redis hget hash1 k9] v9
+        assert_equal [$redis hget 10000 1] 2
+        assert_equal [$redis hget 10000 k1] v1
+        assert_equal [$redis hget 10000 2] v2
+        assert_equal [$redis hget 10000 k2] 1
+    }
 }
 set adds(2) {
     $redis set key2 v 
@@ -201,12 +216,14 @@ set adds(2) {
     $redis expire hash2 10000000
 }
 set checks(2) {
-    assert_equal [$redis hget hash2 k]  v
-    assert {[$redis ttl hash2] <= 10000000}
-    assert {[$redis ttl hash2] > 0}
-    assert_equal [$redis get key2] v
-    assert {[$redis ttl key2] <= 10000000}
-    assert {[$redis ttl key2] > 0}
+    test "expire" {
+        assert_equal [$redis hget hash2 k]  v
+        assert {[$redis ttl hash2] <= 10000000}
+        assert {[$redis ttl hash2] > 0}
+        assert_equal [$redis get key2] v
+        assert {[$redis ttl key2] <= 10000000}
+        assert {[$redis ttl key2] > 0}
+    }
 }
 set adds(3) {
     $redis set key3 v ex 10000000
@@ -215,11 +232,13 @@ set adds(3) {
     $redis set key5 1
 }
 set checks(3) {
-    assert_equal [$redis get key3]  v
-    assert {[$redis ttl key3] <= 10000000}
-    assert {[$redis ttl key3] > 0}
-    assert_equal [$redis get key4]  {}
-    assert_equal [$redis get key5]  1
+    test "del" {
+        assert_equal [$redis get key3]  v
+        assert {[$redis ttl key3] <= 10000000}
+        assert {[$redis ttl key3] > 0}
+        assert_equal [$redis get key4]  {}
+        assert_equal [$redis get key5]  1
+    }
 }
 set adds(4) {
     $redis sadd key6 s1 
@@ -228,14 +247,22 @@ set adds(4) {
     $redis srem key8 s1 
     $redis sadd key9 s1 s2
     $redis del key9
+    $redis sadd key10 1
+    $redis sadd 40000 s1 
+    $redis sadd 40000 1
 }
 set checks(4) {
-    assert_equal [$redis SISMEMBER key6 s1] 1
-    assert_equal [$redis SISMEMBER key7 s1] 1
-    assert_equal [$redis SISMEMBER key7 s2] 1
-    assert_equal [$redis SISMEMBER key8 s1] 0
-    assert_equal [$redis SISMEMBER key8 s2] 1
-    assert_equal [$redis SISMEMBER key9 s1] 0
+    test "set" {
+        assert_equal [$redis SISMEMBER key6 s1] 1
+        assert_equal [$redis SISMEMBER key7 s1] 1
+        assert_equal [$redis SISMEMBER key7 s2] 1
+        assert_equal [$redis SISMEMBER key8 s1] 0
+        assert_equal [$redis SISMEMBER key8 s2] 1
+        assert_equal [$redis SISMEMBER key9 s1] 0
+        assert_equal [$redis SISMEMBER key10 1] 1
+        assert_equal [$redis SISMEMBER 40000 s1] 1
+        assert_equal [$redis SISMEMBER 40000 1] 1
+    }
 }
 
 set adds(5) {
@@ -251,17 +278,25 @@ set adds(5) {
     $redis zadd myzset6 1 a 2 b
     $redis del myzset6 a 
     $redis zadd myzset6 3 a 
+    $redis zadd myzset7 1 1
+    $redis zadd 50000 1 f1
+    $redis zadd 50000 1 2 
 }
 set checks(5) {
-    assert_equal [$redis zscore myzset1 a] 1
-    assert_equal [$redis zscore myzset2 a] 1
-    assert_equal [$redis zscore myzset2 b] 2
-    assert_equal [$redis zscore myzset3 a] {}
-    assert_equal [$redis zscore myzset3 b] 2
-    assert_equal [$redis zscore myzset4 a] {}
-    assert_equal [$redis zscore myzset4 b] {}
-    assert_equal [$redis zscore myzset5 a] 3
-    assert_equal [$redis zscore myzset6 a] 3
+    test "zset" {
+        assert_equal [$redis zscore myzset1 a] 1
+        assert_equal [$redis zscore myzset2 a] 1
+        assert_equal [$redis zscore myzset2 b] 2
+        assert_equal [$redis zscore myzset3 a] {}
+        assert_equal [$redis zscore myzset3 b] 2
+        assert_equal [$redis zscore myzset4 a] {}
+        assert_equal [$redis zscore myzset4 b] {}
+        assert_equal [$redis zscore myzset5 a] 3
+        assert_equal [$redis zscore myzset6 a] 3
+        assert_equal [$redis zscore myzset7 1] 1
+        assert_equal [$redis zscore 50000 f1] 1
+        assert_equal [$redis zscore 50000 2] 1
+    }
 }
 
 ####### tests
