@@ -505,12 +505,22 @@ int checkTombstoneDataType(void* current, void* other, robj* key) {
 int dbTombstone(redisDb *db, robj* key) {
     return dictDelete(db->deleted_keys, key->ptr);
 }
+
+robj* lookupKeyWithNoneFlag(redisDb *db, robj *key) {
+    return lookupKey(db, key, LOOKUP_NONE);
+}
+
 void
 crdtMergeDelCommand(client *c) {
+    /**
+     * 1. tombstone + tombstone
+     * 2. tombstone + value (not expire)
+     *      It may be possible to reduce an unnecessary expire
+     */
     crdtMergeTomstoneCommand(c, 
         findTombstone, 
         addTombstone,
-        lookupKeyWrite,
+        lookupKeyWithNoneFlag,
         dbDelete,
         dbTombstone,
         checkTombstoneType,
@@ -639,6 +649,10 @@ int checkDataType(void* current, void* other, robj* key) {
 // CRDT.Merge <gid> <key>  <value> <expire>
 // 0           1    2       3       4
 void crdtMergeCommand(client *c) {
+    /**
+     * 1. value + value (expire)
+     * 2. value + tombstone 
+     */
     mergeCrdtObjectCommand(c, 
         lookupKeyWrite,
         dbAdd,

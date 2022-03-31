@@ -501,6 +501,13 @@ proc start_write_load {host port seconds} {
     exec $tclsh tests/helpers/gen_write_load.tcl $host $port $seconds &
 }
 
+# Execute a background process writing random data for the specified number
+# of seconds to the specified Redis instance.
+proc start_write_expire_load {host port seconds type} {
+    set tclsh [info nameofexecutable]
+    exec $tclsh tests/helpers/gen_write_expire_load.tcl $host $port $seconds $type &
+}
+
 proc start_write_load_with_interval {host port seconds interval} {
     set tclsh [info nameofexecutable]
     exec $tclsh tests/helpers/gen_write_load_with_interval.tcl $host $port $seconds $interval &
