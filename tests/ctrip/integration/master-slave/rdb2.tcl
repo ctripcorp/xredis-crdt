@@ -144,7 +144,7 @@ set checks(0) {
     assert_equal [$redis get rc1] 10
     assert_equal [$redis get rc2] 1
     assert_equal [$redis get rc3] 6
-    assert_equal [$redis get rc4] 2.3
+    assert {abs([$redis get rc4] - 2.3) < 0.001}
 }
 set adds(1) {
     $redis hset hash k1 v1 k2 v2
