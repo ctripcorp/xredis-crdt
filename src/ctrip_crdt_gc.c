@@ -167,7 +167,8 @@ VectorClock getGcVectorClock() {
 
     int index = 0;
     for(; index < MAX_PEERS + 1; index ++) {
-        if(crdtServer.peer_set & (1 << index)) {
+        if(crdtServer.peer_set & (1 << index)
+            && !(crdtServer.offline_peer_set & (1 << index))) {
             CRDT_Master_Instance *crdtMaster = crdtServer.crdtMasters[index];
             VectorClock other;
             if (crdtMaster == NULL) {
@@ -177,15 +178,6 @@ VectorClock getGcVectorClock() {
             }
             VectorClock old = gcVectorClock;
             gcVectorClock = mergeMinVectorClock(old, other);
-            // #if defined(DEBUG) 
-            //     sds vc_str = vectorClockToSds(other);
-            //     sds gcvc1_str = vectorClockToSds(old);
-            //     sds gcvc_str = vectorClockToSds(gcVectorClock);
-            //     serverLog(LL_WARNING, "[mergeminvc]:%s  + %s = %s", vc_str, gcvc1_str, gcvc_str);
-            //     sdsfree(vc_str);
-            //     sdsfree(gcvc1_str);
-            //     sdsfree(gcvc_str);
-            // #endif
             freeVectorClock(old);
             
         }
