@@ -900,6 +900,7 @@ int rdbLoadCrdtInfoAuxFields(robj* auxkey, robj* auxval, CRDT_Master_Instance** 
         (*currentMasterInstance)->proxy =  proxy;
         return 1;
     } else if (!strcasecmp(auxkey->ptr, "crdt-offline-gid")) {
+        serverLog(LL_WARNING, "reset offline_peer_set1");
         crdtServer.offline_peer_set = atoi(auxval->ptr);
     }
     return 0;
