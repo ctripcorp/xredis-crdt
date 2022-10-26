@@ -334,7 +334,9 @@ struct redisCommand redisCommandTable[] = {
     {"crdt.authGid", crdtAuthGidCommand,2,"rF", 0, NULL,0,0,0,0,0},
     {"crdt.auth", crdtAuthCommand, 3, "rF", 0,NULL,0,0,0,0,0},
     {"crdt.replication", crdtReplicationCommand, 4, "rF", 0, NULL, 0,0,0,0,0},
-    {"crdt.evictiontombstone", evictionTombstoneCommand, 4, "rF", 0, NULL, 0,0,0,0,0}
+    {"crdt.evictiontombstone", evictionTombstoneCommand, 4, "rF", 0, NULL, 0,0,0,0,0},
+    {"crdt.setOfflineGid", setOfflineGidCommand, -1, "w", 0, NULL, 0,0,0,0,0},
+    {"crdt.getOfflineGid", getOfflineGidCommand, 1, "rF", 0, NULL, 0,0,0,0,0}
 };
 
 /*============================ CRDT functions ============================ */
@@ -1990,6 +1992,7 @@ void initServer(struct redisServer *srv) {
     srv->clients_paused = 0;
     srv->system_memory_size = zmalloc_get_memory_size();
     srv->peer_set = 0;
+    srv->offline_peer_set = 0;
     if(srv == &server) {
         createSharedObjects();
         adjustOpenFilesLimit();
