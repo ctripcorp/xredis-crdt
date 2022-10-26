@@ -1556,6 +1556,7 @@ void rdbLoadProgressCallback(rio *r, const void *buf, size_t len) {
 int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
     uint64_t dbid;
     int type, rdbver;
+    sds loadCrdtAuxError = NULL;
     redisDb *db = server.db+0;
     char buf[1024];
     long long expiretime, now = mstime();
@@ -1698,107 +1699,12 @@ int rdbLoadRio(rio *rdb, rdbSaveInfo *rsi) {
                         "Can't load Lua script from RDB file! "
                         "BODY: %s", auxval->ptr);
                 }
-            }  else if (!strcasecmp(auxkey->ptr,"vclock")) {
-                if (!isNullVectorClock(crdtServer.vectorClock)) {
-                    freeVectorClock(crdtServer.vectorClock);
-                }
-                crdtServer.vectorClock = sdsToVectorClock(auxval->ptr);
-                VectorClockUnit unit = getVectorClockUnit(crdtServer.vectorClock, crdtServer.crdt_gid);
-                if(isNullVectorClockUnit(unit)) {
-                    crdtServer.vectorClock = addVectorClockUnit(crdtServer.vectorClock, crdtServer.crdt_gid, 0);
-                }
-            } else if (!strcasecmp(auxkey->ptr,"crdt-repl-id")) {
-                if (sdslen(auxval->ptr) == CONFIG_RUN_ID_SIZE) {
-                    memcpy(crdtServer.replid, auxval->ptr,CONFIG_RUN_ID_SIZE+1);
-                }
-            } else if (!strcasecmp(auxkey->ptr,"crdt-repl-offset")) {
-                crdtServer.master_repl_offset = strtoll(auxval->ptr,NULL,10);
-            } else if (!strcasecmp(auxkey->ptr,"peer-master-gid")) {
-                int gid = atoi(auxval->ptr);
-                if(!check_gid(gid)) {
-                    rdbExitReportCorruptRDB(
-                        "Can't load peer-master-gid from RDB file! "
-                        "BODY: %d", gid);
-                }
-                currentMasterInstance = NULL;
-                CRDT_Master_Instance *masterInstance = getPeerMaster(gid);
-                /**
-                 *  master 
-                 *      rdb < config
-                 *   slave  
-                 *      config > rdb
-                 */
-                if (masterInstance == NULL) {
-                    masterInstance = createPeerMaster(NULL, gid);
-                    crdtServer.crdtMasters[gid] = masterInstance;
-                } else if(iAmMaster() == C_OK) {
-                    decrRefCount(auxkey);
-                    decrRefCount(auxval);
-                    continue;
-                }
-                currentMasterInstance = masterInstance;
-                crdtReplicationCreateMasterClient(currentMasterInstance, createClient(-1), -1);
-                needIfRewriteConfig = 1;
-            } else if(!strcasecmp(auxkey->ptr,"peer-master-dbid")) {
-                if(currentMasterInstance == NULL) {
-                    decrRefCount(auxkey);
-                    decrRefCount(auxval);
-                    continue;
-                }
-                selectDb(currentMasterInstance->master, atoi(auxval->ptr));
-                currentMasterInstance->dbid = atoi(auxval->ptr);
-            } else if (!strcasecmp(auxkey->ptr,"peer-master-host")) {
-                if(currentMasterInstance == NULL) {
-                    decrRefCount(auxkey);
-                    decrRefCount(auxval);
-                    continue;
-                }
-                sdsfree(currentMasterInstance->masterhost);
-                currentMasterInstance->masterhost = sdsdup(auxval->ptr);
-            } else if (!strcasecmp(auxkey->ptr,"peer-master-port")) {
-                if(currentMasterInstance == NULL) {
-                    decrRefCount(auxkey);
-                    decrRefCount(auxval);
-                    continue;
-                }
-                currentMasterInstance->masterport = atoi(auxval->ptr);
-            } else if (!strcasecmp(auxkey->ptr,"peer-master-repl-id")) {
-                if(currentMasterInstance == NULL) {
-                    decrRefCount(auxkey);
-                    decrRefCount(auxval);
-                    continue;
-                }
-                if (sdslen(auxval->ptr) == CONFIG_RUN_ID_SIZE) {
-                    memcpy(currentMasterInstance->master->replid, auxval->ptr,CONFIG_RUN_ID_SIZE+1);
-                }
-            } else if (!strcasecmp(auxkey->ptr,"peer-master-repl-offset")) {
-                if(currentMasterInstance == NULL) {
-                    decrRefCount(auxkey);
-                    decrRefCount(auxval);
-                    continue;
-                }
-                currentMasterInstance->master->reploff = strtoll(auxval->ptr,NULL,10); 
-            } else if (!strcasecmp(auxkey->ptr, "peer-proxy-type")) {
-                if(currentMasterInstance == NULL) {
-                    decrRefCount(auxkey);
-                    decrRefCount(auxval);
-                    continue;
-                }
-                currentMasterInstance->proxy_type = atoi(auxval->ptr); 
-            } else if (!strcasecmp(auxkey->ptr, "peer-proxy")) {
-                if(currentMasterInstance == NULL) {
-                    decrRefCount(auxkey);
-                    decrRefCount(auxval);
-                    continue;
-                }
-                
-                void* proxy = str2proxy(currentMasterInstance->proxy_type,auxval->ptr);
-                if (proxy == NULL) {
-                    serverLog(LL_WARNING,"RDB Parse Proxy %s", auxval->ptr);
-                    rdbExitReportCorruptRDB("RDB Proxy error");
+            } else if((rdbLoadCrdtInfoAuxFields(auxkey, auxval, &currentMasterInstance, &needIfRewriteConfig, &loadCrdtAuxError) != 0)) {
+                if (loadCrdtAuxError != NULL) {
+                    rdbExitReportCorruptRDB(loadCrdtAuxError);
+                    sdsfree(loadCrdtAuxError);
                     return C_ERR;
                 }
-                currentMasterInstance->proxy =  proxy;
             }
             else {
                 /* We ignore fields we don't understand, as by AUX field

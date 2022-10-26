@@ -780,7 +780,129 @@ int rdbSaveCrdtInfoAuxFields(rio* rdb) {
     if (rdbSaveAuxFieldStrInt(rdb,"crdt-repl-offset",crdtServer.master_repl_offset)
         == -1) return -1;
     if(rdbSaveAuxFieldCrdt(rdb) == -1) return -1;
+    if(crdtServer.offline_peer_set != 0) {
+        if (rdbSaveAuxFieldStrInt(rdb, "crdt-offline-gid", crdtServer.offline_peer_set) == -1) return -1; 
+    }
     return 1;
+}
+
+int rdbLoadCrdtInfoAuxFields(robj* auxkey, robj* auxval, CRDT_Master_Instance** currentMasterInstance, int* needIfRewriteConfig, sds* error) {
+    if (!strcasecmp(auxkey->ptr,"vclock")) {
+        if (!isNullVectorClock(crdtServer.vectorClock)) {
+            freeVectorClock(crdtServer.vectorClock);
+        }
+        crdtServer.vectorClock = sdsToVectorClock(auxval->ptr);
+        VectorClockUnit unit = getVectorClockUnit(crdtServer.vectorClock, crdtServer.crdt_gid);
+        if(isNullVectorClockUnit(unit)) {
+            crdtServer.vectorClock = addVectorClockUnit(crdtServer.vectorClock, crdtServer.crdt_gid, 0);
+        }
+        return 1;
+    } else if (!strcasecmp(auxkey->ptr,"crdt-repl-id")) {
+        if (sdslen(auxval->ptr) == CONFIG_RUN_ID_SIZE) {
+            memcpy(crdtServer.replid, auxval->ptr,CONFIG_RUN_ID_SIZE+1);
+        }
+        return 1;
+    } else if (!strcasecmp(auxkey->ptr,"crdt-repl-offset")) {
+        crdtServer.master_repl_offset = strtoll(auxval->ptr,NULL,10);
+        return 1;
+    } else if (!strcasecmp(auxkey->ptr,"peer-master-gid")) {
+        int gid = atoi(auxval->ptr);
+        if(!check_gid(gid)) {
+            *error = sdsempty();
+            *error = sdscatprintf(*error, "Can't load peer-master-gid from RDB file! "
+                "BODY: %d", gid);
+            return -1;
+        }
+        *currentMasterInstance = NULL;
+        CRDT_Master_Instance *masterInstance = getPeerMaster(gid);
+        /**
+         *  master 
+         *      rdb < config
+         *   slave  
+         *      config > rdb
+         */
+        if (masterInstance == NULL) {
+            masterInstance = createPeerMaster(NULL, gid);
+            crdtServer.crdtMasters[gid] = masterInstance;
+        } else if(iAmMaster() == C_OK) {
+            decrRefCount(auxkey);
+            decrRefCount(auxval);
+            return 1;
+        }
+        *currentMasterInstance = masterInstance;
+        crdtReplicationCreateMasterClient(*currentMasterInstance, createClient(-1), -1);
+        *needIfRewriteConfig = 1;
+        return 1;
+    } else if(!strcasecmp(auxkey->ptr,"peer-master-dbid")) {
+        if((*currentMasterInstance) == NULL) {
+            decrRefCount(auxkey);
+            decrRefCount(auxval);
+            return 1;
+        }
+        selectDb((*currentMasterInstance)->master, atoi(auxval->ptr));
+        (*currentMasterInstance)->dbid = atoi(auxval->ptr);
+        return 1;
+    } else if (!strcasecmp(auxkey->ptr,"peer-master-host")) {
+        if((*currentMasterInstance) == NULL) {
+            decrRefCount(auxkey);
+            decrRefCount(auxval);
+            return 1;
+        }
+        sdsfree((*currentMasterInstance)->masterhost);
+        (*currentMasterInstance)->masterhost = sdsdup(auxval->ptr);
+    } else if (!strcasecmp(auxkey->ptr,"peer-master-port")) {
+        if((*currentMasterInstance) == NULL) {
+            decrRefCount(auxkey);
+            decrRefCount(auxval);
+            return 1;
+        }
+        (*currentMasterInstance)->masterport = atoi(auxval->ptr);
+        return 1;
+    } else if (!strcasecmp(auxkey->ptr,"peer-master-repl-id")) {
+        if((*currentMasterInstance) == NULL) {
+            decrRefCount(auxkey);
+            decrRefCount(auxval);
+            return 1;
+        }
+        if (sdslen(auxval->ptr) == CONFIG_RUN_ID_SIZE) {
+            memcpy((*currentMasterInstance)->master->replid, auxval->ptr,CONFIG_RUN_ID_SIZE+1);
+        }
+        return 1;
+    } else if (!strcasecmp(auxkey->ptr,"peer-master-repl-offset")) {
+        if((*currentMasterInstance) == NULL) {
+            decrRefCount(auxkey);
+            decrRefCount(auxval);
+            return 1;
+        }
+        (*currentMasterInstance)->master->reploff = strtoll(auxval->ptr,NULL,10); 
+        return 1;
+    } else if (!strcasecmp(auxkey->ptr, "peer-proxy-type")) {
+        if((*currentMasterInstance) == NULL) {
+            decrRefCount(auxkey);
+            decrRefCount(auxval);
+            return 1;
+        }
+        (*currentMasterInstance)->proxy_type = atoi(auxval->ptr); 
+        return 1;
+    } else if (!strcasecmp(auxkey->ptr, "peer-proxy")) {
+        if((*currentMasterInstance) == NULL) {
+            decrRefCount(auxkey);
+            decrRefCount(auxval);
+            return 1;
+        }
+        
+        void* proxy = str2proxy((*currentMasterInstance)->proxy_type,auxval->ptr);
+        if (proxy == NULL) {
+            serverLog(LL_WARNING,"RDB Parse Proxy %s", auxval->ptr);
+            *error = sdsnew("RDB Proxy error");
+            return -1;
+        }
+        (*currentMasterInstance)->proxy =  proxy;
+        return 1;
+    } else if (!strcasecmp(auxkey->ptr, "crdt-offline-gid")) {
+        crdtServer.offline_peer_set = atoi(auxval->ptr);
+    }
+    return 0;
 }
 int initedCrdtServer() {
     if(get_len(crdtServer.vectorClock) != 1) {

@@ -22,3 +22,53 @@ start_server {
         assert_equal $retval "ERR peer gid invalid"
     }
 }
+
+start_server {
+    tags {" sync offlinegid (master-> slave)"}
+    overrides {crdt-gid 1} config {crdt.conf} module {crdt.so}
+} {
+    set master [srv 0 client]
+    set master_host [srv 0 host]
+    set master_port [srv 0 port]
+    test "sync offlinegid - partial sync " {
+        start_server {
+            tags {"slave"}
+            overrides {crdt-gid 1} config {crdt.conf} module {crdt.so}
+        } {
+            set slave [srv 0 client]
+            set slave_host [srv 0 host]
+            set slave_port [srv 0 port]
+
+            $slave slaveof $master_host $master_port
+            wait_for_sync $slave 
+            assert_equal [$slave crdt.getOfflineGid] ""
+            
+            #set
+            assert_equal [$master crdt.setOfflineGid 2 3 4] "OK"
+            after 200
+            assert_equal [$slave crdt.getOfflineGid] "2 3 4"
+        
+            assert_equal [$master crdt.setOfflineGid] "OK"
+            after 200
+            assert_equal [$slave crdt.getOfflineGid] ""
+        }
+    }
+
+    test "sync offlinegid - full sync " {
+        $master crdt.setOfflineGid 2 3 4 5
+        start_server {
+            tags {"slave"}
+            overrides {crdt-gid 1} config {crdt.conf} module {crdt.so}
+        } {
+            set slave [srv 0 client]
+            set slave_host [srv 0 host]
+            set slave_port [srv 0 port]
+
+            $slave slaveof $master_host $master_port
+            wait_for_sync $slave 
+
+            assert_equal [$slave crdt.getOfflineGid] "2 3 4 5"
+
+        }
+    }
+}
