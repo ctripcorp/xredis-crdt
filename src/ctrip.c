@@ -73,6 +73,7 @@ void setOfflineGidCommand(client *c) {
         gids |= 1 << gid;
     }
     crdtServer.offline_peer_set = gids;
+    server.dirty++;
     addReply(c,shared.ok);
 }
 
