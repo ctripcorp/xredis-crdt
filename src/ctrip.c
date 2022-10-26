@@ -58,3 +58,30 @@ void xslaveofCommand(client *c) {
     }
     addReply(c,shared.ok);
 }
+
+
+void setOfflineGidCommand(client *c) {
+    int gids = 0;
+    for(int i = 1; i < c->argc; i++) {
+        long gid = 0;
+        if ((getLongFromObjectOrReply(c, c->argv[i], &gid, NULL) != C_OK))
+            return;
+        if (gid > (1 << GIDSIZE)) {
+            addReplyError(c, "peer gid invalid");
+            return;
+        }
+        gids |= 1 << gid;
+    }
+    crdtServer.offline_peer_set = gids;
+    addReply(c,shared.ok);
+}
+
+void getOfflineGidCommand(client *c) {
+    sds gids = sdsempty();
+    for(int i = 0; i < (1 << GIDSIZE); i++) {
+        if(crdtServer.offline_peer_set & (1 << i)) {
+            gids = sdscatprintf(gids, "%d ", i);
+        }
+    }
+    addReplyBulkSds(c, sdstrim(gids, " "));
+}

@@ -32,6 +32,7 @@ set ::ci_failed_tests {
 }
 
 set ::all_tests {
+    ctrip/unit/offline_peer
     ctrip/api/result_diff
     ctrip/proxy/config
     ctrip/proxy/one_proxy_peerof

@@ -1317,6 +1317,7 @@ struct redisServer {
     long long crdt_set_del_conflict;
     long long local_clock;
     int peer_set;
+    int offline_peer_set;
     long long start_time;
     size_t multi_process_sync;
     int restart_lazy_peerof_time; 
@@ -1670,6 +1671,8 @@ void crdtAuthGidCommand(client *c);
 void sendSelectCommandToSlave(int dictid);
 void crdtAuthCommand(client *c);
 void crdtReplicationCommand(client *c);
+void setOfflineGidCommand(client *c);
+void getOfflineGidCommand(client *c);
 void freeClientArgv(client* c);
 void feedCrdtBacklog(robj **argv, int argc);
 void replicationFeedAllSlaves(int dictid, robj **argv, int argc);
