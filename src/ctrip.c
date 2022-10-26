@@ -72,8 +72,13 @@ void setOfflineGidCommand(client *c) {
         }
         gids |= 1 << gid;
     }
+    serverLog(LL_WARNING, "reset offline_peer_set3");
     crdtServer.offline_peer_set = gids;
     server.dirty++;
+    if (server.configfile != NULL && rewriteConfig(server.configfile) == -1) {
+        addReplyBulkCString(c,"OK,but save config fail");
+        return;
+    } 
     addReply(c,shared.ok);
 }
 

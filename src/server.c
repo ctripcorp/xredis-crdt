@@ -1581,6 +1581,8 @@ void initServerConfig(struct redisServer *srv) {
     srv->lua_time_limit = LUA_SCRIPT_TIME_LIMIT;
     srv->local_clock = DEFAULT_LOCAL_CLOCK;
     srv->restart_lazy_peerof_time = CONFIG_DEFAULT_RESTART_LAZY_PEEROF_TIME;
+    srv->offline_peer_set = 0;
+    srv->peer_set = 0;
     unsigned int lruclock = getLRUClock();
     atomicSet(srv->lruclock,lruclock);
     resetServerSaveParams(srv);
@@ -1991,8 +1993,6 @@ void initServer(struct redisServer *srv) {
     srv->get_ack_from_slaves = 0;
     srv->clients_paused = 0;
     srv->system_memory_size = zmalloc_get_memory_size();
-    srv->peer_set = 0;
-    srv->offline_peer_set = 0;
     if(srv == &server) {
         createSharedObjects();
         adjustOpenFilesLimit();

@@ -399,6 +399,9 @@ void loadServerConfigFromString(char *config) {
                 err = "restart_lazy_peerof_time must be 1 or greater";
                 goto loaderr;
             }
+        } else if (!strcasecmp(argv[0], "crdt-offline-gid") && argc == 2) {
+            serverLog(LL_WARNING, "reset offline_peer_set2");
+            crdtServer.offline_peer_set = atoi(argv[1]);
         } else if (!strcasecmp(argv[0],"repl-ping-slave-period") && argc == 2) {
             server.repl_ping_slave_period = atoi(argv[1]);
             if (server.repl_ping_slave_period <= 0) {
@@ -1523,6 +1526,12 @@ void configGetCommand(client *c, struct redisServer *srv) {
         matches += peer_num;
     }
 
+    if (stringmatch(pattern,"crdt-offline-gid",1)) {
+        addReplyBulkCString(c,"crdt-offline-gid");
+        addReplyLongLong(c,crdtServer.offline_peer_set);
+        matches++;
+    }
+
 
     if (stringmatch(pattern,"notify-keyspace-events",1)) {
         robj *flagsobj = createObject(OBJ_STRING,
@@ -1922,6 +1931,15 @@ void rewriteConfigPeerofOption(struct rewriteConfigState *state) {
     
 } 
 
+/* Rewrite the crdt-offline-gid option. */
+void rewriteConfigCrdtOfflineGidOption(struct rewriteConfigState *state) {
+    char *option = "crdt-offline-gid";
+    
+    rewriteConfigMarkAsProcessed(state,"crdt-offline-gid");
+    sds line = sdscatprintf(sdsempty(), "%s %d", option, crdtServer.offline_peer_set);
+    rewriteConfigRewriteLine(state,option,line,1);
+} 
+
 /* Rewrite the notify-keyspace-events option. */
 void rewriteConfigNotifykeyspaceeventsOption(struct rewriteConfigState *state) {
     int force = server.notify_keyspace_events != 0;
@@ -2151,6 +2169,7 @@ int rewriteConfig(char *path) {
     rewriteConfigDirOption(state);
     rewriteConfigSlaveofOption(state);
     rewriteConfigPeerofOption(state);
+    rewriteConfigCrdtOfflineGidOption(state);
     rewriteConfigStringOption(state,"slave-announce-ip",server.slave_announce_ip,CONFIG_DEFAULT_SLAVE_ANNOUNCE_IP);
     rewriteConfigStringOption(state,"masterauth",server.masterauth,NULL);
     rewriteConfigStringOption(state,"cluster-announce-ip",server.cluster_announce_ip,NULL);
