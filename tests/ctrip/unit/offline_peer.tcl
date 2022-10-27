@@ -124,7 +124,21 @@ start_server {
         }
     }
 }
+proc parse_vc_str {vc_str} {
+    set vc [dict create]
+    set list1 [split $vc_str ";"]
+    foreach iter1 $list1 {
+        set list2 [split $iter1 ":"]
+        dict append vc [lindex $list2 0] [lindex $list2 1]
+    }
+    return $vc 
+}
 
+test "parse_vc_str" {
+    set vc [parse_vc_str "1:2;3:4;5:6"]
+    assert_equal [dict get $vc 1] 2
+    assert_equal [dict exist $vc 2] 0
+}
 start_server {
     tags {"gc"}
     overrides {crdt-gid 1 } config {crdt.conf} module {crdt.so} 
@@ -180,13 +194,13 @@ start_server {
                 }
 
                 test "offline gid (gc), step 2 write data" {
+                    $peer3 set peer3_string peer3 
                     $master set master_string master 
                     $peer2  set peer2_string peer2 
-                    $peer3 set peer3_string peer3 
-
-                    $master set k v1
-                    $peer2 set k v2 
-                    $peer3 set k v3 
+                    
+                    $peer2 set k v1
+                    $peer3 set k v2 
+                    $master set k v3
                     
                     wait_for_condition 100 50 {
                         [$master get k ] == "v3"
@@ -210,14 +224,19 @@ start_server {
                     # puts [$peer3 crdt.info replication] 
                     # puts [$master crdt.info replication]
                     # puts [$peer2 crdt.info replication]
-                    $master del master_string 
+                    $master set add_key1 v
+                    set add_key1_vc_str [lindex [$master crdt.get add_key1] 3]
+                    set add_key1_vc [parse_vc_str $add_key1_vc_str]
+                    assert_equal [dict exist $add_key1_vc 3] 1                   
+
+                    $master del k 
                     after 2000
                     assert_equal [$master tombstonesize ] $ts
                     assert_equal [$slave tombstonesize ] $ts
                     assert_equal [$peer2 tombstonesize ] $ts
                 }
 
-                test "offline gid (gc), step 3 (master/peer2) peerof 3" {
+                test "offline gid (gc), step 4 (master/peer2) peerof 3" {
                     $master peerof 3 no one
                     $peer2 peerof 3 no one 
                     
@@ -226,7 +245,7 @@ start_server {
                     assert_equal [$peer2 tombstonesize ] $ts
                 }
 
-                test "offline gid (gc), step 3 (master/peer2) crdt.setOfflineGid 3" {
+                test "offline gid (gc), step 5 (master/peer2) crdt.setOfflineGid 3" {
                     $master crdt.setOfflineGid 3 
                     $peer2 crdt.setOfflineGid 3
                     wait_for_condition 100 50 {
@@ -246,7 +265,52 @@ start_server {
                     }
                 }
 
-                
+                test "offline gid (gc), step 6 master/peer2 add new key  vc not exist gid(3)" {
+                    $master set add_key2 v 
+                    set add_key2_vc_str [lindex [$master crdt.get add_key2] 3]
+                    set add_key2_vc [parse_vc_str $add_key2_vc_str]
+                    assert_equal [dict exist $add_key2_vc 3] 0
+                    wait_for_condition 100 50 {
+                        [$peer2 get add_key2] == "v" 
+                    } else {
+                        assert_equal [$peer2 get add_key2] "v"
+                    }
+                    set add_key2_vc_str [lindex [$peer2 crdt.get add_key2] 3]
+                    set add_key2_vc [parse_vc_str $add_key2_vc_str]
+                    assert_equal [dict exist $add_key2_vc 3] 0
+                }
+
+                test "offline gid (gc), step 7 peer2 del new key  can gc" {
+                    $peer2 del add_key2
+                    wait_for_condition 100 50 {
+                        [$peer2 tombstoneSize] == 0
+                    } else {
+                        assert_equal [$peer2 tombstoneSize] 0
+                    }
+                    wait_for_condition 100 50 {
+                        [$master get add_key2] == ""
+                    } else {
+                        assert_equal [$master get add_key2] ""
+                    }
+                    wait_for_condition 100 50 {
+                        [$master tombstoneSize] == 0
+                    } else {
+                        assert_equal [$master tombstoneSize] 0
+                    }
+                }
+
+                test "offline gid (gc) check ovc contains ovcc " {
+                    proc check_ovc_and_ovcc {r} {
+                        set ovc [parse_vc_str [crdt_status $r ovc]]
+                        set ovc_cache [parse_vc_str [crdt_status $r ovcc]]
+                        foreach gid [dict keys $ovc_cache] {
+                            assert_equal [dict get $ovc $gid] [dict get $ovc_cache $gid]
+                        }
+                    }
+                    check_ovc_and_ovcc $master
+                    check_ovc_and_ovcc $slave
+                    check_ovc_and_ovcc $peer2
+                }
 
             }
         }

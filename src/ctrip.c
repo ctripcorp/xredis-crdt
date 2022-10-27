@@ -1,5 +1,14 @@
 #include "server.h"
 
+/*============================ CRDT functions ============================ */
+
+void
+incrLocalVcUnit(long long delta) {
+    // VectorClockUnit *localVcu = getVectorClockUnit(crdtServer.vectorClock, crdtServer.crdt_gid);
+    incrLogicClock(&crdtServer.vectorClock, crdtServer.crdt_gid, delta);
+    if (crdtServer.vectorClockCache) { incrLogicClock(&crdtServer.vectorClockCache, crdtServer.crdt_gid, delta); }
+}
+
 void refullsyncCommand(client *c) {
 
     sds client = catClientInfoString(sdsempty(),c);
@@ -59,6 +68,30 @@ void xslaveofCommand(client *c) {
     addReply(c,shared.ok);
 }
 
+void setOfflinePeerSet(int gids) {
+    if (crdtServer.offline_peer_set == gids) return;
+    crdtServer.offline_peer_set = gids;
+    if (gids == 0) {
+        if (crdtServer.vectorClockCache ) {
+            freeVectorClock(crdtServer.vectorClockCache);
+            crdtServer.vectorClockCache = NULL;
+        }
+    } else {
+        VectorClock vectorClockCache = newVectorClock(0);
+        int vlen = get_len(crdtServer.vectorClock);
+        for(int i = 0; i < vlen; i++) {
+            clk* current_clk = get_clock_unit_by_index(&crdtServer.vectorClock, i);
+            int gid = get_gid(*current_clk);
+            if (!(crdtServer.offline_peer_set & (1 << gid))) {
+                vectorClockCache = addVectorClockUnit(vectorClockCache, gid, get_logic_clock(*current_clk));
+            }
+        }
+        if (crdtServer.vectorClockCache) {
+            freeVectorClock(crdtServer.vectorClockCache);
+        }
+        crdtServer.vectorClockCache = vectorClockCache;
+    }
+}
 
 void setOfflineGidCommand(client *c) {
     int gids = 0;
@@ -72,8 +105,7 @@ void setOfflineGidCommand(client *c) {
         }
         gids |= 1 << gid;
     }
-    serverLog(LL_WARNING, "reset offline_peer_set3");
-    crdtServer.offline_peer_set = gids;
+    setOfflinePeerSet(gids);
     server.dirty++;
     if (server.configfile != NULL && rewriteConfig(server.configfile) == -1) {
         addReplyBulkCString(c,"OK,but save config fail");

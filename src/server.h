@@ -1305,6 +1305,7 @@ struct redisServer {
     int crdt_gid;
     char* crdt_namespace;
     VectorClock vectorClock;
+    VectorClock vectorClockCache; //filter offline gid vc
     VectorClock gcVectorClock;
     struct CRDT_Master_Instance **crdtMasters;
     int active_crdt_ovc;      /* Can be disabled for testing purposes. */

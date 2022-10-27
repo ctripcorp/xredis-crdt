@@ -48,6 +48,7 @@ void crdtAuthGidCommand(client *c);
 void sendSelectCommandToSlave(int dictid);
 void crdtAuthCommand(client *c);
 void crdtReplicationCommand(client *c);
+void setOfflinePeerSet(int gids);
 void setOfflineGidCommand(client *c);
 void getOfflineGidCommand(client *c);
 void freeClientArgv(client* c);
