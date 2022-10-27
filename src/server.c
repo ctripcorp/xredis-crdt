@@ -339,14 +339,6 @@ struct redisCommand redisCommandTable[] = {
     {"crdt.getOfflineGid", getOfflineGidCommand, 1, "rF", 0, NULL, 0,0,0,0,0}
 };
 
-/*============================ CRDT functions ============================ */
-
-void
-incrLocalVcUnit(long long delta) {
-    // VectorClockUnit *localVcu = getVectorClockUnit(crdtServer.vectorClock, crdtServer.crdt_gid);
-    incrLogicClock(&crdtServer.vectorClock, crdtServer.crdt_gid, delta);
-}
-
 /*============================ Utility functions ============================ */
 
 /* Low level logging. To use only for very big messages, otherwise
@@ -3517,6 +3509,12 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
         info = sdscatprintf(info, 
                             "ovc:%s\r\n", vectorClockStr);
         sdsfree(vectorClockStr);
+        if (crdtServer.vectorClockCache) {
+            sds vectorClockCacheStr = vectorClockToSds(crdtServer.vectorClockCache);
+            info = sdscatprintf(info,
+                            "ovcc:%s\r\n", vectorClockCacheStr);
+            sdsfree(vectorClockCacheStr);
+        }
         sds gcVectorClockStr = vectorClockToSds(crdtServer.gcVectorClock);                    
         info = sdscatprintf(info, 
                             "gcvc:%s\r\n", gcVectorClockStr);
