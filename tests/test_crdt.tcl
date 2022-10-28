@@ -6,6 +6,7 @@ package require Tcl 8.5
 
 set tcl_precision 17
 source tests/support/redis.tcl
+source tests/support/crdt.tcl
 source tests/support/xpipe_proxy.tcl
 source tests/support/server.tcl
 source tests/support/proxy_server.tcl
@@ -554,11 +555,11 @@ proc the_end {} {
         foreach failed $::failed_tests {
             puts "*** $failed"
         }
-        cleanup
+        #cleanup
         exit 1
     } else {
         puts "\n[colorstr bold-white {\o/}] [colorstr bold-green {All tests passed without errors!}]\n"
-        cleanup
+        #cleanup
         exit 0
     }
 }

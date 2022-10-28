@@ -1,3 +1,5 @@
+
+
 start_server {
     tags {"offline command"}
     overrides {crdt-gid 1} config {crdt.conf} module {crdt.so}
@@ -124,6 +126,7 @@ start_server {
         }
     }
 }
+
 proc parse_vc_str {vc_str} {
     set vc [dict create]
     set list1 [split $vc_str ";"]
@@ -139,6 +142,7 @@ test "parse_vc_str" {
     assert_equal [dict get $vc 1] 2
     assert_equal [dict exist $vc 2] 0
 }
+
 start_server {
     tags {"gc"}
     overrides {crdt-gid 1 } config {crdt.conf} module {crdt.so} 
@@ -146,6 +150,7 @@ start_server {
     set master [srv 0 client]
     set master_host [srv 0 host]
     set master_port [srv 0 port]
+    set master_stdout [srv 0 stdout]
     $master config crdt.set repl-ping-slave-period 1
     start_server {
         tags {"slave"}
@@ -310,6 +315,23 @@ start_server {
                     check_ovc_and_ovcc $master
                     check_ovc_and_ovcc $slave
                     check_ovc_and_ovcc $peer2
+                }
+
+                test "peer new gid3 server (vcu = 0)  peerof fail" {
+                    start_server {
+                        tags {"npeer3"}
+                        overrides {crdt-gid 3 } config {crdt.conf} module {crdt.so} 
+                    } {
+                        set npeer3 [srv 0 client]
+                        set npeer3_host [srv 0 host]
+                        set npeer3_port [srv 0 port]
+                        $master peerof 3 $npeer3_host $npeer3_port
+                        for {set j 0} {$j < 100} {incr j} {
+                            assert_equal [crdt_status $master "peer1_link_status"]  "down"
+                            after 50
+                        }
+                        assert_log_file $master_stdout "*-ERR CRDT.SYNC and CRDT.PSYNC Slave vectorClock*"
+                    }
                 }
 
             }
