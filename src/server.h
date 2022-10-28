@@ -1320,7 +1320,7 @@ struct redisServer {
     int peer_set;
     int offline_peer_set;
     long long start_time;
-    size_t multi_process_sync;
+    int multi_process_sync;
     int restart_lazy_peerof_time; 
 }redisServer;
 

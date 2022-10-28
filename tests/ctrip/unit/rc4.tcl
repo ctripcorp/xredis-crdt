@@ -1,4 +1,4 @@
-start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module {crdt.so} } {
+start_server {tags {"crdt-set"}  config {crdt.conf} overrides {crdt-gid 1 local-clock 10000 } module {crdt.so} } {
     set master [srv 0 client]
     set master_gid 1
     set master_host [srv 0 host]
@@ -10,7 +10,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
     start_server {tags {"crdt-set"} overrides {crdt-gid 9} config {crdt.conf} module {crdt.so} } {
         set peer_gc [srv 0 client]
         $peer_gc peerof $master_gid $master_host $master_port
-        start_server {tags {"crdt-set"} overrides {crdt-gid 2} config {crdt.conf} module {crdt.so} } {
+        
+        start_server {tags {"crdt-set"} overrides {crdt-gid 2 } config {crdt.conf} module {crdt.so} } {
             set peer [srv 0 client]
             set peer_gid 2
             set peer_host [srv 0 host]
@@ -19,6 +20,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
             $peer config crdt.set repl-diskless-sync-delay 1
             $peer config set repl-diskless-sync-delay 1
             $peer crdt.debug_gc rc 0
+            puts [$master crdt.info replication]
             test "before" {
                 test "value + tomstone" {
                     test "a" {
@@ -27,6 +29,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                             $peer crdt.rc rc8000 1 1000 1:3 3:3:1.0 -1
                             $peer crdt.del_rc rc8000 1 1000 1:4  
                         }
+                        puts [$master crdt.info replication]
                         test "a + tad" {
                             test "a + tad success" {
                                 $master crdt.counter rc8010 1 1000 1:4 4 4:5.0 
@@ -57,6 +60,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                             }
                         }
                     }
+                    
                     test "b" {
                         test "b + tb " {
                             test "b + tb success" {
@@ -360,7 +364,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         }
                     }
                 }
-
+                
                 test "tombstone + value" {
                     test "b" {
                         test "tb + a" {
@@ -678,9 +682,9 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 }
                 
             }
+            $master crdt.set set_vcu vcu 1 1000 1:100000
             $peer peerof $master_gid $master_host $master_port
-            # wait_for_peer_sync $peer
-            after 5000
+            wait_for_peer_sync $peer
             print_log_file $peer_log
             test "after" {
                 test "value + tomstone" {

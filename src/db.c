@@ -1137,7 +1137,7 @@ int crdtPropagateExpire(redisDb *db, robj *key, int lazy, long long expireTime) 
                 if(mk != NULL) {
                     CrdtDataMethod* method = getCrdtDataMethod(obj);
                     if(method == NULL) {
-                        serverLog(LL_WARNING, "[crdtPropagateExpire]key %s can't find method", key->ptr);
+                        serverLog(LL_WARNING, "[crdtPropagateExpire]key %s can't find method", (sds)key->ptr);
                         return C_ERR;
                     }
                     method->propagateDel(db->id, key, mk, obj);
@@ -1153,7 +1153,7 @@ int crdtPropagateExpire(redisDb *db, robj *key, int lazy, long long expireTime) 
             }
         }
     }
-    serverLog(LL_WARNING, "[crdtPropagateExpire]key %s can't find value", key->ptr);
+    serverLog(LL_WARNING, "[crdtPropagateExpire]key %s can't find value", (sds)key->ptr);
     return C_ERR;
 }
 

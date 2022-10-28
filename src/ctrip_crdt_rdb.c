@@ -34,6 +34,7 @@
 #include "ctrip_crdt_rdb.h"
 #include "rdb.h"
 #include "rio.h"
+#include <strings.h>
 
 /**---------------------------CRDT RDB Send Functions--------------------------------*/
 /* Spawn an RDB child that writes the RDB to the sockets of the slaves
@@ -469,12 +470,12 @@ int checkTombstoneType(void* current, void* other, robj* key) {
     CrdtObject* o = (CrdtObject*)other;
     if(!isTombstone(c)) {
         serverLog(LL_WARNING, "[INCONSIS][MERGE TOMBSTONE TYPE] key: %s, tombstone type: %d",
-                key->ptr, c->type);
+                (sds)key->ptr, c->type);
         return C_ERR;
     }
     if(c->type != o->type) {
         serverLog(LL_WARNING, "[INCONSIS][MERGE TOMBSTONE] key: %s, tombstone type: %d, merge type %d",
-                key->ptr, c->type, o->type);
+                (sds)key->ptr, c->type, o->type);
         incrCrdtConflict(MERGECONFLICT | TYPECONFLICT);
         return C_ERR;
     }
@@ -486,17 +487,17 @@ int checkTombstoneDataType(void* current, void* other, robj* key) {
     CrdtObject* o = (CrdtObject*)other;
     if(!isTombstone(c)) {
         serverLog(LL_WARNING, "[INCONSIS][TOMBSTONE DATA] TOMBSTONE TYPE key: %s, tombstone type: %d",
-                key->ptr, c->type);
+                (sds)key->ptr, c->type);
         return C_ERR;
     }
     if(!isData(other)) {
         serverLog(LL_WARNING, "[INCONSIS][TOMBSTONE DATA] DATA TYPE key: %s, data type: %d",
-                key->ptr, c->type);
+                (sds)key->ptr, c->type);
         return C_ERR;
     }
     if(getDataType(c)!= getDataType(o)) {
         serverLog(LL_WARNING, "[INCONSIS][TOMBSTONE DATA] key: %s, tombstone type: %d, data type %d",
-                key->ptr, c->type, o->type);
+                (sds)key->ptr, c->type, o->type);
         incrCrdtConflict(MERGECONFLICT | TYPECONFLICT);
         return C_ERR;
     }
@@ -634,12 +635,12 @@ int checkDataType(void* current, void* other, robj* key) {
     CrdtObject* o = (CrdtObject*)other;
     if(!(isData(c))) {
         serverLog(LL_WARNING, "[INCONSIS][MERGE DATA TYPE ERROR] key: %s, local type: %d",
-                key->ptr, c->type);
+                (sds)key->ptr, c->type);
         return C_ERR;
     }
     if (c->type != o->type) {
         serverLog(LL_WARNING, "[INCONSIS][MERGE DATA] key: %s, local type: %d, merge type %d, type: %d != %d",
-                key->ptr, getDataType(c), getDataType(o), c->type, o->type);
+                (sds)key->ptr, getDataType(c), getDataType(o), c->type, o->type);
         incrCrdtConflict(MERGECONFLICT | TYPECONFLICT);
         return C_ERR;
     }
@@ -893,7 +894,7 @@ int rdbLoadCrdtInfoAuxFields(robj* auxkey, robj* auxval, CRDT_Master_Instance** 
         
         void* proxy = str2proxy((*currentMasterInstance)->proxy_type,auxval->ptr);
         if (proxy == NULL) {
-            serverLog(LL_WARNING,"RDB Parse Proxy %s", auxval->ptr);
+            serverLog(LL_WARNING,"RDB Parse Proxy %s", (sds)auxval->ptr);
             *error = sdsnew("RDB Proxy error");
             return -1;
         }
@@ -973,7 +974,7 @@ robj* reverseHashToArgv(hashTypeIterator* hi, int type) {
 int processInputRdb(client* fakeClient) {
     struct redisCommand* cmd = lookupCommand(fakeClient->argv[0]->ptr);
     if (!cmd) {
-        serverLog(LL_WARNING,"Unknown command '%s' reading the append only file", fakeClient->argv[0]->ptr);
+        serverLog(LL_WARNING,"Unknown command '%s' reading the append only file", (sds)fakeClient->argv[0]->ptr);
         freeClientArgv(fakeClient);
         fakeClient->cmd = NULL;
         return C_ERR;

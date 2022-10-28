@@ -1664,10 +1664,10 @@ int RM_CrdtMultiWrappedReplicate(RedisModuleCtx *ctx, const char *cmdname, const
 //todo: re-use
 long long RM_CurrentVectorClock() {
     if (crdtServer.offline_peer_set == 0) {
-        serverAssert(crdtServer.vectorClockCache == NULL);
+        serverAssert(isNullVectorClock(crdtServer.vectorClockCache));
         return *(long long*)(&crdtServer.vectorClock);
     } else {
-        serverAssert(crdtServer.vectorClockCache);
+        serverAssert(!isNullVectorClock(crdtServer.vectorClockCache));
         return *(long long*)(&crdtServer.vectorClockCache);
     }
     
@@ -1699,7 +1699,7 @@ void RM_MergeVectorClock (int gid, VectorClock vclock) {
     
     updateProcessVectorClock(&crdtServer.vectorClock, &vclock, gid, crdtServer.crdt_gid);
     
-    if (crdtServer.vectorClockCache) updateProcessVectorClock(&crdtServer.vectorClockCache, &vclock, gid, crdtServer.crdt_gid);
+    if (!isNullVectorClock(crdtServer.vectorClockCache)) updateProcessVectorClock(&crdtServer.vectorClockCache, &vclock, gid, crdtServer.crdt_gid);
     
     // refreshMinVectorClock(vclock, gid);
     refreshGcVectorClock(vclock);

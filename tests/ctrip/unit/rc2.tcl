@@ -398,6 +398,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 }
             }
         }
+        $master crdt.set set_vcu vcu 1 1000 1:100000
         $peer peerof $master_gid $master_host $master_port
         $master peerof $peer_gid $peer_host $peer_port
         wait_for_peer_sync $peer
@@ -625,6 +626,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 }
             }
         }
+        $master crdt.set set_vcu vcu 1 1000 1:100000
         $peer peerof $master_gid $master_host $master_port
         $master peerof $peer_gid $peer_host $peer_port
         wait_for_peer_sync $peer
@@ -926,12 +928,12 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $peer crdt.rc rc6557 1 1000 1:8 3:3:3.0 -1
                         $peer crdt.counter rc6557 1 1000 1:6 4 4:6.0
                         $peer crdt.del_rc rc6557 1 1000 1:5  1:5:2:2.0
-                        puts [$master crdt.datainfo rc6557]
-                        puts [$peer crdt.datainfo rc6557]
+                        
                     }
                 }
             }
         }
+        $master crdt.set set_vcu vcu 1 1000 1:100000
         $peer peerof $master_gid $master_host $master_port
         $master peerof $peer_gid $peer_host $peer_port
         wait_for_peer_sync $peer
@@ -1009,7 +1011,6 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $master get  rc6556 
                     } {6}
                     test "bad + bad  bad fail" {
-                        puts [$peer crdt.datainfo rc6557]
                         $peer get  rc6557 
                     } {7}
                 }

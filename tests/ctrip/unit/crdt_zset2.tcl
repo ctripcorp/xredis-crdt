@@ -85,6 +85,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 }
             }
         }
+        $master crdt.set set_vcu vcu 1 1000 1:100000
         $peer peerof $master_gid $master_host $master_port
         $master peerof $peer_gid $peer_host $peer_port
         wait_for_peer_sync $peer
@@ -400,6 +401,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 }
             }
         }
+        $master crdt.set set_vcu vcu 1 1000 1:100000
         $peer peerof $master_gid $master_host $master_port
         $master peerof $peer_gid $peer_host $peer_port
         wait_for_peer_sync $peer
@@ -626,6 +628,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 }
             }
         }
+        $master crdt.set set_vcu vcu 1 1000 1:100000
         $master peerof $peer_gid $peer_host $peer_port
          wait_for_peer_sync $master
         $peer peerof $master_gid $master_host $master_port
@@ -936,6 +939,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
             }
         }
         
+        $master crdt.set set_vcu vcu 1 1000 1:100000
         $master peerof $peer_gid $peer_host $peer_port
         wait_for_peer_sync $master
        

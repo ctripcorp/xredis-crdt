@@ -448,7 +448,6 @@ proc start_server_by_config {config_file config host port stdout stderr wait cod
         }
         if {$wait == 1} {
             while 1 {
-                puts $stdout
                 # check that the server actually started and is ready for connections
                 if {[exec grep -i "Ready to accept" | wc -l < $stdout] > 0} {
                     break

@@ -2145,6 +2145,7 @@ void initServer(struct redisServer *srv) {
     VectorClock gcVclock = newVectorClock(1);
     set_clock_unit_by_index(&gcVclock, 0, init_clock(crdtServer.crdt_gid, 0));
     srv->gcVectorClock =  gcVclock;
+    srv->vectorClockCache = newVectorClock(0);
 }
 
 /* Populates the Redis Command Table starting from the hard coded list
@@ -3509,7 +3510,7 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
         info = sdscatprintf(info, 
                             "ovc:%s\r\n", vectorClockStr);
         sdsfree(vectorClockStr);
-        if (crdtServer.vectorClockCache) {
+        if (!isNullVectorClock(crdtServer.vectorClockCache)) {
             sds vectorClockCacheStr = vectorClockToSds(crdtServer.vectorClockCache);
             info = sdscatprintf(info,
                             "ovcc:%s\r\n", vectorClockCacheStr);

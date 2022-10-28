@@ -88,22 +88,6 @@ proc run_thread {peer2_host peer2_port time } {
     
 }
 
-# test "2peer shutdown" {
-#     build_env {
-#         set load_handle0 [run_thread $master_host $master_port 5000]
-#         set load_handle1 [run_thread $peer_host $peer_port 5000]
-#         after 5000
-#         stop_write_load $load_handle0
-#         stop_write_load $load_handle1
-#         after 2000
-#         assert_equal  [$master dbsize] [$peer dbsize]
-#         assert_equal  [$peer2 dbsize] [$peer dbsize]
-#         catch {$master shutdown} error 
-#         catch {$peer2 shutdown} error2
-        
-
-#     }
-# }
 test "restart" {
     build_env {
         set load_handle0 [run_thread $master_host $master_port 5000]
@@ -169,18 +153,11 @@ test "change_master_when_start_master" {
     }
 }
 
-proc read_file {log} {
-    set fp [open $log r]
-    set content [read $fp]
-    close $fp
-    puts $content
-}
 
 proc wait_start_peer {log} {
     set fp [open $log r]
     while {1} {
         set content [read $fp]
-        puts $content
         if {[string match {*[CRDT][crdtMergeStartCommand][begin]*} $content]} {
             break;
         } else {

@@ -694,7 +694,6 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 test "ad" {
                     $master  crdt.counter rc5300 1 1000 1:2 4 4:2.0 
                     $master  crdt.del_rc rc5300 1 1000 1:1 1:1:2:1.0 
-                    puts [$master crdt.datainfo rc5300]
                 }
                 test "ba" {
                     $master  crdt.rc rc5400 1 1000 1:1 3:3:1.1 -1 
@@ -725,7 +724,6 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 test "value" {
                     test "a" {
                         assert_equal [$master crdt.datainfo rc5100] [$slave crdt.datainfo rc5100]
-                        puts [$master crdt.datainfo rc5100]
                     }
                     test "b" {
                         assert_equal [$master crdt.datainfo rc5200] [$slave crdt.datainfo rc5200]
