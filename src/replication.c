@@ -783,6 +783,22 @@ void crdtPsyncCommand(client *c) {
         return;
     }
 
+    if (!(c->slave_capa & SLAVE_CAPA_BACKSTREAM)) {
+        long long c_vcu = get_vcu_from_vc(c->vectorClock, crdtServer.crdt_gid, NULL);
+        long long l_vcu = get_vcu_from_vc(crdtServer.vectorClock, crdtServer.crdt_gid, NULL);
+        
+
+        if (c_vcu > l_vcu) {
+            sds c_vc = vectorClockToSds(c->vectorClock);
+            sds l_vc = vectorClockToSds(crdtServer.vectorClock);
+            addReplyError(c, sdscatprintf(sdsempty(), "CRDT.SYNC and CRDT.PSYNC Slave vectorClock , gid(%d) client vc(%s) > local vc(%s)", 
+                crdtServer.crdt_gid, c_vc, l_vc));
+            sdsfree(c_vc);
+            sdsfree(l_vc);
+            return;
+        }
+    }
+
     /* SYNC can't be issued when the server has pending data to send to
      * the client about already issued commands. We need a fresh reply
      * buffer registering the differences between the BGSAVE and the current
@@ -900,11 +916,6 @@ void replconfCommand(client *c) {
             c->filterVectorClock = vectorClockMerge(c->filterVectorClock, vc);
             freeVectorClock(old_vc);
             freeVectorClock(vc);
-            {//del
-                sds vc_str = vectorClockToSds(c->filterVectorClock);
-                serverLog(LL_WARNING, "filterVectorClock: %s", vc_str);
-                sdsfree(vc_str);
-            }
             c->slave_capa  |= SLAVE_CAPA_BACKSTREAM;
 
         }
