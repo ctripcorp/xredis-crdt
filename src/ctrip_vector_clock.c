@@ -99,7 +99,7 @@ static inline clk *get_clock_unit(VectorClock *vc, char gid) {
         if(get_len(value) == 1) {
             return (clk*)(&value.unit);
         }
-        return (clk*)value.pvc.pvc;
+        return (clk*)(value.pvc.pvc);
     }
 #endif
 

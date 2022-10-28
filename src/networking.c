@@ -1291,7 +1291,7 @@ int processMultibulkBuffer(client *c) {
                 serverLog(LL_WARNING, "Protocol error: expected '$',  buf: %s",
                     c->querybuf);
                 if(c->argc > 0) {
-                    serverLog(LL_WARNING, "Protocol error: expected '$' ,command %s", c->argv[0]->ptr);
+                    serverLog(LL_WARNING, "Protocol error: expected '$' ,command %s", (sds)c->argv[0]->ptr);
                 }
                 return C_ERR;
             }
@@ -1303,7 +1303,7 @@ int processMultibulkBuffer(client *c) {
                 serverLog(LL_WARNING, "Protocol error: invalid bulk length,  buf: %s",
                     c->querybuf);
                 if(c->argc > 0) {
-                    serverLog(LL_WARNING, "Protocol error: invalid bulk length, command %s", c->argv[0]->ptr);
+                    serverLog(LL_WARNING, "Protocol error: invalid bulk length, command %s", (sds)c->argv[0]->ptr);
                 }
                 return C_ERR;
             }
@@ -1379,7 +1379,7 @@ void printCommand(client *c) {
         if((len + sdslen(c->argv[i]->ptr) + 10) > max_buf) {
             goto end;
         } else {
-            len += sprintf(buf + len, " %s", c->argv[i]->ptr);
+            len += sprintf(buf + len, " %s", (sds)c->argv[i]->ptr);
         }
     }
 end:

@@ -36,6 +36,7 @@ start_server {tags {"debug"} overrides {crdt-gid 1} config {crdt.conf} module {c
         test "before" {
             $master crdt.datainfo []
         }
+        $peer crdt.set set_vcu vcu 2 1000 2:100000
         $master peerof $peer_gid $peer_host $peer_port
         $peer peerof $master_gid $master_host $master_port
         wait_for_peer_sync $master 

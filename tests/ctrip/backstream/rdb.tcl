@@ -161,8 +161,6 @@ test "slave-add-sync" {
             set slave [redis $slave_host $slave_port]
             $slave select 9
             wait_for_sync $slave 
-            puts [$slave info replication]
-            puts [$master info replication]
             assert_equal [$slave get k] [$master get k]
         }
     }

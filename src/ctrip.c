@@ -6,7 +6,7 @@ void
 incrLocalVcUnit(long long delta) {
     // VectorClockUnit *localVcu = getVectorClockUnit(crdtServer.vectorClock, crdtServer.crdt_gid);
     incrLogicClock(&crdtServer.vectorClock, crdtServer.crdt_gid, delta);
-    if (crdtServer.vectorClockCache) { incrLogicClock(&crdtServer.vectorClockCache, crdtServer.crdt_gid, delta); }
+    if (!isNullVectorClock(crdtServer.vectorClockCache)) { incrLogicClock(&crdtServer.vectorClockCache, crdtServer.crdt_gid, delta); }
 }
 
 void refullsyncCommand(client *c) {
@@ -72,9 +72,9 @@ void setOfflinePeerSet(int gids) {
     if (crdtServer.offline_peer_set == gids) return;
     crdtServer.offline_peer_set = gids;
     if (gids == 0) {
-        if (crdtServer.vectorClockCache ) {
+        if (!isNullVectorClock(crdtServer.vectorClockCache )) {
             freeVectorClock(crdtServer.vectorClockCache);
-            crdtServer.vectorClockCache = NULL;
+            crdtServer.vectorClockCache = newVectorClock(0);
         }
     } else {
         VectorClock vectorClockCache = newVectorClock(0);
@@ -86,7 +86,7 @@ void setOfflinePeerSet(int gids) {
                 vectorClockCache = addVectorClockUnit(vectorClockCache, gid, get_logic_clock(*current_clk));
             }
         }
-        if (crdtServer.vectorClockCache) {
+        if (!isNullVectorClock(crdtServer.vectorClockCache)) {
             freeVectorClock(crdtServer.vectorClockCache);
         }
         crdtServer.vectorClockCache = vectorClockCache;

@@ -680,9 +680,9 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 }
                 
             }
+            $master crdt.set set_vcu vcu 1 1000 1:100000
             $peer peerof $master_gid $master_host $master_port
-            # wait_for_peer_sync $peer
-            after 5000
+            wait_for_peer_sync $peer
             print_log_file $peer_log
             test "after" {
                 test "value + tomstone" {

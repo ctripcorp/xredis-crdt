@@ -908,9 +908,6 @@ void replconfCommand(client *c) {
         } 
         else if (!strcasecmp(c->argv[j]->ptr, "backstream")) {
             serverAssertWithInfo(c, NULL, sdsEncodedObject(c->argv[j+1]));
-            // c->gid = atoi(c->argv[j+1]->ptr);
-            serverLog(LL_WARNING, "backstream: %s", c->argv[j+1]->ptr);
-            // refreshVectorClock(c, c->argv[j+1]->ptr);
             VectorClock vc = sdsToVectorClock(c->argv[j+1]->ptr);
             VectorClock old_vc = c->filterVectorClock;
             c->filterVectorClock = vectorClockMerge(c->filterVectorClock, vc);

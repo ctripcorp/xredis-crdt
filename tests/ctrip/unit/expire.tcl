@@ -5,7 +5,7 @@ proc log_file_matches {log} {
     puts $content
 }
 proc wait { client index type log}  {
-    set retry 50
+    set retry 100
     set match_str ""
     append match_str "*slave" $index ":*state=online*"
     while {$retry} {
@@ -509,7 +509,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
 
 
     
-    start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 2 repl-diskless-sync-delay 1} module {crdt.so}} {
+    start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 2 repl-diskless-sync-delay 1 local-clock 10000} module {crdt.so}} {
 
         lappend peers [srv 0 client]
         lappend peer_hosts [srv 0 host]
@@ -518,8 +518,10 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
         lappend peer_gids 2 
         [lindex $peers 1] config crdt.set repl-diskless-sync-delay 1
         [lindex $peers 1] config set repl-diskless-sync-delay 1
+        [lindex $peers 1] crdt.set set_vcu vcu 2 1000 2:100000
+        [lindex $peers 1] peerof [lindex $peer_gids 0] [lindex $peer_hosts 0] [lindex $peer_ports 0] 
         [lindex $peers 0] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
-        [lindex $peers 1] peerof [lindex $peer_gids 0] [lindex $peer_hosts 0] [lindex $peer_ports 0]
+        
         wait [lindex $peers 0] 0 crdt.info [lindex $peer_stdouts 0]
         wait [lindex $peers 1] 0 crdt.info [lindex $peer_stdouts 1]
         test "k expire" {
