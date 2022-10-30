@@ -126,15 +126,15 @@ start_server {tags {"load rdb master"} overrides {crdt-gid 1} config {crdt.conf}
         set peer_port [srv 0 port]
         set peer_stdout [srv 0 stdout]
         set peer_stderr [srv 0 stderr]
-        puts [dict get [srv 0 config] dir]
+        # puts [dict get [srv 0 config] dir]
         # $peer crdt.set key v1 1 1000 1:1 
         $peer peerof $master_gid $master_host $master_port
         wait_for_peer_sync $peer 
         $master peerof $peer_gid $peer_host $peer_port 
         wait_for_peer_sync $master 
         $master set key v1
-        puts [$master info replication]
-        puts [$master crdt.info replication]
+        # puts [$master info replication]
+        # puts [$master crdt.info replication]
         $master bgsave 
         waitForBgsave $master 
         # puts [read_file $master_stdout]
@@ -154,8 +154,8 @@ start_server {tags {"load rdb master"} overrides {crdt-gid 1} config {crdt.conf}
             }
             test "1" {
                 wait_for_peer_sync $master 
-                puts [$master crdt.info replication]
-                puts [read_file [format "%s/stdout" $server_path]]
+                # puts [$master crdt.info replication]
+                # puts [read_file [format "%s/stdout" $server_path]]
                 assert_equal [$master get key] v1
             }
             
@@ -268,7 +268,7 @@ start_server {tags {"slave load rdb.conf"} overrides {crdt-gid 2} config {crdt.c
                 $slave slaveof no one 
                 assert_equal [crdt_status $slave backstreaming] 1
                 wait_for_peer_sync $slave 
-                puts [$slave crdt.info replication]
+                # puts [$slave crdt.info replication]
                 assert_equal [$slave get key] v1
             }
         }
@@ -412,7 +412,6 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt_no_save.conf} 
         $peer peerof $master_gid $master_host $master_port
         $peer crdt.set key v1 1 1000 1:1
         $master peerof 2 127.0.0.1 0 
-        puts "abc"
         $master bgsave 
         waitForBgrewriteaof $master
         $master peerof $peer_gid $peer_host $peer_port
@@ -429,7 +428,6 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt_no_save.conf} 
             $master select 9
             test "2" {
                 wait_for_peer_sync $master 
-                puts "2"
                 assert_equal [$master get key] v1
             }
             
@@ -469,7 +467,7 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt_no_save.conf} 
             after 2000
             set master [redis $master_host $master_port]
             wait_for_peer_sync $master
-            puts [$master crdt.info replication]
+            # puts [$master crdt.info replication]
             $master select 9
             assert_equal [$master crdt.datainfo peer_key] [$peer crdt.datainfo peer_key] 
             assert_equal [$master crdt.datainfo master_key] [$peer crdt.datainfo master_key] 
@@ -479,7 +477,7 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt_no_save.conf} 
             $master flushall 
             $master peerof $peer_gid $peer_host $peer_port backstream 0
             wait_for_peer_sync $master
-            puts [read_file $master_stdout]
+            # puts [read_file $master_stdout]
 
             assert_equal [$master crdt.datainfo peer_key] [$peer crdt.datainfo peer_key] 
             assert_equal [$master crdt.datainfo master_key] [$peer crdt.datainfo master_key] 

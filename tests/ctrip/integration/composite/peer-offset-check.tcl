@@ -377,8 +377,8 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                     set load_handle2 [start_write_load_with_interval [lindex $peer_hosts 0] [lindex $peer_ports 0] 1 20]
                     after 40              
                     # client kill crdt-master => disturb peer sync
-                    puts [format "killed clients: %d" [[lindex $peers 0] client kill type crdt.master]]
-                    puts [format "killed clients: %d" [[lindex $peers 1] client kill type crdt.master]]
+                    # puts [format "killed clients: %d" [[lindex $peers 0] client kill type crdt.master]]
+                    # puts [format "killed clients: %d" [[lindex $peers 1] client kill type crdt.master]]
 
                     after 200
                     # Stop the write load
@@ -432,10 +432,10 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                     set sync_partial_ok_now_0 [ crdt_status [lindex $peers 0] "sync_partial_ok" ]
                     set sync_partial_ok_now_1 [ crdt_status [lindex $peers 1] "sync_partial_ok" ]
 
-                    puts [format "sync_partial_ok-0: %d" $sync_partial_ok_now_0]
-                    puts [format "sync_partial_ok-1: %d" $sync_partial_ok_now_1]
-                    puts [format "sync_full_0: %d" [crdt_status [lindex $peers 0] "sync_full" ]]
-                    puts [format "sync_full_1: %d" [crdt_status [lindex $peers 1] "sync_full" ]]
+                    # puts [format "sync_partial_ok-0: %d" $sync_partial_ok_now_0]
+                    # puts [format "sync_partial_ok-1: %d" $sync_partial_ok_now_1]
+                    # puts [format "sync_full_0: %d" [crdt_status [lindex $peers 0] "sync_full" ]]
+                    # puts [format "sync_full_1: %d" [crdt_status [lindex $peers 1] "sync_full" ]]
 
                     set partil_incr_0 [expr $sync_partial_ok_now_0 - $sync_partial_ok_0]
                     set partil_incr_1 [expr $sync_partial_ok_now_1 - $sync_partial_ok_1]
@@ -725,8 +725,8 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                     set sync_partial_ok_now_0 [ crdt_status [lindex $slaves 0] "sync_partial_ok" ]
                     set sync_partial_ok_now_1 [ crdt_status [lindex $peers 1] "sync_partial_ok" ]
 
-                    puts [format "sync_full_0: %d" [crdt_status [lindex $slaves 0] "sync_full" ]]
-                    puts [format "sync_full_1: %d" [crdt_status [lindex $peers 1] "sync_full" ]]
+                    # puts [format "sync_full_0: %d" [crdt_status [lindex $slaves 0] "sync_full" ]]
+                    # puts [format "sync_full_1: %d" [crdt_status [lindex $peers 1] "sync_full" ]]
 
                     set partil_incr_0 [expr $sync_partial_ok_now_0 - $sync_partial_ok_0]
                     set partil_incr_1 [expr $sync_partial_ok_now_1 - $sync_partial_ok_1]
@@ -863,8 +863,8 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                     set sync_full_now_0 [ crdt_status [lindex $peers 0] "sync_full" ]
                     set sync_full_now_1 [ crdt_status [lindex $peers 1] "sync_full" ]
 
-                    puts [format "sync_full_0: %d" [crdt_status [lindex $slaves 0] "sync_full" ]]
-                    puts [format "sync_full_1: %d" [crdt_status [lindex $peers 1] "sync_full" ]]
+                    # puts [format "sync_full_0: %d" [crdt_status [lindex $slaves 0] "sync_full" ]]
+                    # puts [format "sync_full_1: %d" [crdt_status [lindex $peers 1] "sync_full" ]]
 
                     set full_incr_0 [expr $sync_full_now_0 - $sync_full_0]
                     set full_incr_1 [expr $sync_full_now_1 - $sync_full_1]

@@ -91,7 +91,6 @@ proc basic_test { type create check delete} {
             
             test [format "%s-del-tombstone2" $type] {
                 set add1 {key field value 1 100000 {"1:11;2:11"} }
-                puts [[lindex $peers 0] crdt.datainfo key ]
                 run [replace [replace_client $create {[lindex $peers 0]}] $add1] 1
                 
                 run [replace [replace_client $check {[lindex $peers 0]}] $add1] 1

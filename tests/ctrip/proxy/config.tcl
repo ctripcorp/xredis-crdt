@@ -57,7 +57,6 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                     assert_equal $sync_partial_ok_num [crdt_stats $peer sync_partial_ok]
                     assert_equal [crdt_status $master peer0_proxy_server] PROXYTCP://$proxy_host:$proxy_port
 
-                    puts "abc"
                     #reset peerof
                     $master peerof $peer_gid $peer_host $peer_port proxy-type XPIPE-PROXY proxy-servers PROXYTCP://127.0.0.1:0,PROXYTCP://$proxy_host:$proxy_port proxy-params PROXYTLS://$proxy2_host:$proxy2_tls_port
                     wait_for_peer_sync $master
@@ -65,7 +64,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                     catch {$master shutdown} error
                     set master_config_file [srv -3 config_file]
                     set master_config [srv -3 config]
-                    puts [read_file $master_config_file]
+                    # puts [read_file $master_config_file]
                     start_server_by_config $master_config_file $master_config $master_host $master_port $master_stdout $master_stderr 1 {
                         set master [redis $master_host $master_port]
                         $master select 9

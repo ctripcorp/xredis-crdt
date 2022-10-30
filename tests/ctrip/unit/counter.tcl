@@ -116,7 +116,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
             catch {$master incrby incrby_max20 1} error
             assert_match "ERR increment or decrement would overflow" $error
             $master incrby incrby_max20 -1
-            puts [$master crdt.datainfo incrby_max20]
+            # puts [$master crdt.datainfo incrby_max20]
             assert_equal [ $master get incrby_max20] -1
         }
 
@@ -270,9 +270,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                     }
                     test " incrbyfloat + set" {
                         $master  incrbyfloat kv1020 1.0   
-                        puts [$master crdt.datainfo kv1020]
                         $master set kv1020 3.0  
-                        puts [$master crdt.datainfo kv1020]
                     }
                     test "del + set" {
                         test "del(set) + set" {

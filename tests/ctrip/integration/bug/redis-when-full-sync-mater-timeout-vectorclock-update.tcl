@@ -97,7 +97,6 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskle
             assert { $dbsize <= $n}
             after 100
             assert { [ [lindex $peers 1] dbsize] == $dbsize}
-            puts [get_vector_clock [lindex $peers 1]]
             set clock [get_vector_clock [lindex $peers 1]]
             if {$clock != "1:0;2:0" && $clock != "2:0"} {
                 fail "full sync clock error"

@@ -94,13 +94,12 @@ start_redis [list overrides [list repl-diskless-sync-delay 1 "dir"  $server_path
                 } else {
                     assert_equal [[lindex $peers 0] ping] PONG
                     assert_equal [[lindex $peers 1] ping] PONG
-                    puts "aaaaa"
-                    puts [[lindex $peers 0] dbsize] 
-                    puts [[lindex $peers 0] expiresize] 
-                    puts [[lindex $peers 0] tombstonesize] 
-                    puts [[lindex $peers 1] dbsize] 
-                    puts [[lindex $peers 1] expiresize] 
-                    puts [[lindex $peers 1] tombstonesize] 
+                    # puts [[lindex $peers 0] dbsize] 
+                    # puts [[lindex $peers 0] expiresize] 
+                    # puts [[lindex $peers 0] tombstonesize] 
+                    # puts [[lindex $peers 1] dbsize] 
+                    # puts [[lindex $peers 1] expiresize] 
+                    # puts [[lindex $peers 1] tombstonesize] 
                     incr retry -1
                     after 100
                 }

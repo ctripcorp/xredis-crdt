@@ -61,7 +61,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
         stop_write_load $load_handle3
         stop_write_load $load_handle4
 
-        after 500
+        wait_for_sync [lindex $slaves 0]
         start_server {config {crdt.conf} overrides {crdt-gid 2} module {crdt.so}} {
             lappend peers [srv 0 client]
             lappend peer_hosts [srv 0 host]
@@ -97,6 +97,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                 stop_write_load $load_handle8
                 stop_write_load $load_handle9
 
+                wait_for_sync [lindex $slaves 1]
                 test "TEST Master-Master + Master-Slave works together" {
                     # Send PEEROF commands to peers
                     [lindex $peers 0] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
@@ -104,34 +105,8 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
 
                     # Wait for all the three slaves to reach the "online"
                     # state from the POV of the master.
-                    set retry 500
-                    while {$retry} {
-                        set info [[lindex $peers 0] crdt.info replication]
-                        if {[string match {*slave0:*state=online*} $info]} {
-                            break
-                        } else {
-                            incr retry -1
-                            after 100
-                        }
-                    }
-                    if {$retry == 0} {
-                        puts [log_content [lindex $peer_stdout 1]]
-                        error "assertion:Peers not correctly synchronized"
-                    }
-                    set retry 500
-                    while {$retry} {
-                        set info [[lindex $peers 1] crdt.info replication]
-                        if {[string match {*slave0:*state=online*} $info]} {
-                            break
-                        } else {
-                            incr retry -1
-                            after 100
-                        }
-                    }
-                    if {$retry == 0} {
-                        puts [log_content [lindex $peer_stdout 0]]
-                        error "assertion:Peers not correctly synchronized"
-                    }
+                    wait_for_peer_sync [lindex $peers 0]
+                    wait_for_peer_sync [lindex $peers 1]
 
                     # Wait that slaves acknowledge they are online so
                     # we are sure that DBSIZE and DEBUG DIGEST will not
@@ -238,8 +213,8 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                         fail "Different number of keys between masted and slave after too long time."
                     }
 
-                    puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
-                    puts [format "%s: %d" {slave2 key numbers} [[lindex $slaves 1] dbsize]]
+                    # puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
+                    # puts [format "%s: %d" {slave2 key numbers} [[lindex $slaves 1] dbsize]]
                 }
 
                 test "after failover, full sync count should be 1 and 0" {

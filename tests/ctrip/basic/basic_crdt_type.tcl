@@ -180,14 +180,10 @@ proc basic_test { type create check delete} {
 
 
                 set argv3 {tombstone field value3 1 100001 {"1:12;2:11"}}
-                puts [[lindex $peers 0] crdt.datainfo tombstone]
-                puts [[lindex $peers 1] crdt.datainfo tombstone]
                 run [replace [replace_client $create {[lindex $peers 0]}] $argv3] 1
                 
                 run [replace [replace_client $check {[lindex $peers 0]}] $argv3] 1
                 after 1000
-                puts [[lindex $peers 0] crdt.datainfo tombstone]
-                puts [[lindex $peers 1] crdt.datainfo tombstone]
                 
                 run [replace [replace_client $check {[lindex $peers 1]}] $argv3] 1
             }
@@ -210,14 +206,12 @@ proc basic_test { type create check delete} {
             test [format "%s-tombstone-gid2" $type] {            
                 set argv5 {tombstone field value5 1 100001 {"1:14;2:13"}}
                 set result {tombstone field {} 1 100000 {"1:14;2:14"} }
-                puts [[lindex $peers 0] crdt.datainfo tombstone]
-                puts [[lindex $peers 1] crdt.datainfo tombstone]
+                
                 run [replace [replace_client $create {[lindex $peers 0]}] $argv5] 1
                 run [replace [replace_client $check {[lindex $peers 0]}] $argv5] 1
                 after 1000
                 run [replace [replace_client $check {[lindex $peers 1]}] $argv5] 1
-                puts [[lindex $peers 0] crdt.datainfo tombstone]
-                puts [[lindex $peers 1] crdt.datainfo tombstone]
+                
                 set del3 {tombstone field value5 2 100001 {"1:14;2:14"}}
                 run [replace [replace_client $delete {[lindex $peers 1]}] $del3] 1
                 run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
@@ -707,15 +701,14 @@ proc basic_test { type create check delete} {
             run [replace [replace_client $check {[lindex $peers 0]}] $add1] 1
             run [replace [replace_client $delete {[lindex $peers 0]}] $del1] 1
             run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
-            puts [[lindex $peers 0] crdt.datainfo tombstone3 ]
+
             run [replace [replace_client $create {[lindex $peers 0]}] $add2] 1
-            puts [[lindex $peers 0] crdt.datainfo tombstone3 ]
+            
             run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
             run [replace [replace_client $create {[lindex $peers 0]}] $add3] 1
-            puts [[lindex $peers 0] crdt.datainfo tombstone3 ]
+
             run [replace [replace_client $check {[lindex $peers 0]}] $result3] 1
             run [replace [replace_client $delete {[lindex $peers 0]}] $del2] 1 
-            puts [[lindex $peers 0] crdt.datainfo tombstone3 ]
             run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
         }
         

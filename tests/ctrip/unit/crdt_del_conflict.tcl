@@ -70,7 +70,7 @@ start_server {tags {"crdt-del"} overrides {crdt-gid 1} config {crdt.conf} module
             } else {
                 fail "del fail to replicate"
             }
-            puts [format "tombstone size: %lld" [[lindex $peers 1] tombstonesize]]
+            # puts [format "tombstone size: %lld" [[lindex $peers 1] tombstonesize]]
             
             [lindex $peers 0] debug set-crdt-ovc 0
             [lindex $peers 1] debug set-crdt-ovc 0
@@ -78,15 +78,15 @@ start_server {tags {"crdt-del"} overrides {crdt-gid 1} config {crdt.conf} module
 
             [lindex $peers 0] del k
 
-            puts [format "tombstone size: %lld" [[lindex $peers 1] tombstonesize]]
+            # puts [format "tombstone size: %lld" [[lindex $peers 1] tombstonesize]]
             [lindex $peers 0] set k v
             [lindex $peers 0] del k
-            puts [format "tombstone size: %lld" [[lindex $peers 1] tombstonesize]]
+            # puts [format "tombstone size: %lld" [[lindex $peers 1] tombstonesize]]
             [lindex $peers 0] hmset k f v
 
             [lindex $peers 0] del k
 
-            puts [format "tombstone size: %lld" [[lindex $peers 1] tombstonesize]]
+            # puts [format "tombstone size: %lld" [[lindex $peers 1] tombstonesize]]
 
             [lindex $peers 1] debug set-crdt-ovc 1
             [lindex $peers 1] debug set-crdt-ovc 1

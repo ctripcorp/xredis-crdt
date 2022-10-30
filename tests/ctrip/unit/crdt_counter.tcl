@@ -56,7 +56,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
             test "step3 crdt.zadd conflict by time fail" {
                 
                 catch {$master crdt.zadd zset1 1 1000 {1:2;2:1} a 2:3.0 } error 
-                print_log_file $master_log
+                # print_log_file $master_log
                 $master zscore zset1 a
             } {2}
             test "step4 crdt.zadd conflict by gid" {
@@ -627,7 +627,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 test "ad" {
                     $master  crdt.zincrby zset5300 1 1000 1:2 a 2:2.0 
                     $master  crdt.zrem zset5300 1 1000 1:1 3:1:a,1:1:2:1.0 
-                    puts [$master crdt.datainfo zset5300]
+                    # puts [$master crdt.datainfo zset5300]
                 }
                 test "ba" {
                     $master  crdt.zadd zset5400 1 1000 1:1 a 2:1.1 
@@ -658,7 +658,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 test "value" {
                     test "a" {
                         assert_equal [$master crdt.datainfo zset5100] [$slave crdt.datainfo zset5100]
-                        puts [$master crdt.datainfo zset5100]
+                        # puts [$master crdt.datainfo zset5100]
                     }
                     test "b" {
                         assert_equal [$master crdt.datainfo zset5200] [$slave crdt.datainfo zset5200]
@@ -1245,8 +1245,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $peer crdt.zadd zset6557 1 1000 1:8 a 2:3.0
                         $peer crdt.zincrby zset6557 1 1000 1:6 a 2:6.0
                         $peer crdt.zrem zset6557 1 1000 1:5 3:1:a,1:5:2:2.0
-                        puts [$master crdt.datainfo zset6557]
-                        puts [$peer crdt.datainfo zset6557]
+                        # puts [$master crdt.datainfo zset6557]
+                        # puts [$peer crdt.datainfo zset6557]
                     }
                 }
             }
@@ -1256,7 +1256,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
         
         # wait_for_peer_sync $peer
         after 5000
-        print_log_file $peer_log
+        # print_log_file $peer_log
         wait_for_peer_sync $master
         test "after" {
             test "a" {
@@ -1526,7 +1526,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         $peer zscore zset6556 a
                     } {6}
                     test "bad + bad  bad fail" {
-                        puts [$peer crdt.datainfo zset6557]
+                        # puts [$peer crdt.datainfo zset6557]
                         $peer zscore zset6557 a
                     } {7}
                 }
@@ -2438,7 +2438,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
             $peer peerof $master_gid $master_host $master_port
             # wait_for_peer_sync $peer
             after 5000
-            puts [print_log_file $peer_log]
+            # puts [print_log_file $peer_log]
             test "after" {
                 test "value + tomstone" {
                     test "a" {

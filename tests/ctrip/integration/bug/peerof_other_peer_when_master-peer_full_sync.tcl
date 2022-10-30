@@ -89,7 +89,6 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
                 assert_equal [log_file_matches [lindex $peer_stdouts 2] "*crdtMergeEndCommand*"] 0
                 [lindex $peers 2] peerof [lindex $peer_gids 0]  [lindex $peer_hosts 0] [lindex $peer_ports 0]
                 wait_for_peer_sync [lindex $peers 2]
-                puts [[lindex $peers 2] crdt.info replication]
                 after 5000
                 check_peer_info  [lindex $peers 0]  [lindex $peers 2] 0
                 assert_equal [[lindex $peers 2] dbsize] [[lindex $peers 0] dbsize]

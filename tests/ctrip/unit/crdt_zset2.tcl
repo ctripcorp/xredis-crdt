@@ -662,7 +662,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 }
                 test "ba + ad" {
                     test "ba + ad success" {
-                        puts [$master crdt.datainfo zset6430]
+                        # puts [$master crdt.datainfo zset6430]
                         $master zscore zset6430 a
                     } {4}
                     # test "ba + ad fail" {
@@ -954,11 +954,11 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 }
                 test "bad + a" {
                     test "bad + a success" {
-                        puts [$master crdt.datainfo zset6510]
+                        # puts [$master crdt.datainfo zset6510]
                         $master zscore zset6510 a
                     } {10}
                     test "bad + a fail" {
-                        puts [$peer crdt.datainfo zset6511]
+                        # puts [$peer crdt.datainfo zset6511]
                         $master zscore zset6511 a
                     } {4}
                 }

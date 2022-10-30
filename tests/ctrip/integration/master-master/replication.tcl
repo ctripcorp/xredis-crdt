@@ -175,7 +175,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                     # Wait that slaves acknowledge they are online so
                     # we are sure that DBSIZE and DEBUG DIGEST will not
                     # fail because of timing issues.
-                    puts [[lindex $slaves 2] crdt.role slave $master_gid]
+                    # puts [[lindex $slaves 2] crdt.role slave $master_gid]
                     wait_for_condition 500 100 {
                         [lindex [[lindex $slaves 0] crdt.role slave $master_gid] 3] eq {connected} &&
                         [lindex [[lindex $slaves 1] crdt.role slave $master_gid] 3] eq {connected} &&

@@ -629,7 +629,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 test "ad" {
                     $master  crdt.zincrby zset5300 1 1000 1:2 a 2:2.0 
                     $master  crdt.zrem zset5300 1 1000 1:1 3:1:a,1:1:2:1.0 
-                    puts [$master crdt.datainfo zset5300]
+                    # puts [$master crdt.datainfo zset5300]
                 }
                 test "ba" {
                     $master  crdt.zadd zset5400 1 1000 1:1 a 2:1.1 
@@ -660,7 +660,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 test "value" {
                     test "a" {
                         assert_equal [$master crdt.datainfo zset5100] [$slave crdt.datainfo zset5100]
-                        puts [$master crdt.datainfo zset5100]
+                        # puts [$master crdt.datainfo zset5100]
                     }
                     test "b" {
                         assert_equal [$master crdt.datainfo zset5200] [$slave crdt.datainfo zset5200]

@@ -135,9 +135,9 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                     fail "Different number of keys between masted and slave after too long time."
                 }
             }
-            puts [format "A %s: %lld" {db size} [[lindex $peers 0] dbsize]]
-            puts [format "B %s: %lld" {db size} [[lindex $peers 1] dbsize]]
-            puts [format "C %s: %lld" {db size} [[lindex $peers 2] dbsize]]
+            # puts [format "A %s: %lld" {db size} [[lindex $peers 0] dbsize]]
+            # puts [format "B %s: %lld" {db size} [[lindex $peers 1] dbsize]]
+            # puts [format "C %s: %lld" {db size} [[lindex $peers 2] dbsize]]
         }
     }
 }

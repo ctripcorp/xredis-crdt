@@ -140,7 +140,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 assert_equal 1 [$master sismember myset2 16]
                 assert_equal 1 [$master sismember myset2 17]
                 assert_equal {16 17} [lsort [$master smembers myset2]]
-                puts [$master crdt.sismember myset2 16]
+                # puts [$master crdt.sismember myset2 16]
             }
 
             test {crdt.sadd2} {
@@ -180,7 +180,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 $master sadd myset7 16
                 $master del myset7  
                 $master crdt.sadd myset7 1 1000 1:14 16
-                puts [$master crdt.datainfo myset7]
+                # puts [$master crdt.datainfo myset7]
                 assert_equal 1 [$master scard myset7]
                 assert_equal 1 [$master sismember myset7 16]
                 assert_equal {16} [lsort [$master smembers myset7]]
@@ -195,41 +195,41 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 assert_equal 1 [$master sadd myset11 16]
                 assert_equal 1 [$master srem myset11 16]
                 assert_equal 0 [$master sismember myset11 16]
-                puts [$master crdt.sismember myset11 16]
+                # puts [$master crdt.sismember myset11 16]
             }
             test {rem2} {
                 assert_equal 1 [$master sadd myset12 16]
-                puts [$master crdt.sismember myset12 16]
+                # puts [$master crdt.sismember myset12 16]
                 assert_equal OK [$master crdt.srem myset12 1 1000 1:100 16]
                 assert_equal 0 [$master sismember myset12 16]
             }
             test {rem - sadd} {
                 assert_equal 2 [$master sadd myset13 16 17]
-                puts [$master crdt.sismember myset13 16 ]
+                # puts [$master crdt.sismember myset13 16 ]
                 assert_equal OK [$master crdt.srem myset13 1 1000 {1:102} 16]
                 assert_equal 1 [$master sadd myset13 16]
                 assert_equal 1 [$master sismember myset13 16]
-                puts [$master crdt.datainfo myset13]
-                puts [$master crdt.sismember myset13 16]
+                # puts [$master crdt.datainfo myset13]
+                # puts [$master crdt.sismember myset13 16]
             }
             test {crdt.rem - sadd conflict} {
                 assert_equal 1 [$master sadd myset14 16]
-                puts [$master crdt.sismember myset14 16]
+                # puts [$master crdt.sismember myset14 16]
                 assert_equal OK [$master crdt.srem myset14 2 1000 {1:102;2:1} 16]
                 assert_equal 1 [$master sismember myset14 16]
-                puts [$master crdt.datainfo myset14]
-                puts [$master crdt.sismember myset14 16]
+                # puts [$master crdt.datainfo myset14]
+                # puts [$master crdt.sismember myset14 16]
                 # print_log_file $master_log
             }
             test {crdt.rem > sadd } {
                 $master crdt.sadd myset15 1 10 1:104 16 
                 # assert_equal 1 [$master sadd myset14 16]
-                puts [$master crdt.sismember myset15 16]
+                # puts [$master crdt.sismember myset15 16]
                 assert_equal OK [$master crdt.srem myset15 2 1000 {1:104;2:2} 16]
                 assert_equal OK [$master crdt.srem myset15 1 1000 {1:105;2:1} 16]
                 assert_equal 0 [$master sismember myset15 16]
-                puts [$master crdt.datainfo myset15]
-                puts [$master crdt.sismember myset15 16]
+                # puts [$master crdt.datainfo myset15]
+                # puts [$master crdt.sismember myset15 16]
                 # print_log_file $master_log
             }
 
@@ -240,15 +240,15 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
             }
             test {rem2 will peer} {
                 $master crdt.srem myset17 1 1000 {1:108;2:10} 16
-                puts [$master crdt.sismember myset17 16]
+                # puts [$master crdt.sismember myset17 16]
             }
             test {rem3 will peer} {
                 $master crdt.srem myset18 1 1000 {1:109;2:10} 16
-                puts [$master crdt.sismember myset18 16]
+                # puts [$master crdt.sismember myset18 16]
             }
             test {rem3 will peer} {
                 $master crdt.srem myset19 1 1000 {1:109;2:10} 16
-                puts [$master crdt.sismember myset18 16]
+                # puts [$master crdt.sismember myset18 16]
             }
         }
         test "del" {
@@ -258,8 +258,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 assert_equal 1 [$master sadd myset21 16 ]
                 assert_equal 1 [$master del myset21 ]
                 assert_equal 0 [$master sismember myset21 16]
-                puts [$master crdt.datainfo myset21]
-                puts [$master crdt.sismember myset21 16]
+                # puts [$master crdt.datainfo myset21]
+                # puts [$master crdt.sismember myset21 16]
                 # print_log_file $master_log
             }
             test {sadd srem - del} {
@@ -286,8 +286,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 assert_equal 3 [$master sadd myset25 16 17 18]
                 set k [$master spop myset25 ]
                 assert_equal 0 [$master sismember myset25 $k]
-                puts [$master crdt.datainfo myset25]
-                puts [$master crdt.sismember myset25 16]
+                # puts [$master crdt.datainfo myset25]
+                # puts [$master crdt.sismember myset25 16]
                 # print_log_file $master_log
             }
             
@@ -298,8 +298,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                 set k [$master spop myset26 10]
                 assert_equal 3 [llength $k]
                 assert_equal 0 [$master scard myset26]
-                puts [$master crdt.datainfo myset26]
-                puts [$master crdt.sismember myset26 16]
+                # puts [$master crdt.datainfo myset26]
+                # puts [$master crdt.sismember myset26 16]
                 # print_log_file $master_log
             }
         }
@@ -349,7 +349,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                     test "add " {
                         test "will be merge add-add" {
                             $peer sadd myset2 16
-                            puts [$peer crdt.sismember myset2 16]
+                            # puts [$peer crdt.sismember myset2 16]
                         }
                         test "will be merge add-tombstone => tombstone win" {
                             $peer crdt.srem myset3 3 1000 {1:100;2:1;3:10} 16
@@ -370,23 +370,23 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         }
                         test "will be merge rem-add => add wins" {
                             $peer sadd myset16 16
-                            puts [$peer crdt.sismember myset16 16] 
+                            # puts [$peer crdt.sismember myset16 16] 
                         }
                         test "will be merge rem-add => rem wins " {
                             $peer sadd myset17 16
-                            puts [$peer crdt.sismember myset17 16] 
+                            # puts [$peer crdt.sismember myset17 16] 
                         }
                         test "will be merge rem - rem - purge add => add wins " {
                             $peer sadd myset18 16
                             $peer srem myset18 16
                             $peer crdt.sadd myset18 3 1000 3:1 16
-                            puts [$peer crdt.sismember myset18 16] 
+                            # puts [$peer crdt.sismember myset18 16] 
                         }
                         test "will be merge rem - rem - purge add => rem wins " {
                             $peer sadd myset19 16
                             $peer srem myset19 16
                             $peer crdt.sadd myset19 1 1000 1:1 16
-                            puts [$peer crdt.sismember myset19 16] 
+                            # puts [$peer crdt.sismember myset19 16] 
                         }
                     }
                 }
@@ -398,8 +398,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         assert_equal {16 17 18} [lsort [$peer smembers myset1]]
                     }
                     test "merge add-add" {
-                        puts [$peer crdt.sismember myset2 16]
-                        puts [$peer crdt.sismember myset2 17]
+                        # puts [$peer crdt.sismember myset2 16]
+                        # puts [$peer crdt.sismember myset2 17]
                         assert_equal {16 17} [lsort [$peer smembers myset2]]
                     }
                     
@@ -435,17 +435,17 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         assert_equal "{type: orset_set, vector-clock: 2:3} {type: orset_set_tombstone, vector-clock: 1:107}" [$peer crdt.sismember myset16 16]
                     }
                     test "srem - add => srem wins" {
-                        puts [$peer crdt.sismember myset17 16]
+                        # puts [$peer crdt.sismember myset17 16]
                         assert_equal {} [lsort [$peer smembers myset17]]
                         
                     }
                     test "srem - srem - purge add  => add wins" {
                         assert_equal {16} [lsort [$peer smembers myset18]]
-                        puts [$peer crdt.sismember myset18 16]
+                        # puts [$peer crdt.sismember myset18 16]
                     }
                     test "srem - srem - purge add  => srem wins" {
                         assert_equal {} [lsort [$peer smembers myset19]]
-                        puts [$peer crdt.sismember myset19 16]
+                        # puts [$peer crdt.sismember myset19 16]
                     }
                     # assert_equal [$master crdt.datainfo myset13] [$peer crdt.datainfo myset13]
                     assert_equal [$master smembers myset14] [$peer smembers myset14]
@@ -500,8 +500,8 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                         test "spop argc == 3 size = 2" {
                             $master sadd myset62 17 18 
                             set r [$master spop myset62 2] 
-                            puts [lindex $r 0]
-                            puts [lindex $r 1]
+                            # puts [lindex $r 0]
+                            # puts [lindex $r 1]
                             assert_equal 2 [llength $r]
                             after 1000
                             for {set i 0} {$i < 2} {incr i} {

@@ -118,7 +118,7 @@ start_server {tags {"crdt-hash"} overrides {crdt-gid 1} config {crdt.conf} modul
     test {"[crdt_hash.tcl]basic hset and hget"} {
         r hset k-hash f1 v1
         set info [r crdt.dataInfo k-hash]
-        puts [lindex $info 0]
+        # puts [lindex $info 0]
         assert_equal [string match  "*type: lww_hash,  last-vc: 1:1*" [lindex $info 0]] 1
         r hget k-hash f1
     } {v1}
