@@ -197,8 +197,8 @@ write_diff_db "write db0 and db5 " {
     wait $peer 0 crdt.info $master_log
     wait $peer2 0 crdt.info $master_log
 
-    puts [$r info Keyspace]
-    puts [$peer info Keyspace]
+    # puts [$r info Keyspace]
+    # puts [$peer info Keyspace]
 
     $slave slaveof $master_host $master_port
     
@@ -228,8 +228,8 @@ write_diff_db "write db0 and db5 " {
     $peer2 debug set-crdt-ovc 0
     # print_file_matches $peer_slave_log
     check $master $slave $slave_slave $peer  $peer_slave $peer2
-    puts [$peer info Keyspace]
-    puts [$master info Keyspace]
+    # puts [$peer info Keyspace]
+    # puts [$master info Keyspace]
     assert_equal [get_keys $master 0] [get_keys $peer 0]
     assert_equal [get_keys $master 1] [get_keys $peer 1]
     assert_equal [get_keys $master 2] [get_keys $peer 2]

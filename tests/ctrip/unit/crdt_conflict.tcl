@@ -308,7 +308,7 @@ proc read_from_all_stream {s} {
         read $s 1
         set arg [::redis::redis_bulk_read $s]
         if {$j == 0} {set arg [string tolower $arg]}
-        puts $arg
+        # puts $arg
         lappend res $arg
     }
     return $res

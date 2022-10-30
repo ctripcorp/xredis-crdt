@@ -20,7 +20,7 @@ start_server {tags {"crdt-set"}  config {crdt.conf} overrides {crdt-gid 1 local-
             $peer config crdt.set repl-diskless-sync-delay 1
             $peer config set repl-diskless-sync-delay 1
             $peer crdt.debug_gc rc 0
-            puts [$master crdt.info replication]
+            # puts [$master crdt.info replication]
             test "before" {
                 test "value + tomstone" {
                     test "a" {
@@ -29,7 +29,7 @@ start_server {tags {"crdt-set"}  config {crdt.conf} overrides {crdt-gid 1 local-
                             $peer crdt.rc rc8000 1 1000 1:3 3:3:1.0 -1
                             $peer crdt.del_rc rc8000 1 1000 1:4  
                         }
-                        puts [$master crdt.info replication]
+                        # puts [$master crdt.info replication]
                         test "a + tad" {
                             test "a + tad success" {
                                 $master crdt.counter rc8010 1 1000 1:4 4 4:5.0 

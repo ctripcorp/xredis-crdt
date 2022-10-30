@@ -169,8 +169,8 @@ set adds(2) {
     $redis crdt.del_reg kv 2 1000000 "1:100;2:100;3:100"
 }
 set checks(2) {
-    # assert_equal [$redis tombstonesize] 1
-    puts [$redis crdt.datainfo kv]
+    assert {[$redis tombstonesize] >= 1}
+    assert  [string match "*tomsbtone*" [$redis crdt.datainfo kv]]
 }
 set adds(3) {
     $redis set key2 v ex 10000000

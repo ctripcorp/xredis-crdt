@@ -57,9 +57,9 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
             [lindex $peers 1] config crdt.set repl-diskless-sync-delay 1
             [lindex $peers 2] config crdt.set repl-diskless-sync-delay 1
 
-            puts [format "A: %s%lld" {db size: } [[lindex $peers 0] dbsize]]
-            puts [format "B: %s%lld" {db size: } [[lindex $peers 1] dbsize]]
-            puts [format "C: %s%lld" {db size: } [[lindex $peers 2] dbsize]]
+            # puts [format "A: %s%lld" {db size: } [[lindex $peers 0] dbsize]]
+            # puts [format "B: %s%lld" {db size: } [[lindex $peers 1] dbsize]]
+            # puts [format "C: %s%lld" {db size: } [[lindex $peers 2] dbsize]]
 
             test "sync request while del happend" {
 
@@ -77,9 +77,9 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                     fail "Different number of keys between masted and slave after too long time."
                 }
 
-                puts [format "A: %s%lld" {db size: } [[lindex $peers 0] dbsize]]
-                puts [format "B: %s%lld" {db size: } [[lindex $peers 1] dbsize]]
-                puts [format "C: %s%lld" {db size: } [[lindex $peers 2] dbsize]]
+                # puts [format "A: %s%lld" {db size: } [[lindex $peers 0] dbsize]]
+                # puts [format "B: %s%lld" {db size: } [[lindex $peers 1] dbsize]]
+                # puts [format "C: %s%lld" {db size: } [[lindex $peers 2] dbsize]]
 
                 [lindex $peers 0] config crdt.set repl-diskless-sync-delay 0
                 [lindex $peers 1] config crdt.set repl-diskless-sync-delay 0
@@ -128,9 +128,9 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
 
             } {}
 
-            puts [format "A: %s%lld" {db size: } [[lindex $peers 0] dbsize]]
-            puts [format "B: %s%lld" {db size: } [[lindex $peers 1] dbsize]]
-            puts [format "C: %s%lld" {db size: } [[lindex $peers 2] dbsize]]
+            # puts [format "A: %s%lld" {db size: } [[lindex $peers 0] dbsize]]
+            # puts [format "B: %s%lld" {db size: } [[lindex $peers 1] dbsize]]
+            # puts [format "C: %s%lld" {db size: } [[lindex $peers 2] dbsize]]
 
         }
     }

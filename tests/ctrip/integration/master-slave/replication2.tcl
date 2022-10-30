@@ -91,7 +91,6 @@ start_server {tags {"only add rc"} overrides {crdt-gid 1} config {crdt.conf} mod
                 # $r del myzset2  
             }]
             after 10000
-            puts [$master dbsize]
             stop_write_load $load_handle
             stop_write_load $load_handle1
             stop_write_load $load_handle2

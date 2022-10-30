@@ -44,7 +44,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
             }
             test "master-peer3" {
                 set local_ip [exec ifconfig -a | grep inet | grep -v {127.0.0.1} | grep -v inet6 | awk  [format "{print $%d}" 2] | tr -d "addr:"]
-                puts $local_ip 
+                # puts $local_ip 
                 $master peerof $peer_gid $peer_host $peer_port proxy-type XPIPE-PROXY proxy-servers PROXYTCP://[format "%s:%d,%s:%d" $local_ip  10080 $proxy_host $proxy_port]
                 wait_for_peer_sync $master
                 $peer set k v1 

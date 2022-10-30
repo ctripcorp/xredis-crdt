@@ -171,7 +171,7 @@ proc basic_test { type create check delete} {
                     set argv2 {tombstone field value2 1 99999 {"1:11;2:10"}}
                     run [replace [replace_client $create {[lindex $peers 0]}] $argv2] 1
                     run [replace [replace_client $check {[lindex $peers 0]}] $result] 1
-                    puts [[lindex $peers 0] crdt.datainfo tombstone]
+                    # puts [[lindex $peers 0] crdt.datainfo tombstone]
                     set argv3 {tombstone field value3 1 100001 {"1:12;2:11"}}
                     run [replace [replace_client $create {[lindex $peers 0]}] $argv3] 1
                     run [replace [replace_client $check {[lindex $peers 0]}] $argv3] 1

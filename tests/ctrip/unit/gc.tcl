@@ -278,7 +278,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
             after 1000
             [lindex $peers 0] del k 
             wait_for_peer_sync [lindex $peers 1]
-            log_file_matches [lindex $peer_stdout 0] 
+            # log_file_matches [lindex $peer_stdout 0] 
             assert_equal [[lindex $peers 0] tombstonesize] 1
             after 2000
             assert_equal [[lindex $peers 0] tombstonesize] 1

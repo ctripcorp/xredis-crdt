@@ -36,7 +36,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
 
         set conflict_num [randomInt 10000]
         set key_set [gen_key_set $conflict_num]
-
+        wait_for_sync [lindex $slaves 0]
         test "test first master-slave ready" {
 
             # Wait for all the three slaves to reach the "online"
@@ -68,7 +68,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
             }
         }
 
-        puts [format "duplicate counter: %s" $counter]
+        # puts [format "duplicate counter: %s" $counter]
 
         foreach key $key_set {
             if {[$redis_master get $key] eq ""} {
@@ -78,7 +78,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
 
         set conflict_num [[lindex $peers 0] dbsize]
 
-        puts [format "first pair, master: %d; slave: %d" [[lindex $peers 0] dbsize] [[lindex $slaves 0] dbsize]]
+        # puts [format "first pair, master: %d; slave: %d" [[lindex $peers 0] dbsize] [[lindex $slaves 0] dbsize]]
 
         start_server {config {crdt.conf} overrides {crdt-gid 2} module {crdt.so}} {
             lappend peers [srv 0 client]
@@ -101,7 +101,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                 foreach key $key_set {
                     [lindex $peers 1] set $key [randstring 10 1024 alpha]
                 }
-
+                 wait_for_sync [lindex $slaves 1]
                 test "test second master-slave ready" {
 
                     # Wait for all the three slaves to reach the "online"
@@ -120,7 +120,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                         error "assertion: Master-Slave not correctly synchronized"
                     }
                 }
-                puts [format "second pair, master: %d; slave: %d" [[lindex $peers 1] dbsize] [[lindex $slaves 1] dbsize]]
+                # puts [format "second pair, master: %d; slave: %d" [[lindex $peers 1] dbsize] [[lindex $slaves 1] dbsize]]
 
                 test "master-slave + master-slave composite" {
                     # Send PEEROF commands to peers
@@ -129,6 +129,8 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
 
                     # Wait for all the three slaves to reach the "online"
                     # state from the POV of the master.
+                    wait_for_peer_sync [lindex $peers 0]
+                    wait_for_peer_sync [lindex $peers 1]
                     set retry 500
                     while {$retry} {
                         set info [[lindex $peers 0] crdt.info replication]
@@ -164,8 +166,8 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                     }
 
 
-                    puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
-                    puts [format "%s: %d" {slave2 key numbers} [[lindex $slaves 1] dbsize]]
+                    # puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
+                    # puts [format "%s: %d" {slave2 key numbers} [[lindex $slaves 1] dbsize]]
                     # Make sure that slaves and master have same
                     # number of keys
                     wait_for_condition 500 100 {
@@ -179,10 +181,10 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
 
                 }
 
-                puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
-                puts [format "%s: %d" {slave1 key numbers} [[lindex $slaves 0] dbsize]]
-                puts [format "%s: %d" {master2 key numbers} [[lindex $peers 1] dbsize]]
-                puts [format "%s: %d" {slave2 key numbers} [[lindex $slaves 1] dbsize]]
+                # puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
+                # puts [format "%s: %d" {slave1 key numbers} [[lindex $slaves 0] dbsize]]
+                # puts [format "%s: %d" {master2 key numbers} [[lindex $peers 1] dbsize]]
+                # puts [format "%s: %d" {slave2 key numbers} [[lindex $slaves 1] dbsize]]
                 test "concurrent conflict when full sync" {
                     set db_size [[lindex $slaves 1] dbsize]
                     assert {$conflict_num eq $db_size}
@@ -234,7 +236,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                             [lindex $peers 2] set $key [randstring 10 1024 alpha]
                         }
 
-                        puts [format "third pair, master: %d; slave: %d" [[lindex $peers 2] dbsize] [[lindex $slaves 2] dbsize]]
+                        # puts [format "third pair, master: %d; slave: %d" [[lindex $peers 2] dbsize] [[lindex $slaves 2] dbsize]]
 
 
                         test "test three redis pairs become peers" {
@@ -282,12 +284,12 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                                 fail "Peers still not connected after some time"
                             }
 
-                            puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
-                            puts [format "%s: %d" {slave1 key numbers} [[lindex $slaves 0] dbsize]]
-                            puts [format "%s: %d" {master2 key numbers} [[lindex $peers 1] dbsize]]
-                            puts [format "%s: %d" {slave2 key numbers} [[lindex $slaves 1] dbsize]]
-                            puts [format "%s: %d" {master3 key numbers} [[lindex $peers 2] dbsize]]
-                            puts [format "%s: %d" {slave3 key numbers} [[lindex $slaves 2] dbsize]]
+                            # puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
+                            # puts [format "%s: %d" {slave1 key numbers} [[lindex $slaves 0] dbsize]]
+                            # puts [format "%s: %d" {master2 key numbers} [[lindex $peers 1] dbsize]]
+                            # puts [format "%s: %d" {slave2 key numbers} [[lindex $slaves 1] dbsize]]
+                            # puts [format "%s: %d" {master3 key numbers} [[lindex $peers 2] dbsize]]
+                            # puts [format "%s: %d" {slave3 key numbers} [[lindex $slaves 2] dbsize]]
 
                             # Make sure that slaves and master have same
                             # number of keys
@@ -318,9 +320,9 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                         }
 
                         test "test three pairs concurrent conflict" {
-                            puts [format "conflict num: %d" $conflict_num]
+                            # puts [format "conflict num: %d" $conflict_num]
                             set db_size [[lindex $slaves 1] dbsize]
-                            puts [format "db size: %d" $db_size]
+                            # puts [format "db size: %d" $db_size]
                             assert {$conflict_num == $db_size}
                             set db_size [[lindex $slaves 2] dbsize]
                             assert {$conflict_num == $db_size}

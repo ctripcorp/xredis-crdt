@@ -40,7 +40,6 @@ start_server [list overrides [list crdt-gid 1 loadmodule ./crdt.so  "dir"  $serv
     # assert_match "*ziplist*" [r debug object hash]
     # assert_equal 2 [r hlen hash]
     after 1000
-    puts [r dbsize]
     assert_equal [r zscore k a] 1
     assert_equal [r zscore k b] 2
     assert_equal [r zscore k c] 3
@@ -73,8 +72,6 @@ start_server [list overrides [list crdt-gid 1 loadmodule ./crdt.so  "dir"  $serv
     # assert_match "*ziplist*" [r debug object hash]
     # assert_equal 2 [r hlen hash]
     after 1000
-    puts [r dbsize]
-    puts [r crdt.zscore k a]
     assert_equal [r zscore k a] 1
     assert_equal [r zscore k b] 2
     assert_equal [r zscore k c] 3
@@ -106,7 +103,6 @@ start_server [list overrides [list crdt-gid 1 loadmodule ./crdt.so  "dir"  $serv
     # assert_match "*ziplist*" [r debug object hash]
     # assert_equal 2 [r hlen hash]
     after 1000
-    puts [r dbsize]
     assert_equal [r zscore k a] 1
     assert_equal [r zscore k b] 2
     assert_equal [r zscore k c] 3

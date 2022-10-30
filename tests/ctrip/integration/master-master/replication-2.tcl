@@ -43,7 +43,6 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
             stop_bg_complex_data $load_handle1
             stop_bg_complex_data $load_handle2
             set retry 10
-            print_log_content $peer2_stdout
             while {$retry && ([$peer1 debug digest] ne [$peer2 debug digest])}\
             {
                 after 1000

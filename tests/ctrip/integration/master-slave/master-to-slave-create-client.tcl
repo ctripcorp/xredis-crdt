@@ -57,8 +57,8 @@ start_server { tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskl
                         wait_for_peer_sync $peer_slave  
                         wait_for_peer_sync $slave
                         if {[expr  $peer_slave_sync_partial_ok + 1] == [status $peer_slave sync_partial_ok]} {
-                            puts $master_peer_sync_partial_ok  
-                            puts [crdt_stats $master sync_partial_ok]
+                            # puts $master_peer_sync_partial_ok  
+                            # puts [crdt_stats $master sync_partial_ok]
                             if {[expr  $master_peer_sync_partial_ok + 1] == [crdt_stats $master sync_partial_ok]} {
                                 break;
                             }

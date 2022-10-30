@@ -35,8 +35,8 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
     stop_write_load $load_handle4
 
     set keynum [$master dbsize]
-    puts {master key numbers: }
-    puts $keynum
+    # puts {master key numbers: }
+    # puts $keynum
 
     start_server {config {crdt.conf} overrides {crdt-gid 2} module {crdt.so}} {
         lappend slaves [srv 0 client]

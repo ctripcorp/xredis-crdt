@@ -51,9 +51,9 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
         stop_write_load $load_handle4
 
         after 1000
-        puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
-        puts [format "%s: %d" {slave1 key numberss} [[lindex $slaves 0] dbsize]]
-
+        # puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
+        # puts [format "%s: %d" {slave1 key numberss} [[lindex $slaves 0] dbsize]]
+        wait_for_sync [lindex $slaves 0]
         start_server {config {crdt.conf} overrides {crdt-gid 2} module {crdt.so}} {
             lappend peers [srv 0 client]
             lappend peer_hosts [srv 0 host]
@@ -88,9 +88,9 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                 stop_write_load $load_handle9
 
                 after 1000
-                puts [format "%s: %d" {master2 key numbers} [[lindex $peers 1] dbsize]]
-                puts [format "%s: %d" {slave2 key numberss} [[lindex $slaves 1] dbsize]]
-
+                # puts [format "%s: %d" {master2 key numbers} [[lindex $peers 1] dbsize]]
+                # puts [format "%s: %d" {slave2 key numberss} [[lindex $slaves 1] dbsize]]
+                wait_for_sync [lindex $slaves 1]
                 test "TEST Master-Master + Master-Slave works together" {
                     # Send PEEROF commands to peers
                     [lindex $peers 0] peerof [lindex $peer_gids 1] [lindex $peer_hosts 1] [lindex $peer_ports 1]
@@ -98,29 +98,9 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
 
                     # Wait for all the three slaves to reach the "online"
                     # state from the POV of the master.
-                    set retry 500
-                    while {$retry} {
-                        set info [[lindex $peers 0] crdt.info replication]
-                        if {[string match {*slave0:*state=online*} $info]} {
-                            break
-                        } else {
-                            incr retry -1
-                            after 100
-                        }
-                    }
-                    set retry 500
-                    while {$retry} {
-                        set info [[lindex $peers 1] crdt.info replication]
-                        if {[string match {*slave0:*state=online*} $info]} {
-                            break
-                        } else {
-                            incr retry -1
-                            after 100
-                        }
-                    }
-                    if {$retry == 0} {
-                        error "assertion:Peers not correctly synchronized"
-                    }
+                    wait_for_peer_sync [lindex $peers 0]
+                    wait_for_peer_sync [lindex $peers 1]
+                    
 
                     # Wait that slaves acknowledge they are online so
                     # we are sure that DBSIZE and DEBUG DIGEST will not
@@ -133,8 +113,8 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                     }
 
 
-                    puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
-                    puts [format "%s: %d" {slave2 key numbers} [[lindex $slaves 1] dbsize]]
+                    # puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
+                    # puts [format "%s: %d" {slave2 key numbers} [[lindex $slaves 1] dbsize]]
                     # Make sure that slaves and master have same
                     # number of keys
                     wait_for_condition 500 100 {
@@ -148,10 +128,10 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
 
                 }
 
-                puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
-                puts [format "%s: %d" {slave1 key numbers} [[lindex $slaves 0] dbsize]]
-                puts [format "%s: %d" {master2 key numbers} [[lindex $peers 1] dbsize]]
-                puts [format "%s: %d" {slave2 key numbers} [[lindex $slaves 1] dbsize]]
+                # puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
+                # puts [format "%s: %d" {slave1 key numbers} [[lindex $slaves 0] dbsize]]
+                # puts [format "%s: %d" {master2 key numbers} [[lindex $peers 1] dbsize]]
+                # puts [format "%s: %d" {slave2 key numbers} [[lindex $slaves 1] dbsize]]
 
 
                 start_server {config {crdt.conf} overrides {crdt-gid 3} module {crdt.so}} {
@@ -212,8 +192,8 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                             error "assertion:Slave 3 not correctly synchronized"
                         }
 
-                        puts [format "%s: %d" {master3 key numbers} [[lindex $peers 2] dbsize]]
-                        puts [format "%s: %d" {slave3 key numbers} [[lindex $slaves 2] dbsize]]
+                        # puts [format "%s: %d" {master3 key numbers} [[lindex $peers 2] dbsize]]
+                        # puts [format "%s: %d" {slave3 key numbers} [[lindex $slaves 2] dbsize]]
 
                         test "TEST Third Redis Join" {
                             # Send PEEROF commands to peers
@@ -260,12 +240,12 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                                 fail "Peers still not connected after some time"
                             }
 
-                            puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
-                            puts [format "%s: %d" {slave1 key numbers} [[lindex $slaves 0] dbsize]]
-                            puts [format "%s: %d" {master2 key numbers} [[lindex $peers 1] dbsize]]
-                            puts [format "%s: %d" {slave2 key numbers} [[lindex $slaves 1] dbsize]]
-                            puts [format "%s: %d" {master3 key numbers} [[lindex $peers 2] dbsize]]
-                            puts [format "%s: %d" {slave3 key numbers} [[lindex $slaves 2] dbsize]]
+                            # puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
+                            # puts [format "%s: %d" {slave1 key numbers} [[lindex $slaves 0] dbsize]]
+                            # puts [format "%s: %d" {master2 key numbers} [[lindex $peers 1] dbsize]]
+                            # puts [format "%s: %d" {slave2 key numbers} [[lindex $slaves 1] dbsize]]
+                            # puts [format "%s: %d" {master3 key numbers} [[lindex $peers 2] dbsize]]
+                            # puts [format "%s: %d" {slave3 key numbers} [[lindex $slaves 2] dbsize]]
 
                             # Make sure that slaves and master have same
                             # number of keys

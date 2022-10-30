@@ -136,7 +136,7 @@ test "rdb-restart-peerof-cancel-lazy-peerof" {
         start_server_by_config [get_master_srv config_file] [get_master_srv config] $master_host $master_port $master_stdout $master_stderr 1 {
             set master [redis $master_host $master_port]
             $master select 9
-            puts [$master peerof $peer_gid $peer_host $peer_port backstream 0]
+            $master peerof $peer_gid $peer_host $peer_port backstream 0
             after 2000
             assert_equal [crdt_status $peer connected_slaves] 2
 

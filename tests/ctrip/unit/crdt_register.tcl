@@ -13,7 +13,7 @@ start_server {tags {"crdt-register"} overrides {crdt-gid 1} config {crdt.conf} m
     test {"[crdt_register.tcl]SET and GET"} {
         r set x foobar
         set info [r crdt.datainfo x]
-        puts $info
+        # puts $info
         assert_equal [string match  "type: lww_register, gid: 1, timestamp: *, vector-clock: 1:1, val: foobar" [lindex $info 0]] 1
         r get x
     } {foobar}
@@ -49,14 +49,14 @@ start_server {tags {"crdt-register"} overrides {crdt-gid 1} config {crdt.conf} m
 
     test {"[crdt_register.tcl]Test Crdt Get"} {
         r set key val
-        puts [r CRDT.GET key]
+        # puts [r CRDT.GET key]
     }
 
     test {"[crdt_register.tcl]Test Concurrent-2"} {
         r CRDT.SET key1 val 1 [clock milliseconds] "1:100" 
-        puts [r CRDT.GET key1]
+        # puts [r CRDT.GET key1]
         r CRDT.SET key1 val2 2 [expr [clock milliseconds] - 2000] "1:101;2:100" 
-        puts [r CRDT.GET key1]
+        # puts [r CRDT.GET key1]
         r get key1
     } {val2}
 

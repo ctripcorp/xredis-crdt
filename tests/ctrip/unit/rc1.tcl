@@ -146,7 +146,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
             } 
             test "step6 other gid crdt.counter" {
                 $master crdt.counter rc1 2 1000 2:1 4 4:1.0 
-                puts {abs([$master get rc1] - 5.12) < 0.001}
+                # puts {abs([$master get rc1] - 5.12) < 0.001}
                 assert {[expr abs([$master get rc1] - 5.12)] < 0.001} 
             } 
             test "step6 crdt.rc + del_counter" {

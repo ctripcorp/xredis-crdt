@@ -81,12 +81,12 @@ start_server {tags {"crdt-del"} overrides {crdt-gid 1} config {crdt.conf} module
             [lindex $peers 1] hdel key-hash f1 f2
 
 
-            puts [format "tombstone size (index-0): %lld" [[lindex $peers 0] tombstonesize]]
-            puts [format "tombstone size (index-1): %lld" [[lindex $peers 1] tombstonesize]]
+            # puts [format "tombstone size (index-0): %lld" [[lindex $peers 0] tombstonesize]]
+            # puts [format "tombstone size (index-1): %lld" [[lindex $peers 1] tombstonesize]]
 
         }
 
-        puts [format "tombstone size (index-0): %lld" [[lindex $peers 0] tombstonesize]]
-        puts [format "tombstone size (index-1): %lld" [[lindex $peers 1] tombstonesize]]
+        # puts [format "tombstone size (index-0): %lld" [[lindex $peers 0] tombstonesize]]
+        # puts [format "tombstone size (index-1): %lld" [[lindex $peers 1] tombstonesize]]
     }
 }

@@ -1105,9 +1105,9 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
                     }
                     test "zincrby + zadd" {
                         $master zincrby zset1020 1.0 a  
-                        puts [$master crdt.datainfo zset1020]
+                        # puts [$master crdt.datainfo zset1020]
                         $master zadd zset1020 3.0 a 2.0 b 
-                        puts [$master crdt.datainfo zset1020]
+                        # puts [$master crdt.datainfo zset1020]
                     }
                     test "zrem + zadd" {
                         test "zrem(zadd) + zadd" {

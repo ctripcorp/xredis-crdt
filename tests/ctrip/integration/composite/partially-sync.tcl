@@ -51,8 +51,8 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
         stop_write_load $load_handle4
 
         after 1000
-        puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
-        puts [format "%s: %d" {slave1 key numberss} [[lindex $slaves 0] dbsize]]
+        # puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
+        # puts [format "%s: %d" {slave1 key numberss} [[lindex $slaves 0] dbsize]]
 
         start_server {config {crdt.conf} overrides {crdt-gid 2} module {crdt.so}} {
             lappend peers [srv 0 client]
@@ -89,8 +89,8 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                 stop_write_load $load_handle9
 
                 after 1000
-                puts [format "%s: %d" {master2 key numbers} [[lindex $peers 1] dbsize]]
-                puts [format "%s: %d" {slave2 key numberss} [[lindex $slaves 1] dbsize]]
+                # puts [format "%s: %d" {master2 key numbers} [[lindex $peers 1] dbsize]]
+                # puts [format "%s: %d" {slave2 key numberss} [[lindex $slaves 1] dbsize]]
 
                 test "TEST Master-Master + Master-Slave works together" {
                     # Send PEEROF commands to peers
@@ -134,8 +134,8 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                     }
 
 
-                    puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
-                    puts [format "%s: %d" {slave2 key numbers} [[lindex $slaves 1] dbsize]]
+                    # puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
+                    # puts [format "%s: %d" {slave2 key numbers} [[lindex $slaves 1] dbsize]]
                     # Make sure that slaves and master have same
                     # number of keys
                     wait_for_condition 500 100 {
@@ -148,10 +148,10 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                 }
 
                 test "continuously writing and sync" {
-                    puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
-                    puts [format "%s: %d" {slave1 key numberss} [[lindex $slaves 0] dbsize]]
-                    puts [format "%s: %d" {master2 key numbers} [[lindex $peers 1] dbsize]]
-                    puts [format "%s: %d" {slave2 key numberss} [[lindex $slaves 1] dbsize]]
+                    # puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
+                    # puts [format "%s: %d" {slave1 key numberss} [[lindex $slaves 0] dbsize]]
+                    # puts [format "%s: %d" {master2 key numbers} [[lindex $peers 1] dbsize]]
+                    # puts [format "%s: %d" {slave2 key numberss} [[lindex $slaves 1] dbsize]]
 
                     set all_key_num [[lindex $peers 0] dbsize]
 
@@ -180,10 +180,10 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
 
                     set new_key_num [[lindex $peers 0] dbsize]
 
-                    puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
-                    puts [format "%s: %d" {slave1 key numberss} [[lindex $slaves 0] dbsize]]
-                    puts [format "%s: %d" {master2 key numbers} [[lindex $peers 1] dbsize]]
-                    puts [format "%s: %d" {slave2 key numberss} [[lindex $slaves 1] dbsize]]
+                    # puts [format "%s: %d" {master1 key numbers} [[lindex $peers 0] dbsize]]
+                    # puts [format "%s: %d" {slave1 key numberss} [[lindex $slaves 0] dbsize]]
+                    # puts [format "%s: %d" {master2 key numbers} [[lindex $peers 1] dbsize]]
+                    # puts [format "%s: %d" {slave2 key numberss} [[lindex $slaves 1] dbsize]]
                     assert {$new_key_num > $all_key_num}
                 }
 
