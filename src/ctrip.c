@@ -68,6 +68,22 @@ void xslaveofCommand(client *c) {
     addReply(c,shared.ok);
 }
 
+void initVectorClockCache() {
+    VectorClock vectorClockCache = newVectorClock(0);
+    int vlen = get_len(crdtServer.vectorClock);
+    for(int i = 0; i < vlen; i++) {
+        clk* current_clk = get_clock_unit_by_index(&crdtServer.vectorClock, i);
+        int gid = get_gid(*current_clk);
+        if (!(crdtServer.offline_peer_set & (1 << gid))) {
+            vectorClockCache = addVectorClockUnit(vectorClockCache, gid, get_logic_clock(*current_clk));
+        }
+    }
+    if (!isNullVectorClock(crdtServer.vectorClockCache)) {
+        freeVectorClock(crdtServer.vectorClockCache);
+    }
+    crdtServer.vectorClockCache = vectorClockCache;
+}
+
 void setOfflinePeerSet(int gids) {
     if (crdtServer.offline_peer_set == gids) return;
     crdtServer.offline_peer_set = gids;
@@ -77,19 +93,7 @@ void setOfflinePeerSet(int gids) {
             crdtServer.vectorClockCache = newVectorClock(0);
         }
     } else {
-        VectorClock vectorClockCache = newVectorClock(0);
-        int vlen = get_len(crdtServer.vectorClock);
-        for(int i = 0; i < vlen; i++) {
-            clk* current_clk = get_clock_unit_by_index(&crdtServer.vectorClock, i);
-            int gid = get_gid(*current_clk);
-            if (!(crdtServer.offline_peer_set & (1 << gid))) {
-                vectorClockCache = addVectorClockUnit(vectorClockCache, gid, get_logic_clock(*current_clk));
-            }
-        }
-        if (!isNullVectorClock(crdtServer.vectorClockCache)) {
-            freeVectorClock(crdtServer.vectorClockCache);
-        }
-        crdtServer.vectorClockCache = vectorClockCache;
+        initVectorClockCache();
     }
 }
 

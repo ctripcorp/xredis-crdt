@@ -791,8 +791,10 @@ void crdtPsyncCommand(client *c) {
         if (c_vcu > l_vcu) {
             sds c_vc = vectorClockToSds(c->vectorClock);
             sds l_vc = vectorClockToSds(crdtServer.vectorClock);
-            addReplyError(c, sdscatprintf(sdsempty(), "CRDT.SYNC and CRDT.PSYNC Slave vectorClock , gid(%d) client vc(%s) > local vc(%s)", 
-                crdtServer.crdt_gid, c_vc, l_vc));
+            sds error = sdscatprintf(sdsempty(), "CRDT.SYNC and CRDT.PSYNC Slave vectorClock , gid(%d) client vc(%s) > local vc(%s)", 
+                crdtServer.crdt_gid, c_vc, l_vc);
+            addReplyError(c, error);
+            sdsfree(error);
             sdsfree(c_vc);
             sdsfree(l_vc);
             return;
