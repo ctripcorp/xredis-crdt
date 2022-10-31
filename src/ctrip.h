@@ -58,6 +58,7 @@ void replicationFeedStringToAllSlaves(int dictid, void* cmdbuf, size_t cmdlen);
 void replicationFeedRobjToAllSlaves(int dictid, robj* cmd);
 void crdtCancelReplicationHandshake(int gid);
 void evictionTombstoneCommand(client *c);
+void initVectorClockCache();
 /* CRDT Command */
 void crdtDelCommand(client *c);
 struct CrdtObject *retrieveCrdtObject(robj *obj);

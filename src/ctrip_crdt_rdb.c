@@ -781,9 +781,7 @@ int rdbSaveCrdtInfoAuxFields(rio* rdb) {
     if (rdbSaveAuxFieldStrInt(rdb,"crdt-repl-offset",crdtServer.master_repl_offset)
         == -1) return -1;
     if(rdbSaveAuxFieldCrdt(rdb) == -1) return -1;
-    if(crdtServer.offline_peer_set != 0) {
-        if (rdbSaveAuxFieldStrInt(rdb, "crdt-offline-gid", crdtServer.offline_peer_set) == -1) return -1; 
-    }
+    if (rdbSaveAuxFieldStrInt(rdb, "crdt-offline-gid", crdtServer.offline_peer_set) == -1) return -1; 
     return 1;
 }
 
@@ -826,9 +824,7 @@ int rdbLoadCrdtInfoAuxFields(robj* auxkey, robj* auxval, CRDT_Master_Instance** 
             masterInstance = createPeerMaster(NULL, gid);
             crdtServer.crdtMasters[gid] = masterInstance;
         } else if(iAmMaster() == C_OK) {
-            decrRefCount(auxkey);
-            decrRefCount(auxval);
-            return 1;
+            return -1;
         }
         *currentMasterInstance = masterInstance;
         crdtReplicationCreateMasterClient(*currentMasterInstance, createClient(-1), -1);
@@ -836,8 +832,6 @@ int rdbLoadCrdtInfoAuxFields(robj* auxkey, robj* auxval, CRDT_Master_Instance** 
         return 1;
     } else if(!strcasecmp(auxkey->ptr,"peer-master-dbid")) {
         if((*currentMasterInstance) == NULL) {
-            decrRefCount(auxkey);
-            decrRefCount(auxval);
             return 1;
         }
         selectDb((*currentMasterInstance)->master, atoi(auxval->ptr));
@@ -845,24 +839,18 @@ int rdbLoadCrdtInfoAuxFields(robj* auxkey, robj* auxval, CRDT_Master_Instance** 
         return 1;
     } else if (!strcasecmp(auxkey->ptr,"peer-master-host")) {
         if((*currentMasterInstance) == NULL) {
-            decrRefCount(auxkey);
-            decrRefCount(auxval);
             return 1;
         }
         sdsfree((*currentMasterInstance)->masterhost);
         (*currentMasterInstance)->masterhost = sdsdup(auxval->ptr);
     } else if (!strcasecmp(auxkey->ptr,"peer-master-port")) {
         if((*currentMasterInstance) == NULL) {
-            decrRefCount(auxkey);
-            decrRefCount(auxval);
             return 1;
         }
         (*currentMasterInstance)->masterport = atoi(auxval->ptr);
         return 1;
     } else if (!strcasecmp(auxkey->ptr,"peer-master-repl-id")) {
         if((*currentMasterInstance) == NULL) {
-            decrRefCount(auxkey);
-            decrRefCount(auxval);
             return 1;
         }
         if (sdslen(auxval->ptr) == CONFIG_RUN_ID_SIZE) {
@@ -871,24 +859,18 @@ int rdbLoadCrdtInfoAuxFields(robj* auxkey, robj* auxval, CRDT_Master_Instance** 
         return 1;
     } else if (!strcasecmp(auxkey->ptr,"peer-master-repl-offset")) {
         if((*currentMasterInstance) == NULL) {
-            decrRefCount(auxkey);
-            decrRefCount(auxval);
             return 1;
         }
         (*currentMasterInstance)->master->reploff = strtoll(auxval->ptr,NULL,10); 
         return 1;
     } else if (!strcasecmp(auxkey->ptr, "peer-proxy-type")) {
         if((*currentMasterInstance) == NULL) {
-            decrRefCount(auxkey);
-            decrRefCount(auxval);
             return 1;
         }
         (*currentMasterInstance)->proxy_type = atoi(auxval->ptr); 
         return 1;
     } else if (!strcasecmp(auxkey->ptr, "peer-proxy")) {
         if((*currentMasterInstance) == NULL) {
-            decrRefCount(auxkey);
-            decrRefCount(auxval);
             return 1;
         }
         
@@ -901,8 +883,8 @@ int rdbLoadCrdtInfoAuxFields(robj* auxkey, robj* auxval, CRDT_Master_Instance** 
         (*currentMasterInstance)->proxy =  proxy;
         return 1;
     } else if (!strcasecmp(auxkey->ptr, "crdt-offline-gid")) {
-        serverLog(LL_WARNING, "reset offline_peer_set1");
         setOfflinePeerSet(atoi(auxval->ptr));
+        return 1;
     }
     return 0;
 }

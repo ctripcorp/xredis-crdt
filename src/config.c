@@ -400,7 +400,6 @@ void loadServerConfigFromString(char *config) {
                 goto loaderr;
             }
         } else if (!strcasecmp(argv[0], "crdt-offline-gid") && argc == 2) {
-            serverLog(LL_WARNING, "reset offline_peer_set2");
             setOfflinePeerSet(atoi(argv[1]));
         } else if (!strcasecmp(argv[0],"repl-ping-slave-period") && argc == 2) {
             server.repl_ping_slave_period = atoi(argv[1]);
