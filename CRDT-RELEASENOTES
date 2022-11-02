@@ -10,6 +10,18 @@ HIGH:     There is a critical bug that may affect a subset of users. Upgrade!
 CRITICAL: There is a critical bug affecting MOST USERS. Upgrade ASAP.
 --------------------------------------------------------------------------------
 ================================================================================
+XRedis-CRDT 1.0.16 Released Wed Nov  2 10:57:54 CST 2022
+================================================================================
+Upgrade urgency HIGH: Compared with the previous version, there are some improvements, mainly:
+* [feature] support the offline gid function
+================================================================================
+================================================================================
+XRedis-CRDT 1.0.15 Released Fri Apr 1 15:31:09 CST 2021
+================================================================================
+Upgrade urgency HIGH: Compared with the previous version, there are some improvements, mainly:
+* [feature] xpipe-proxy can be used to connect other peer instances
+* [feature] expire hist_rate 25%->10% 
+================================================================================
 XRedis-CRDT 1.0.14 Released Mon Jul 26 15:31:09 CST 2021
 ================================================================================
 Upgrade urgency HIGH: Compared with the previous version, there are some improvements, mainly:
