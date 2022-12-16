@@ -14,6 +14,7 @@ start_server {
     }
 
     test "add offline rewrite config file" {
+        # Execute under root user privileges, the configuration file is still writable
         exec chmod 400 $config_file
         assert_equal [r crdt.setOfflineGid 2 3 4 5] "OK,but save config fail"
         exec chmod 777 $config_file

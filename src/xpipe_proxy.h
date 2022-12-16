@@ -1,6 +1,8 @@
+#ifndef __XPIPE_PROXY_H
+#define __XPIPE_PROXY_H
 #include "server.h"
 
-struct XpipeProxy
+typedef struct XpipeProxy
 {
     struct Point** servers;
     int servers_len;
@@ -21,3 +23,4 @@ void* str2XpipeProxy(sds str);
 sds xpipeProxy2str(void* p);
 void* xpipeProxyHiRedis(void* p, char* src_host, int src_port, char* dst_host, int dst_port);
 int xpipeProxyIsKeepConnected(void* c, void* p);
+#endif /* _ZIPLIST_H */

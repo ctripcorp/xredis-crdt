@@ -14,7 +14,9 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
     - uses: actions/checkout@v2
+    - name: init-system
+      run: sudo apt-get install openjdk-8-jdk -y
     - name: make
-      run: make
+      run: make 
     - name: make crdt-test
       run: make crdt-test

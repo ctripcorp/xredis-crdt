@@ -707,7 +707,7 @@ typedef struct readyList {
 struct CRDT_Master_Instance;
 #define NONE_PROXY 0
 #define XPIPE_PROXY 1
-struct Point {
+typedef struct Point {
     sds host;
     int port;
     int type;
@@ -1322,7 +1322,7 @@ struct redisServer {
     long long start_time;
     int multi_process_sync;
     int restart_lazy_peerof_time; 
-}redisServer;
+};
 
 typedef struct pubsubPattern {
     client *client;
