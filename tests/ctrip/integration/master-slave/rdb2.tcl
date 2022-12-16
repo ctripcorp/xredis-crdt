@@ -170,7 +170,7 @@ set adds(2) {
 }
 set checks(2) {
     assert {[$redis tombstonesize] >= 1}
-    assert  [string match "*tomsbtone*" [$redis crdt.datainfo kv]]
+    assert  [string match "*tombstone*" [$redis crdt.datainfo kv]]
 }
 set adds(3) {
     $redis set key2 v ex 10000000

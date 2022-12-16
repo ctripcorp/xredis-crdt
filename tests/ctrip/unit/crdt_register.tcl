@@ -107,7 +107,6 @@ start_server {tags {"crdt-register"} overrides {crdt-gid 1} config {crdt.conf} m
     test {"info tombstone"} {
         r "CRDT.DEL_REG" k13 "2" [clock milliseconds] "2:101;3:100" "2:101;3:100"
         set info [r crdt.dataInfo k13]
-        assert_equal [string match  "type: lww_reigster_tomsbtone, gid: 2, timestamp: *, vector-clock: 2:101;3:100" [lindex $info 0]] 1
-        puts $info
+        assert_equal [string match  "type: lww_reigster_tombstone, gid: 2, timestamp: *, vector-clock: 2:101;3:100" [lindex $info 0]] 1 
     }
 }
