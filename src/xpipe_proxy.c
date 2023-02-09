@@ -239,12 +239,16 @@ int eqXpipeProxy(void* p1, void* p2) {
 
 
 
-
+int ramdonIndex(int start, int end){
+    int dis = end - start;
+    return rand() % dis + start;
+}
 
 int xpipeProxyConnect(void* p, char* host, int port) {
     UNUSED(host);
     UNUSED(port);
     struct XpipeProxy* proxy = (struct XpipeProxy*)p;
+    proxy->servers_index = ramdonIndex(0, proxy->servers_len);
     struct Point* point = proxy->servers[proxy->servers_index];
     assert(point != NULL);
     int fd = anetTcpNonBlockBestEffortBindConnect(NULL,
@@ -255,7 +259,6 @@ int xpipeProxyConnect(void* p, char* host, int port) {
         sds point_info = getPointInfo(point) ;
         serverLog(LL_WARNING, "[XPIPE-PROXY] connect %s fail", point_info);
         sdsfree(point_info);
-        proxy->servers_index = (proxy->servers_index + 1) % proxy->servers_len;
         return fd;
     }
     return fd;
@@ -267,36 +270,9 @@ int xpipeProxyConnectFail(void* p) {
     sds point_info = getPointInfo(point) ;
     serverLog(LL_WARNING, "[XPIPE-PROXY] connect %s fail", point_info);
     sdsfree(point_info);
-
-    proxy->servers_index = (proxy->servers_index + 1) % proxy->servers_len;
     return 1;
 }
 
-int ramdonIndex(int start, int end){
-    int dis = end - start;
-    return rand() % dis + start;
-}
-
-int xpipeProxyConnect2(void* p, char* host, int port) {
-    UNUSED(host);
-    UNUSED(port);
-    struct XpipeProxy* proxy = (struct XpipeProxy*)p;
-    int index = ramdonIndex(0, proxy->servers_len);
-    struct Point* point = proxy->servers[index];
-    assert(point != NULL);
-    int fd = anetTcpNonBlockBestEffortBindConnect(NULL,
-                                              point->host,
-                                              point->port, NULL);
-    sds point_info = getPointInfo(point) ;
-    if(fd == -1) {
-        serverLog(LL_WARNING, "[XPIPE-PROXY] connect %s fail", point_info);
-    } else {
-        serverLog(LL_WARNING, "[XPIPE-PROXY] connect %s", point_info);
-        proxy->servers_index = index;
-    }
-    sdsfree(point_info);
-    return fd;
-}
 
 int xipieProxyConnectedAfter(int fd, void* p, char* src_host, int src_port, char* dst_host, int dst_port) {
     UNUSED(src_host);
