@@ -280,7 +280,6 @@ static size_t module_memory = 0;
 
 void* RM_GetSharedBuffer(size_t bytes) {
     if (bytes <= SHARED_BUFFER_SIZE) {
-        memset(shared.buffer, 0, bytes);
         return shared.buffer;
     } else {
         return NULL;
