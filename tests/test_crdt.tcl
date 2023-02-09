@@ -166,6 +166,7 @@ set ::all_tests {
     ctrip/unit/peerof_backstream
     
     ctrip/master-not-crdt/master-redis-slave-crdt
+    ctrip/integration/bug/stack_overflow   
 }   
 
 set ::temp_tests { 
