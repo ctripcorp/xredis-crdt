@@ -1456,6 +1456,7 @@ void createSharedObjects(void) {
      * string in string comparisons for the ZRANGEBYLEX command. */
     shared.minstring = sdsnew("minstring");
     shared.maxstring = sdsnew("maxstring");
+    shared.buffer = zmalloc(SHARED_BUFFER_SIZE);
 }
 
 void initServerConfig(struct redisServer *srv) {

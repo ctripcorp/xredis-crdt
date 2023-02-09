@@ -278,7 +278,14 @@ static size_t module_memory = 0;
     } \
 } while(0)
 
-
+void* RM_GetSharedBuffer(size_t bytes) {
+    if (bytes <= SHARED_BUFFER_SIZE) {
+        memset(shared.buffer, 0, bytes);
+        return shared.buffer;
+    } else {
+        return NULL;
+    }
+}
 void *RM_Alloc(size_t bytes) {
     size_t old_size = zmalloc_used_memory();
     void* r = zmalloc(bytes);
@@ -4711,6 +4718,7 @@ size_t moduleCount(void) {
  * file so that's easy to seek it to add new entries. */
 void moduleRegisterCoreAPI(void) {
     server.moduleapi = dictCreate(&moduleAPIDictType,NULL);
+    REGISTER_API(GetSharedBuffer);
     REGISTER_API(Alloc);
     REGISTER_API(ModuleMemory);
     REGISTER_API(UsedMemory);

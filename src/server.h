@@ -803,6 +803,9 @@ struct moduleLoadQueueEntry {
     robj **argv;
 };
 
+//4MB
+#define SHARED_BUFFER_SIZE (1024 * 1024 * 4)
+
 struct sharedObjectsStruct {
     robj *crlf, *ok, *err, *emptybulk, *czero, *cone, *cnegone, *pong, *space,
     *colon, *nullbulk, *nullmultibulk, *queued,
@@ -818,6 +821,7 @@ struct sharedObjectsStruct {
     *mbulkhdr[OBJ_SHARED_BULKHDR_LEN], /* "*<value>\r\n" */
     *bulkhdr[OBJ_SHARED_BULKHDR_LEN];  /* "$<value>\r\n" */
     sds minstring, maxstring;
+    void* buffer;
 };
 
 /* ZSETs use a specialized version of Skiplists */
