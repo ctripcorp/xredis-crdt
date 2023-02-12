@@ -11,12 +11,7 @@ proc log_content {log} {
     return $content
 }
 
-proc crdt_status { client property } {
-    set info [ $client crdt.info stats]
-    if {[regexp "\r\n$property:(.*?)\r\n" $info _ value]} {
-        set _ $value
-    }
-}
+
 
 proc crdt_repl { client property } {
     set info [ $client crdt.info replication]
@@ -235,9 +230,9 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                         [crdt_repl [lindex $peers 1] master_repl_offset] == [crdt_repl [lindex $slaves 1] master_repl_offset] &&
                         [crdt_repl [lindex $peers 1] master_repl_offset] == [crdt_repl [lindex $slaves 0] peer0_repl_offset]
                     } else {
-                        puts [format "peer0 offset: %d" [crdt_status [lindex $peers 0] master_repl_offset]]
-                        puts [format "slave0 offset: %d" [crdt_status [lindex $slaves 0] master_repl_offset]]
-                        puts [format "peer1 offset: %d" [crdt_status [lindex $peers 1] peer0_repl_offset]]
+                        puts [format "peer0 offset: %d" [crdt_stats [lindex $peers 0] master_repl_offset]]
+                        puts [format "slave0 offset: %d" [crdt_stats [lindex $slaves 0] master_repl_offset]]
+                        puts [format "peer1 offset: %d" [crdt_stats [lindex $peers 1] peer0_repl_offset]]
                         puts [[lindex $peers 1] crdt.info replication]
                         puts [log_content [lindex $peer_stdout 1]]
                         fail "crdt repl offset not aligned."
@@ -365,8 +360,8 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                 ######################################### Stage 3: Peer Reconnect & Partial Sync ########################################
                 puts "Stage 3: Peer Reconnect & Partial Sync"
                 test "TEST Two-Peers-Partial-Sync Add-Slave-Before-PeerOf" {
-                    set sync_partial_ok_0 [ crdt_status [lindex $peers 0] "sync_partial_ok" ]
-                    set sync_partial_ok_1 [ crdt_status [lindex $peers 1] "sync_partial_ok" ]
+                    set sync_partial_ok_0 [ crdt_stats [lindex $peers 0] "sync_partial_ok" ]
+                    set sync_partial_ok_1 [ crdt_stats [lindex $peers 1] "sync_partial_ok" ]
 
                     [lindex $peers 0] debug set-crdt-ovc 1
                     [lindex $peers 1] debug set-crdt-ovc 1
@@ -429,13 +424,13 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                     assert_equal [string match "*Already*" $result_0] 1
                     assert_equal [string match "*Already*" $result_1] 1
 
-                    set sync_partial_ok_now_0 [ crdt_status [lindex $peers 0] "sync_partial_ok" ]
-                    set sync_partial_ok_now_1 [ crdt_status [lindex $peers 1] "sync_partial_ok" ]
+                    set sync_partial_ok_now_0 [ crdt_stats [lindex $peers 0] "sync_partial_ok" ]
+                    set sync_partial_ok_now_1 [ crdt_stats [lindex $peers 1] "sync_partial_ok" ]
 
                     # puts [format "sync_partial_ok-0: %d" $sync_partial_ok_now_0]
                     # puts [format "sync_partial_ok-1: %d" $sync_partial_ok_now_1]
-                    # puts [format "sync_full_0: %d" [crdt_status [lindex $peers 0] "sync_full" ]]
-                    # puts [format "sync_full_1: %d" [crdt_status [lindex $peers 1] "sync_full" ]]
+                    # puts [format "sync_full_0: %d" [crdt_stats [lindex $peers 0] "sync_full" ]]
+                    # puts [format "sync_full_1: %d" [crdt_stats [lindex $peers 1] "sync_full" ]]
 
                     set partil_incr_0 [expr $sync_partial_ok_now_0 - $sync_partial_ok_0]
                     set partil_incr_1 [expr $sync_partial_ok_now_1 - $sync_partial_ok_1]
@@ -657,8 +652,8 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
 
                 ####################################### Stage 5: Master-Slave Switch ######################################################
                 puts "Stage 5: Master-Slave Switch"
-                set sync_partial_ok_0 [ crdt_status [lindex $slaves 0] "sync_partial_ok" ]
-                set sync_partial_ok_1 [ crdt_status [lindex $peers 1] "sync_partial_ok" ]
+                set sync_partial_ok_0 [ crdt_stats [lindex $slaves 0] "sync_partial_ok" ]
+                set sync_partial_ok_1 [ crdt_stats [lindex $peers 1] "sync_partial_ok" ]
 
                 set load_handle0 [start_write_load_with_interval [lindex $peer_hosts 1] [lindex $peer_ports 1] 1 100]
 
@@ -722,11 +717,11 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                    # error "assertion:Slave3 not correctly synchronized"
                 }
                 test "Master-Slave-Switch Peer-Partial-Sync" {
-                    set sync_partial_ok_now_0 [ crdt_status [lindex $slaves 0] "sync_partial_ok" ]
-                    set sync_partial_ok_now_1 [ crdt_status [lindex $peers 1] "sync_partial_ok" ]
+                    set sync_partial_ok_now_0 [ crdt_stats [lindex $slaves 0] "sync_partial_ok" ]
+                    set sync_partial_ok_now_1 [ crdt_stats [lindex $peers 1] "sync_partial_ok" ]
 
-                    # puts [format "sync_full_0: %d" [crdt_status [lindex $slaves 0] "sync_full" ]]
-                    # puts [format "sync_full_1: %d" [crdt_status [lindex $peers 1] "sync_full" ]]
+                    # puts [format "sync_full_0: %d" [crdt_stats [lindex $slaves 0] "sync_full" ]]
+                    # puts [format "sync_full_1: %d" [crdt_stats [lindex $peers 1] "sync_full" ]]
 
                     set partil_incr_0 [expr $sync_partial_ok_now_0 - $sync_partial_ok_0]
                     set partil_incr_1 [expr $sync_partial_ok_now_1 - $sync_partial_ok_1]
@@ -801,8 +796,8 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
 
                 ####################################### Stage 6: Master-Slave Switch - Peer Full Sync######################################################
                 puts "Stage 6: Master-Slave Switch - Peer Full Sync"
-                set sync_full_0 [ crdt_status [lindex $peers 0] "sync_full" ]
-                set sync_full_1 [ crdt_status [lindex $peers 1] "sync_full" ]
+                set sync_full_0 [ crdt_stats [lindex $peers 0] "sync_full" ]
+                set sync_full_1 [ crdt_stats [lindex $peers 1] "sync_full" ]
 
                 set load_handle0 [start_write_load_with_interval [lindex $peer_hosts 1] [lindex $peer_ports 1] 1 100]
 
@@ -860,11 +855,11 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                     stop_write_load $load_handle0
                     stop_write_load $load_handle1
 
-                    set sync_full_now_0 [ crdt_status [lindex $peers 0] "sync_full" ]
-                    set sync_full_now_1 [ crdt_status [lindex $peers 1] "sync_full" ]
+                    set sync_full_now_0 [ crdt_stats [lindex $peers 0] "sync_full" ]
+                    set sync_full_now_1 [ crdt_stats [lindex $peers 1] "sync_full" ]
 
-                    # puts [format "sync_full_0: %d" [crdt_status [lindex $slaves 0] "sync_full" ]]
-                    # puts [format "sync_full_1: %d" [crdt_status [lindex $peers 1] "sync_full" ]]
+                    # puts [format "sync_full_0: %d" [crdt_stats [lindex $slaves 0] "sync_full" ]]
+                    # puts [format "sync_full_1: %d" [crdt_stats [lindex $peers 1] "sync_full" ]]
 
                     set full_incr_0 [expr $sync_full_now_0 - $sync_full_0]
                     set full_incr_1 [expr $sync_full_now_1 - $sync_full_1]

@@ -105,9 +105,12 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
 
                     # Wait for all the three slaves to reach the "online"
                     # state from the POV of the master.
-                    wait_for_peer_sync [lindex $peers 0]
-                    wait_for_peer_sync [lindex $peers 1]
-
+                    test "wait $peers 0" {
+                        wait_for_peer_sync [lindex $peers 0]
+                    }
+                    test "wait $peers 1" {
+                        wait_for_peer_sync [lindex $peers 1]
+                    }
                     # Wait that slaves acknowledge they are online so
                     # we are sure that DBSIZE and DEBUG DIGEST will not
                     # fail because of timing issues.

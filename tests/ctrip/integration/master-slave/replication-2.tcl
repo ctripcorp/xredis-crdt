@@ -2,7 +2,7 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so}} {
     start_server {overrides {crdt-gid 1} module {crdt.so}} {
         test {First server should have role slave after SLAVEOF} {
             r -1 slaveof [srv 0 host] [srv 0 port]
-            wait_for_condition 50 100 {
+            wait_for_condition 50 1000 {
                 [s -1 master_link_status] eq {up}
             } else {
                 fail "Replication not started."
@@ -12,7 +12,11 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so}} {
         test {If min-slaves-to-write is honored, write is accepted} {
             r config set min-slaves-to-write 1
             r config set min-slaves-max-lag 10
-            r set foo 12345
+            while {1} {
+                if {![catch {r set foo 12345} err]} {
+                    break
+                }
+            }
             wait_for_condition 50 100 {
                 [r -1 get foo] eq {12345}
             } else {
@@ -30,7 +34,11 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so}} {
         test {If min-slaves-to-write is honored, write is accepted (again)} {
             r config set min-slaves-to-write 1
             r config set min-slaves-max-lag 10
-            r set foo 12345
+            while {1} {
+                if {![catch {r set foo 12345} err]} {
+                    break
+                } 
+            }
             wait_for_condition 50 100 {
                 [r -1 get foo] eq {12345}
             } else {

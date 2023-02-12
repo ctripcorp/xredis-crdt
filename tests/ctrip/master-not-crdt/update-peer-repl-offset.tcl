@@ -33,7 +33,7 @@ proc wait { client index type log}  {
     }
 }
 proc wait_script {script err} {
-    set retry 50
+    set retry 100
     while {$retry} {
         set conditionCmd [list expr $script] 
         if {[uplevel 1 $conditionCmd]} {

@@ -79,9 +79,9 @@ test "master(config) + slave(rdb)" {
         wait_for_sync $slave
         assert_equal [$peer get k] [$master get k]
         assert_equal [$slave get k] [$master get k]
-        catch {$slave shutdown} error 
+        shutdown_will_restart_redis $slave
         $master set k1 v1
-        catch {$master shutdown} error
+        shutdown_will_restart_redis $master
         assert_equal [get_slave_srv port] $slave_port
         assert_equal [get_master_srv port] $master_port
         set master_config_file [get_master_srv config_file]
@@ -120,9 +120,9 @@ test "master(rdb) + slave(config)" {
         after 500
         $master bgsave
         waitForBgsave $master 
-        catch {$slave shutdown} error 
+        shutdown_will_restart_redis $slave
         $master set k1 v1
-        catch {$master shutdown} error
+        shutdown_will_restart_redis $master
         assert_equal [get_slave_srv port] $slave_port
         assert_equal [get_master_srv port] $master_port
         set master_config_file [get_master_srv config_file]
@@ -151,9 +151,9 @@ test "master(config) + slave(rdb) + change_master" {
         wait_for_sync $slave
         assert_equal [$peer get k] [$master get k]
         assert_equal [$slave get k] [$master get k]
-        catch {$slave shutdown} error 
+        shutdown_will_restart_redis $slave
         $master set k1 v1
-        catch {$master shutdown} error
+        shutdown_will_restart_redis $master
         assert_equal [get_slave_srv port] $slave_port
         assert_equal [get_master_srv port] $master_port
         set master_config_file [get_master_srv config_file]
@@ -191,10 +191,10 @@ test "master(rdb) + slave(config) + change_master" {
         assert_equal [$slave get k] [$master get k]
         after 500
         $master bgsave
-        waitForBgsave $master 
-        catch {$slave shutdown} error 
+        waitForBgsave $master  
+        shutdown_will_restart_redis $slave
         $master set k1 v1
-        catch {$master shutdown} error
+        shutdown_will_restart_redis $master
         assert_equal [get_slave_srv port] $slave_port
         assert_equal [get_master_srv port] $master_port
         set master_config_file [get_master_srv config_file]

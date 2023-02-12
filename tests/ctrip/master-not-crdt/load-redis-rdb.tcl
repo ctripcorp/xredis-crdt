@@ -47,7 +47,7 @@ start_server [list overrides [list crdt-gid 1 loadmodule ./crdt.so  "dir"  $serv
     set master_stdout [srv 0 stdout]
     $master select 0
     assert_equal [$master dbsize]  1
-    catch { $master shutdown } error
+    shutdown_will_restart_redis $master 
 }
 set server_path1 [tmpdir "load-redis-rdb1"]
 exec cp tests/assets/non-crdt.rdb $server_path1/dump.rdb

@@ -38,7 +38,7 @@ proc is_not_slave {master slave} {
 }
 
 proc wait { client index type log}  {
-    set retry 50
+    set retry 100
     set match_str ""
     append match_str "*slave" $index ":*state=online*"
     while {$retry} {

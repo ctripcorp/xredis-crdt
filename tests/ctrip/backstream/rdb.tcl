@@ -1,4 +1,4 @@
-proc build_env {code} {
+proc build_env {name code } {
     start_server {tags {"backstreaming, peer"} overrides {crdt-gid 2} config {crdt_no_save.conf} module {crdt.so} } {
         set peer [srv 0 client]
         set peer_gid 2
@@ -59,7 +59,7 @@ proc build_env {code} {
                         return [srv -2 $value]
                     }
 
-                    test "run" {
+                    test $name {
                          #run code
                         if {[catch [uplevel 0 $code ] result]} {
                             puts $result
@@ -72,8 +72,15 @@ proc build_env {code} {
 }
 
 proc wait_backstream {r} {
+    set trycount 0 
     while 1 {
         if {[crdt_status $r backstreaming] eq 1} {
+            incr trycount +1
+            if {$trycount > 6000} {
+                puts [$r info ]
+                puts [$r crdt.info replication]
+                fail "wait_backstream fail" 
+            }
             after 100
         } else {
             break;
@@ -81,39 +88,40 @@ proc wait_backstream {r} {
     }
 }
 
-test "master-rdb-backstream" {
-    build_env {
-        $master set k v 
-        $slave slaveof $master_host $master_port
-        $slave config rewrite
-        wait_for_sync $slave 
-        after 1000
-        $master bgsave
-        waitForBgsave $master 
-        $master config rewrite
-        $master set k1 v1
-        after 500
-        assert_equal [$peer get k] [$master get k]
-        assert_equal [$slave get k] [$master get k]
-        catch {$master shutdown} error 
-        after 1000
-        assert_equal [get_master_srv port] $master_port
-        start_server_by_config [get_master_srv config_file] [get_master_srv config] $master_host $master_port $master_stdout $master_stderr 1 {
-            set master [redis $master_host $master_port]
-            $master select 9
-            
-            wait_for_peers_sync 1 $master 
-            wait_backstream $master 
-            assert_equal [$master get k] [$peer get k]
-            wait_for_sync $slave 
-            assert_equal [$master get k] [$slave get k]
 
-        }
+build_env "master-rdb-backstream" {
+    $master set k v 
+    $slave slaveof $master_host $master_port
+    $slave config rewrite
+    wait_for_sync $slave 
+    after 1000
+    $master debug reload 
+    assert_equal [$master get k1] ""
+    assert_equal [$master get k] v
+    $master config rewrite
+    $master set k1 v1
+    after 500
+    assert_equal [$peer get k] [$master get k]
+    assert_equal [$slave get k] [$master get k]
+    shutdown_will_restart_redis $master 
+    after 1000
+    assert_equal [get_master_srv port] $master_port
+    start_server_by_config [get_master_srv config_file] [get_master_srv config] $master_host $master_port $master_stdout $master_stderr 1 {
+        set master [redis $master_host $master_port]
+        $master select 9
+        
+        wait_for_peers_sync 1 $master 
+        wait_backstream $master 
+        assert_equal [$master get k] [$peer get k]
+        wait_for_sync $slave 
+        assert_equal [$master get k] [$slave get k]
+
     }
 }
 
-test "master-rdb-nobackstream" {
-    build_env {
+
+
+    build_env "master-rdb-nobackstream" {
         $master set k v 
         after 1000
         $slave slaveof $master_host $master_port
@@ -122,11 +130,12 @@ test "master-rdb-nobackstream" {
         $master set k1 v1
         assert_equal [$peer get k] [$master get k]
         after 1000
-        $master bgsave
-        waitForBgsave $master 
+        $master debug reload 
+        assert_equal [$master get k1] v1
+        assert_equal [$master get k] v
         $master config rewrite
         
-        catch {$master shutdown} error 
+        shutdown_will_restart_redis $master 
         after 1000
         assert_equal [get_master_srv port] $master_port
         start_server_by_config [get_master_srv config_file] [get_master_srv config] $master_host $master_port $master_stdout $master_stderr 1 {
@@ -141,11 +150,11 @@ test "master-rdb-nobackstream" {
 
         }
     }
-}
 
 
-test "slave-add-sync" {
-    build_env {
+
+
+    build_env "slave-add-sync" {
         
         $slave slaveof $master_host $master_port
         $slave config rewrite
@@ -154,7 +163,7 @@ test "slave-add-sync" {
         after 2000
         assert_equal [$peer get k] [$master get k]
         assert_equal [$slave get k] [$master get k]
-        catch {$slave shutdown} error 
+        shutdown_will_restart_redis $slave
         after 1000
         assert_equal [get_slave_srv port] $slave_port
         start_server_by_config [get_slave_srv config_file] [get_slave_srv config] $slave_host $slave_port $slave_stdout $slave_stderr 1 {
@@ -164,11 +173,11 @@ test "slave-add-sync" {
             assert_equal [$slave get k] [$master get k]
         }
     }
-}
 
 
-test "slave-full-sync" {
-    build_env {
+
+
+    build_env "slave-full-sync" {
         $master set k v 
         $slave slaveof $master_host $master_port
         wait_for_sync $slave 
@@ -176,7 +185,7 @@ test "slave-full-sync" {
         after 2000
         assert_equal [$peer get k] [$master get k]
         assert_equal [$slave get k] [$master get k]
-        catch {$slave shutdown} error 
+        shutdown_will_restart_redis $slave
         after 1000
         assert_equal [get_slave_srv port] $slave_port
         $master set k2 v
@@ -188,26 +197,26 @@ test "slave-full-sync" {
             assert_equal [$slave get k] [$master get k]
         }
     }
-}
 
 
 
-test "master + slave-add-sync-backstream" {
-    build_env {
+
+
+    build_env "master + slave-add-sync-backstream" {
         
         $slave slaveof $master_host $master_port
         $slave config rewrite
         wait_for_sync $slave 
         $master set k v 
         after 2000
-        $master bgsave 
-        after 500
-        waitForBgsave $master 
+        $master debug reload 
+        assert_equal [$master get k1] ""
+        assert_equal [$master get k] v
         assert_equal [$peer get k] [$master get k]
         assert_equal [$slave get k] [$master get k]
-        catch {$slave shutdown} error 
+        shutdown_will_restart_redis $slave 
         $master set k1 v1
-        catch {$master shutdown} error
+        shutdown_will_restart_redis $master 
         after 1000
         assert_equal [get_slave_srv port] $slave_port
         assert_equal [get_master_srv port] $master_port
@@ -227,11 +236,11 @@ test "master + slave-add-sync-backstream" {
             }
         }
     }
-}
 
 
-test "master + slave-full-sync-backstream" {
-    build_env {
+
+
+    build_env "master + slave-full-sync-backstream" {
         $master set k v 
         $slave slaveof $master_host $master_port
         wait_for_sync $slave 
@@ -239,12 +248,12 @@ test "master + slave-full-sync-backstream" {
         after 2000
         assert_equal [$peer get k] [$master get k]
         assert_equal [$slave get k] [$master get k]
-        catch {$slave shutdown} error 
+        shutdown_will_restart_redis $slave
         
         after 1000
         assert_equal [get_slave_srv port] $slave_port
         $master set k1 v1
-        catch {$master shutdown} error
+        shutdown_will_restart_redis $master 
         assert_equal [get_slave_srv port] $slave_port
         assert_equal [get_master_srv port] $master_port
         set master_config_file [get_master_srv config_file]
@@ -263,35 +272,88 @@ test "master + slave-full-sync-backstream" {
             }
         }
     }
-}
+
 
 proc wait_clean_data {log} {
     set fp [open $log r]
-    while {1} {
+    set trycount 0
+    while 1 {
         set content [read $fp]
         if {[string match {*\[backstream\]\ clean data*} $content]} {
-            break;
+            break
+        } else {
+            incr trycount +1
+            if {$trycount > 6000} {
+                fail "wait_clean_data "
+            }
+            after 10
         }
     }
     close $fp
 }
 
-test "change-slave(add-sync)" {
-    build_env {
+
+    build_env "change-slave(add-sync)" {
         $slave slaveof $master_host $master_port
         wait_for_sync $slave 
         $master set k v 
         $slave config rewrite
         after 2000
-        $master bgsave
-        waitForBgsave $master
-        assert_equal [$peer get k] [$master get k]
-        assert_equal [$slave get k] [$master get k]
-        catch {$slave shutdown} error 
+        $master debug reload 
+        assert_equal [$master get k1] "" "test1"
+        assert_equal [$master get k] v "test2"
+        assert_equal [$peer get k] [$master get k] "test3"
+        wait_for_sync $slave 
+        assert_equal [$slave get k] [$master get k] "test4"
+        shutdown_will_restart_redis $slave
         assert_equal [get_slave_srv port] $slave_port
         $master set k1 v1
         after 20
-        catch {$master shutdown} error
+        shutdown_will_restart_redis $master 
+        assert_equal [get_slave_srv port] $slave_port
+        assert_equal [get_master_srv port] $master_port
+        set master_config_file [get_master_srv config_file]
+        set master_config [get_master_srv config]
+        start_server_by_config [get_slave_srv config_file] [get_slave_srv config] $slave_host $slave_port $slave_stdout $slave_stderr 1 {
+            set slave [redis $slave_host $slave_port]
+            $slave select 9
+            $slave slaveof no one 
+            wait_for_peers_sync 1 $slave 
+            assert_equal [$slave get k] [$peer get k]
+
+            assert_equal [$slave get k1] [$peer get k1]
+            start_server_by_config $master_config_file $master_config $master_host $master_port $master_stdout $master_stderr 1 {
+                set master [redis $master_host $master_port]
+                $master select 9
+                wait_clean_data $master_stdout
+                $master slaveof $slave_host $slave_port
+                wait_for_sync $master 
+                assert_equal [$master get k] [$peer get k] "test5"
+                assert_equal [$slave get k] [$master get k] "test6"
+                assert_equal [$slave get k1] [$master get k1] "test7"
+                assert_equal [$slave get k1] [$master get k1] "test8"
+            }
+        }
+    }
+
+
+
+
+    build_env "change-slave(full-sync)" {
+        $master set k v 
+        $slave slaveof $master_host $master_port
+        wait_for_sync $slave 
+        $slave config rewrite
+        $master debug reload 
+        assert_equal [$master get k1] ""
+        assert_equal [$master get k] v
+        assert_equal [$peer get k] [$master get k]
+        assert_equal [$slave get k] [$master get k]
+        shutdown_will_restart_redis $slave
+        assert_equal [get_slave_srv port] $slave_port
+        $master set k1 v1
+        after 20
+        shutdown_will_restart_redis $master
         assert_equal [get_slave_srv port] $slave_port
         assert_equal [get_master_srv port] $master_port
         set master_config_file [get_master_srv config_file]
@@ -317,25 +379,23 @@ test "change-slave(add-sync)" {
             }
         }
     }
-}
 
 
-test "change-slave(full-sync)" {
-    build_env {
+
+    build_env "change-slave(full-sync)-no-backstream" {
         $master set k v 
-        $slave slaveof $master_host $master_port
-        wait_for_sync $slave 
         $slave config rewrite
-        after 2000
-        $master bgsave
-        waitForBgsave $master
-        assert_equal [$peer get k] [$master get k]
-        assert_equal [$slave get k] [$master get k]
-        catch {$slave shutdown} error 
-        assert_equal [get_slave_srv port] $slave_port
+        # after 2000
+        $master debug reload 
+        assert_equal [$master get k1] ""
         $master set k1 v1
         after 20
-        catch {$master shutdown} error
+        $slave slaveof $master_host $master_port
+        wait_for_sync $slave 
+        assert_equal [$peer get k] [$master get k]
+        assert_equal [$slave get k] [$master get k]
+        shutdown_will_restart_redis $slave 
+        shutdown_will_restart_redis $master 
         assert_equal [get_slave_srv port] $slave_port
         assert_equal [get_master_srv port] $master_port
         set master_config_file [get_master_srv config_file]
@@ -361,48 +421,3 @@ test "change-slave(full-sync)" {
             }
         }
     }
-}
-
-test "change-slave(full-sync)-no-backstream" {
-    build_env {
-        $master set k v 
-        
-        $slave config rewrite
-        after 2000
-        $master bgsave
-        waitForBgsave $master
-        assert_equal [get_slave_srv port] $slave_port
-        $master set k1 v1
-        after 20
-        $slave slaveof $master_host $master_port
-        wait_for_sync $slave 
-        assert_equal [$peer get k] [$master get k]
-        assert_equal [$slave get k] [$master get k]
-        catch {$slave shutdown} error 
-        catch {$master shutdown} error
-        assert_equal [get_slave_srv port] $slave_port
-        assert_equal [get_master_srv port] $master_port
-        set master_config_file [get_master_srv config_file]
-        set master_config [get_master_srv config]
-        start_server_by_config [get_slave_srv config_file] [get_slave_srv config] $slave_host $slave_port $slave_stdout $slave_stderr 1 {
-            set slave [redis $slave_host $slave_port]
-            $slave select 9
-            $slave slaveof no one 
-            wait_for_peers_sync 1 $slave 
-            assert_equal [$slave get k] [$peer get k]
-
-            assert_equal [$slave get k1] [$peer get k1]
-            start_server_by_config $master_config_file $master_config $master_host $master_port $master_stdout $master_stderr 1 {
-                set master [redis $master_host $master_port]
-                $master select 9
-                wait_clean_data $master_stdout
-                $master slaveof $slave_host $slave_port
-                wait_for_sync $master 
-                assert_equal [$master get k] [$peer get k]
-                assert_equal [$slave get k] [$master get k]
-                assert_equal [$slave get k1] [$master get k1]
-                assert_equal [$slave get k1] [$master get k1]
-            }
-        }
-    }
-}

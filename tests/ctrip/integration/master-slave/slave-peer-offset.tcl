@@ -33,7 +33,7 @@ proc wait { client index type log}  {
     }
 }
 proc wait_script {script err} {
-    set retry 50
+    set retry 100
     while {$retry} {
         set conditionCmd [list expr $script] 
         if {[uplevel 1 $conditionCmd]} {
@@ -54,46 +54,29 @@ proc test_write_data_offset {hasSlave master slave slave_slave peer peer_slave} 
         $m debug set-crdt-ovc 0
         $p debug set-crdt-ovc 0
         if {$hasSlave} {
-            set mv [get_info_replication_attr_value $m crdt.info master_repl_offset]
-            wait_script {$mv == [get_info_replication_attr_value $ms crdt.info master_repl_offset]} {
-                puts $mv
-                puts [get_info_replication_attr_value $ms crdt.info master_repl_offset]
-                fail [format "%s master and slave offset error" $type]
+            wait_script {[get_info_replication_attr_value $m crdt.info master_repl_offset] == [get_info_replication_attr_value $ms crdt.info master_repl_offset]} {
+                fail [format "%s master and slave offset error %d != %d" $type [get_info_replication_attr_value $m crdt.info master_repl_offset] [get_info_replication_attr_value $ms crdt.info master_repl_offset]]
             }
-            wait_script  {$mv == [get_info_replication_attr_value $mss crdt.info master_repl_offset]} {
-                puts $mv
-                puts [get_info_replication_attr_value $mss crdt.info master_repl_offset]
-                fail [format "%s master and slave-slave offset error " $type]
+            wait_script  {[get_info_replication_attr_value $m crdt.info master_repl_offset] == [get_info_replication_attr_value $mss crdt.info master_repl_offset]} {
+                fail [format "%s master and slave-slave offset error %d != %d" $type [get_info_replication_attr_value $m crdt.info master_repl_offset] [get_info_replication_attr_value $mss crdt.info master_repl_offset]]
             }
         } else {
-            set mv [get_info_replication_attr_value $ms crdt.info master_repl_offset]
-            wait_script  {$mv == [get_info_replication_attr_value $mss crdt.info master_repl_offset]} {
-                puts $mv
-                puts [get_info_replication_attr_value $mss crdt.info master_repl_offset]
-                fail [format "%s slave and slave-slave offset error " $type]
+            wait_script  {[get_info_replication_attr_value $ms crdt.info master_repl_offset] == [get_info_replication_attr_value $mss crdt.info master_repl_offset]} {
+                fail [format "%s slave and slave-slave offset error %d != %d" $type [get_info_replication_attr_value $ms crdt.info master_repl_offset] [get_info_replication_attr_value $mss crdt.info master_repl_offset]]
             }
         }
         
-        set pv [get_info_replication_attr_value $p crdt.info master_repl_offset]
-        wait_script {$pv == [get_info_replication_attr_value $ps crdt.info master_repl_offset]} {
-            puts $pv
-            puts [get_info_replication_attr_value $ps crdt.info master_repl_offset]
-            fail [format "%s peer and peer-slave offset error" $type]
+        wait_script {[get_info_replication_attr_value $p crdt.info master_repl_offset] == [get_info_replication_attr_value $ps crdt.info master_repl_offset]} {
+            fail [format "%s peer and peer-slave offset error %d != %d" $type [get_info_replication_attr_value $p crdt.info master_repl_offset] [get_info_replication_attr_value $ps crdt.info master_repl_offset]]
         }
-        wait_script  { $pv == [get_info_replication_attr_value $m crdt.info peer0_repl_offset]} {
-            puts $pv
-            puts [get_info_replication_attr_value $m crdt.info peer0_repl_offset]
-            fail [format "%s peer and master offset error" $type]
+        wait_script  {[get_info_replication_attr_value $p crdt.info master_repl_offset] == [get_info_replication_attr_value $m crdt.info peer0_repl_offset]} {
+            fail [format "%s peer and master offset error %d != %d " $type [get_info_replication_attr_value $p crdt.info master_repl_offset] [get_info_replication_attr_value $m crdt.info peer0_repl_offset]]
         }
-        wait_script { $pv == [get_info_replication_attr_value $ms crdt.info peer0_repl_offset]} {
-            puts $pv
-            puts [get_info_replication_attr_value $ms crdt.info peer0_repl_offset]
-            fail [format "%s peer and slave offset error" $type]
+        wait_script { [get_info_replication_attr_value $p crdt.info master_repl_offset] == [get_info_replication_attr_value $ms crdt.info peer0_repl_offset]} {
+            fail [format "%s peer and slave offset error %d != %d" $type [get_info_replication_attr_value $p crdt.info master_repl_offset] [get_info_replication_attr_value $ms crdt.info peer0_repl_offset]]
         }
-        wait_script { $pv == [get_info_replication_attr_value $mss crdt.info peer0_repl_offset]} {
-            puts $pv
-            puts [get_info_replication_attr_value $mss crdt.info peer0_repl_offset]
-            fail [format "<%s>,peer and slave-slave offset error" $type]
+        wait_script { [get_info_replication_attr_value $p crdt.info master_repl_offset] == [get_info_replication_attr_value $mss crdt.info peer0_repl_offset]} {
+            fail [format "%s,peer and slave-slave offset error %d != %d" $type [get_info_replication_attr_value $p crdt.info master_repl_offset] [get_info_replication_attr_value $mss crdt.info peer0_repl_offset]]
         }
         $m debug set-crdt-ovc 1
         $p debug set-crdt-ovc 1

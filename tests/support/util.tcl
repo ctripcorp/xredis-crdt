@@ -107,37 +107,64 @@ proc waitForBgrewriteaof r {
 }
 
 proc wait_for_sync r {
+    # while 1 {
+    #     if {[status $r master_link_status] eq "down"} {
+    #         after 10
+    #     } else {         
+    #         break
+    #     }
+    # }
+    set trycount 0
     while 1 {
-        if {[status $r master_link_status] eq "down"} {
-            after 10
-        } else {
+        if {[status $r master_link_status] eq "up"} {
             break
+        } else {
+            incr trycount +1
+            if {$trycount > 6000} {
+                puts [$r info ]
+                fail "wait_for_sync"
+            }
+            after 10
         }
     }
 }
 
 proc wait_for_peer_sync r {
+    set trycount 0
     while 1 {
-        if {[crdt_status $r peer0_link_status] eq "down"} {
-            after 10
-        } else {
+        if {[crdt_status $r peer0_link_status] eq "up"} {
             break
+        } else {
+            incr trycount +1
+            if {$trycount > 6000} {
+                puts [$r info ]
+                puts [$r crdt.info replication]
+                fail "wait_for_peer_sync"
+            }
+            after 10
         }
     }
 }
 
 proc wait_for_peers_sync {i r} {
     set index 0
+    set trycount 0
     while 1 {
         set s [format "peer%s_link_status" $index]
-        if {[crdt_status $r $s] eq "down"} {
-            after 10
-        } else {
+        if {[crdt_status $r $s] eq "up"} {
             if {$index == $i} {
                 break
             } else {
                 incr index
             }
+        } else {
+            incr trycount +1
+            if {$trycount > 6000} {
+                puts [$r info ]
+                puts [$r crdt.info replication]
+                fail [format "wait_for_peers_sync %s" $i]
+            }
+            after 10
         }
     }
 }
@@ -447,8 +474,50 @@ proc roundFloat f {
     format "%.10g" $f
 }
 
+set ::disabled_port [dict create]
+proc add_disabled_port port {
+    dict set ::disabled_port $port 1
+}
+
+proc remove_disabled_port port {
+    set ::disabled_port [dict remove $::disabled_port $port]
+}
+
+proc is_disabled_port port {
+    set _ [dict exists $::disabled_port $port]
+}
+
+set ::last_port_attempted 0
+#625 = 10000/16(clients)
+proc find_available_server_port {start} {
+    set trycount 3
+    for {set j 0} {$j <$trycount} {incr j} {
+        set port $start
+        for {set i 0} {$i < 625} {incr i} {
+            if {[is_disabled_port $port]} {
+                incr port
+                continue
+            }
+            if {[catch {set fd1 [socket 127.0.0.1 $port]}] &&
+                [catch {set fd2 [socket 127.0.0.1 [expr $port+10000]]}]} {
+                set ::last_port_attempted $port
+                return $port
+            } else {
+                catch {
+                    close $fd1
+                    close $fd2
+                }
+            }
+            incr port
+        }
+    }
+    error "Can't find a non busy port in the $start-[expr {$start+$count-1}] range."
+}
 proc find_available_port start {
     for {set j $start} {$j < $start+1024} {incr j} {
+        if {[is_disabled_port $j]} {
+            continue
+        }
         if {[catch {set fd1 [socket 127.0.0.1 $j]}] &&
             [catch {set fd2 [socket 127.0.0.1 [expr $j+10000]]}]} {
             return $j

@@ -14,8 +14,10 @@ proc replace { str argv } {
 proc get_info_replication_attr_value {client type attr} {
     set info [$client $type replication]
     set regstr [format "\r\n%s:(.*?)\r\n" $attr]
-    regexp $regstr $info match value 
-    set _ $value
+    if {[regexp $regstr $info match value]} {
+        set _ $value
+    }
+    
 }
 proc run {script level} {
     catch [uplevel $level $script ] result

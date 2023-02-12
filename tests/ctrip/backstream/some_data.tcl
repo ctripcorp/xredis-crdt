@@ -1,4 +1,4 @@
-proc build_env {code} {
+proc build_env {name code} {
     start_server {tags {"backstreaming, peer"} overrides {crdt-gid 2} config {crdt_no_save.conf} module {crdt.so} } {
         set peer [srv 0 client]
         set peer_gid 2
@@ -59,7 +59,7 @@ proc build_env {code} {
                         return [srv -2 $value]
                     }
 
-                    test "run" {
+                    test $name {
                          #run code
                         if {[catch [uplevel 0 $code ] result]} {
                             puts $result
@@ -88,16 +88,16 @@ proc run_thread {peer2_host peer2_port time } {
     
 }
 
-test "restart" {
-    build_env {
+
+    build_env "restart_server" {
         set load_handle0 [run_thread $master_host $master_port 5000]
         after 5000
         stop_write_load $load_handle0
         $slave slaveof $master_host $master_port
         wait_for_sync $slave 
         after 20
-        catch {$slave shutdown} error 
-        catch {$master shutdown} error
+        shutdown_will_restart_redis $slave 
+        shutdown_will_restart_redis $master  
         assert_equal [get_slave_srv port] $slave_port
         assert_equal [get_master_srv port] $master_port
         set master_config_file [get_master_srv config_file]
@@ -116,17 +116,17 @@ test "restart" {
             }
         }
     }
-}
-test "change_master_when_start_master" {
-    build_env {
+
+
+    build_env "change_master_when_start_master" {
         set load_handle0 [run_thread $master_host $master_port 5000]
         after 5000
         stop_write_load $load_handle0
         $slave slaveof $master_host $master_port
         wait_for_sync $slave 
         after 20
-        catch {$slave shutdown} error 
-        catch {$master shutdown} error
+        shutdown_will_restart_redis $slave 
+        shutdown_will_restart_redis $master 
         assert_equal [get_slave_srv port] $slave_port
         assert_equal [get_master_srv port] $master_port
         set master_config_file [get_master_srv config_file]
@@ -151,7 +151,7 @@ test "change_master_when_start_master" {
             }
         }
     }
-}
+
 
 
 proc wait_start_peer {log} {
@@ -167,16 +167,16 @@ proc wait_start_peer {log} {
     }
     close $fp
 }
-test "peering" {
-    build_env {
+
+    build_env "test peering" {
         set load_handle0 [run_thread $master_host $master_port 5000]
         after 5000
         stop_write_load $load_handle0
         $slave slaveof $master_host $master_port
         wait_for_sync $slave 
         after 20
-        catch {$slave shutdown} error 
-        catch {$master shutdown} error
+        shutdown_will_restart_redis $slave 
+        shutdown_will_restart_redis $master 
         assert_equal [get_slave_srv port] $slave_port
         assert_equal [get_master_srv port] $master_port
         set master_config_file [get_master_srv config_file]
@@ -196,23 +196,31 @@ test "peering" {
                 wait_start_peer $master_stdout
                 $master slaveof $slave_host $slave_port
                 wait_for_sync $master 
-                assert_equal [$master dbsize ] [$peer dbsize]
-                assert_equal [$slave dbsize] [$master dbsize]
+                wait_for_condition 1000 50 {
+                    [$master dbsize ] == [$peer dbsize]
+                } else {
+                    fail "master dbsize != peer dbsize "
+                }
+                wait_for_condition 1000 50 {
+                    [$master dbsize ] == [$slave dbsize]
+                } else {
+                    fail "master dbsize != slave dbsize "
+                }
 
             }
         }
     }
-}
-test "peerof over" {
-    build_env {
+
+
+    build_env "peerof over" {
         set load_handle0 [run_thread $master_host $master_port 5000]
         after 5000
         stop_write_load $load_handle0
         $slave slaveof $master_host $master_port
         wait_for_sync $slave 
         after 20
-        catch {$slave shutdown} error 
-        catch {$master shutdown} error
+        shutdown_will_restart_redis $slave 
+        shutdown_will_restart_redis $master 
         assert_equal [get_slave_srv port] $slave_port
         assert_equal [get_master_srv port] $master_port
         set master_config_file [get_master_srv config_file]
@@ -233,10 +241,15 @@ test "peerof over" {
                 wait_for_peers_sync 1 $master 
                 $master slaveof $slave_host $slave_port
                 wait_for_sync $master 
+                if {[$master dbsize ] != [$peer dbsize]} {
+                    fail [format "master dbsize(%d) != peer dbsize(%d)" [$master dbsize] [$peer dbsize]]
+                }
                 assert_equal [$master dbsize ] [$peer dbsize]
+                if {[$slave dbsize ] != [$master dbsize]} {
+                    fail [format "slave dbsize(%d) != master dbsize(%d)" [$slave dbsize] [$master dbsize]]
+                }
                 assert_equal [$slave dbsize] [$master dbsize]
 
             }
         }
     }
-}

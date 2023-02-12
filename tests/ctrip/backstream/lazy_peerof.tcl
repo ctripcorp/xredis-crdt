@@ -82,7 +82,7 @@ test "restart" {
     build_env {
         $master config set restart-lazy-peerof-time 5000
         $master config rewrite
-        catch {$master shutdown} error 
+        shutdown_will_restart_redis $master
          start_server_by_config [get_master_srv config_file] [get_master_srv config] $master_host $master_port $master_stdout $master_stderr 1 {
             set master [redis $master_host $master_port]
             $master select 9
@@ -107,7 +107,7 @@ test "rdb-restart" {
         $master config set restart-lazy-peerof-time 5000
         $master config rewrite 
         after 1000 
-        catch {$master shutdown} error 
+        shutdown_will_restart_redis $master 
          start_server_by_config [get_master_srv config_file] [get_master_srv config] $master_host $master_port $master_stdout $master_stderr 1 {
             set master [redis $master_host $master_port]
             $master select 9
@@ -132,7 +132,7 @@ test "rdb-restart-peerof-cancel-lazy-peerof" {
         $master config set restart-lazy-peerof-time 5000
         $master config rewrite 
         after 100 
-        catch {$master shutdown} error 
+        shutdown_will_restart_redis $master
         start_server_by_config [get_master_srv config_file] [get_master_srv config] $master_host $master_port $master_stdout $master_stderr 1 {
             set master [redis $master_host $master_port]
             $master select 9
@@ -151,7 +151,7 @@ test "rdb-restart-change-other-peer-cancel-lazy-peerof" {
         $peer peerof $master_gid $master_host $master_port
         wait_for_peer_sync $peer 
         $peer config rewrite
-        catch {$peer shutdown} error 
+        shutdown_will_restart_redis $peer
         start_server_by_config [get_peer_srv config_file] [get_peer_srv config] $peer_host $peer_port $peer_stdout $peer_stderr $peer_gid {
             set peer [redis $peer_host $peer_port]
             $peer select 9

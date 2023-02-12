@@ -20,14 +20,17 @@ start_server {tags {"hash tombstone"} overrides {crdt-gid 1} config {crdt.conf} 
             set peer2_port [srv 0 port]
             set peer2_log [srv 0 stdout]
             $peer peerof $peer2_gid $peer2_host $peer2_port
-            $peer hset h k1 v1
-            $peer hset h k2 v2 
-            $peer crdt.REM_HASH h 3 1000 "3:2;2:2" 2 k1 k2
-            $master hset h k1 v0
-            $peer peerof $master_gid $master_host $master_port
             wait_for_peer_sync $peer
-            $peer crdt.hset h 3 999 {3:1} 1 k2 v3
-            assert_equal [$peer hget h k2] {}
+            test "del hash tombstone when merge hash" {
+                $peer hset h k1 v1
+                $peer hset h k2 v2 
+                $peer crdt.REM_HASH h 3 1000 "3:2;2:2" 2 k1 k2
+                $master hset h k1 v0
+                $peer peerof $master_gid $master_host $master_port
+                wait_for_peers_sync 1 $peer
+                $peer crdt.hset h 3 999 {3:1} 1 k2 v3
+                assert_equal [$peer hget h k2] {}
+            }
            
         }
     }

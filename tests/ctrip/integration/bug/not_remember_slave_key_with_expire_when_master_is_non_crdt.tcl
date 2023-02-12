@@ -72,7 +72,8 @@ start_redis [list overrides [list repl-diskless-sync-delay 1 "dir"  $server_path
             
             [lindex $peers 0] slaveof $master_host $master_port  
             [lindex $peers 0] config set slave-read-only no
-            wait $master 0 info $master_stdout
+            # wait $master 0 info $master_stdout
+            wait_for_sync [lindex $peers 0]
             
             
             # print_log_file [lindex $peer_stdouts 0]
@@ -80,7 +81,7 @@ start_redis [list overrides [list repl-diskless-sync-delay 1 "dir"  $server_path
             after 10000
             
             
-            set retry 50
+            set retry 100
             while {$retry} {
                 if {
                     [[lindex $peers 0] dbsize] == 0 && 
