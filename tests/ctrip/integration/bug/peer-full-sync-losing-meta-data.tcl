@@ -96,9 +96,12 @@ start_server { tags {"repl"} config {crdt.conf} overrides {crdt-gid 1 repl-diskl
                 # we need to mock a client input as well as node-C timestmap is much more smaller
                 assert_equal [[lindex $peers 2] get key] val2
                 [lindex $peers 2] set key val3
-                after 1000
-                assert_equal [[lindex $peers 0] get key ] [[lindex $peers 1] get key ]
-                assert_equal [[lindex $peers 0] get key ] [[lindex $peers 2] get key ]
+                wait_for_condition 100 20 {
+                    [[lindex $peers 0] get key ] == [[lindex $peers 1] get key ] &&
+                    [[lindex $peers 0] get key ] == [[lindex $peers 2] get key ]
+                } else {
+                    fail "sync data fail"
+                }
 
                 set retry 50
                 while {$retry} {

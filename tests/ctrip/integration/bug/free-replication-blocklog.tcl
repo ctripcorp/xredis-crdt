@@ -11,12 +11,7 @@ proc print_log_content {log} {
     close $fp
     puts $content
 }
-proc crdt_status { client property } {
-    set info [ $client crdt.info stats]
-    if {[regexp "\r\n$property:(.*?)\r\n" $info _ value]} {
-        set _ $value
-    }
-}
+
 proc write_batch_data {host port time} {
     # Start to write random val(set k v). for 1 sec
     # the data will be used in full-sync
@@ -97,7 +92,7 @@ start_server {tags {"repl"} config {crdt.conf} overrides {crdt-gid 1} module {cr
                 
                 wait $slave 0 crdt.info $slave_stdout
                 # puts [$slave crdt.info stats]
-                set sync_partial_ok [ crdt_status $slave "sync_partial_ok" ]
+                set sync_partial_ok [ crdt_stats $slave "sync_partial_ok" ]
                 if {$sync_partial_ok==0} {
                     print_log_content $slave_stdout
                     print_log_content $master_stdout

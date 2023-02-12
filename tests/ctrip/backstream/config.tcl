@@ -94,7 +94,7 @@ test "master-config" {
         after 1000
         assert_equal [$peer get k] [$master get k]
         $master config rewrite
-        catch {$master shutdown} error 
+        shutdown_will_restart_redis $master
         after 1000
         assert_equal [get_master_srv port] $master_port
         start_server_by_config [get_master_srv config_file] [get_master_srv config] $master_host $master_port $master_stdout $master_stderr 1 {
@@ -125,7 +125,7 @@ test "master-config-backstream" {
         $master set k1 v1
         after 500
         assert_equal [$peer get k] [$master get k]
-        catch {$master shutdown} error 
+        shutdown_will_restart_redis $master
         assert_equal [get_master_srv port] $master_port
         start_server_by_config [get_master_srv config_file] [get_master_srv config] $master_host $master_port $master_stdout $master_stderr 1 {
             set master [redis $master_host $master_port]
@@ -151,7 +151,7 @@ test "master-config-nobackstream" {
         assert_equal [$peer get k] [$master get k]
         wait_for_sync $slave 
         $master config rewrite
-        catch {$master shutdown} error 
+        shutdown_will_restart_redis $master
         assert_equal [get_master_srv port] $master_port
         start_server_by_config [get_master_srv config_file] [get_master_srv config] $master_host $master_port $master_stdout $master_stderr 1 {
             set master [redis $master_host $master_port]
@@ -175,8 +175,8 @@ test "slave-restart" {
         $slave config rewrite
         wait_for_sync $slave
         delete_rdb $slave
-        $master set k1 v1
-        catch {$slave shutdown} error 
+        $master set k1 v1 
+        shutdown_will_restart_redis $slave
 
         start_server_by_config [get_slave_srv config_file] [get_slave_srv config] $slave_host $slave_port $slave_stdout $slave_stderr 1 {
             set slave [redis $slave_host $slave_port]
@@ -200,7 +200,7 @@ test "slave-restart2" {
         assert_equal [$peer get k] [$master get k]
         assert_equal [$slave get k] [$master get k]
         $slave config rewrite
-        catch {$slave shutdown} error 
+        shutdown_will_restart_redis $slave
         after 1000
         assert_equal [get_slave_srv port] $slave_port
         start_server_by_config [get_slave_srv config_file] [get_slave_srv config] $slave_host $slave_port $slave_stdout $slave_stderr 1 {
@@ -214,10 +214,17 @@ test "slave-restart2" {
 
 proc wait_clean_data {log} {
     set fp [open $log r]
-    while {1} {
+    set trycount 0
+    while 1 {
         set content [read $fp]
         if {[string match {*\[backstream\]\ clean data*} $content]} {
-            break;
+            break
+        } else {
+            incr trycount +1
+            if {$trycount > 6000} {
+                fail "wait_clean_data "
+            }
+            after 10
         }
     }
     close $fp
@@ -276,8 +283,8 @@ test "change-slave(full-sync)1" {
         assert_equal [$slave get k] [$master get k]
         $master config rewrite 
         $slave config rewrite 
-        catch {$master shutdown} error 
-        catch {$slave shutdown} error 
+        shutdown_will_restart_redis $master 
+        shutdown_will_restart_redis $slave
         assert_equal [get_slave_srv port] $slave_port
         assert_equal [get_master_srv port] $master_port
         set master_config_file [get_master_srv config_file]

@@ -49,12 +49,14 @@ proc start_proxy {options {code undefined}} {
             dict set config $directive $arguments
         }
     }
-    set config_dir [tmpdir server]
+    set config_dir [tmpdir proxy]
     dict set config dir $config_dir 
     set config_file "$config_dir/proxy.properties"
     set fp [open $config_file w+]
-    set ::proxy_tcp [find_available_port [expr {$::proxy_tcp+1}]]
-    set ::proxy_tls [find_available_port [expr {$::proxy_tls+1}]]
+    # set ::proxy_tcp [find_available_port [expr {$::proxy_tcp+1}]]
+    # set ::proxy_tls [find_available_port [expr {$::proxy_tls+1}]]
+    set ::proxy_tcp [find_available_server_port $::base_proxy_port]
+    set ::proxy_tls [expr {$::proxy_tcp+10000}]
     set tcp_port $::proxy_tcp 
     set tls_port $::proxy_tls 
     dict set config tcp_port $tcp_port
@@ -69,7 +71,11 @@ proc start_proxy {options {code undefined}} {
 
     set stdout [format "%s/%s" [dict get $config "dir"] "stdout"]
     set stderr [format "%s/%s" [dict get $config "dir"] "stderr"]
-
+    if {[info exists ::cur_test]} {
+        set fd [open $stdout "a+"]
+        puts $fd "### Starting proxy for test $::cur_test"
+        close $fd
+    }
     set server_started 0
     set pid [spawn_proxy $config_file $stdout $stderr]
     wait_proxy_started $pid $stdout

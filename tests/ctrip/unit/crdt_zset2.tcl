@@ -946,7 +946,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
         $peer peerof $master_gid $master_host $master_port
          wait_for_peer_sync $peer
         # after 5000
-        print_log_file  $peer_log
+        # print_log_file  $peer_log
         test "after" {
             test "bad" {
                 test "bad + null" {

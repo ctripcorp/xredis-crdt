@@ -218,7 +218,8 @@ proc start_redis_server {server options {code undefined}} {
     dict set config dir [tmpdir server]
 
     # start every server on a different port
-    set ::port [find_available_port [expr {$::port+1}]]
+    # set ::port [find_available_port [expr {$::port+1}]]
+    set ::port [find_available_server_port $::base_port]
     dict set config port $::port
 
     # apply overrides from global space and arguments
@@ -248,13 +249,17 @@ proc start_redis_server {server options {code undefined}} {
 
     set stdout [format "%s/%s" [dict get $config "dir"] "stdout"]
     set stderr [format "%s/%s" [dict get $config "dir"] "stderr"]
-
+    if {[info exists ::cur_test]} {
+        set fd [open $stdout "a+"]
+        puts $fd "### Restarting server for test $::cur_test"
+        close $fd
+    }
     if {$::valgrind} {
-        set pid [exec valgrind --track-origins=yes --suppressions=src/valgrind.sup --show-reachable=no --show-possibly-lost=no --leak-check=full $server $config_file > $stdout 2> $stderr &]
+        set pid [exec valgrind --track-origins=yes --suppressions=src/valgrind.sup --show-reachable=no --show-possibly-lost=no --leak-check=full $server $config_file >> $stdout 2>> $stderr &]
     } elseif ($::stack_logging) {
-        set pid [exec /usr/bin/env MallocStackLogging=1 MallocLogFile=/tmp/malloc_log.txt $server $config_file > $stdout 2> $stderr &]
+        set pid [exec /usr/bin/env MallocStackLogging=1 MallocLogFile=/tmp/malloc_log.txt $server $config_file >> $stdout 2>> $stderr &]
     } else {
-        set pid [exec $server $config_file > $stdout 2> $stderr &]
+        set pid [exec $server $config_file >> $stdout 2>> $stderr &]
     }
 
     # Tell the test server about this new instance.
@@ -376,16 +381,28 @@ proc start_server {options {code undefined}} {
     set server {src/redis-server}
     start_redis_server $server $options $code 
 }
-
+proc shutdown_will_restart_redis {r} {
+    set port [status $r tcp_port]
+    add_disabled_port $port
+    catch {$r shutdown nosave} error 
+}
 proc start_server_by_config {config_file config host port stdout stderr wait code} {
     set server {src/redis-server}
-    # set pid [exec $server $config_file > $stdout 2> $stderr &]
+    add_disabled_port $port
+    while {1} {
+        if {[catch {set fd1 [socket 127.0.0.1 $port]}]} {
+            break
+        } else {
+            after 100
+        }
+    }
+    # set pid [exec $server $config_file >> $stdout 2>> $stderr &]
     if {$::valgrind} {
-        set pid [exec valgrind --track-origins=yes --suppressions=src/valgrind.sup --show-reachable=no --show-possibly-lost=no --leak-check=full $server $config_file > $stdout 2> $stderr &]
+        set pid [exec valgrind --track-origins=yes --suppressions=src/valgrind.sup --show-reachable=no --show-possibly-lost=no --leak-check=full $server $config_file >> $stdout 2>> $stderr &]
     } elseif ($::stack_logging) {
-        set pid [exec /usr/bin/env MallocStackLogging=1 MallocLogFile=/tmp/malloc_log.txt $server $config_file > $stdout 2> $stderr &]
+        set pid [exec /usr/bin/env MallocStackLogging=1 MallocLogFile=/tmp/malloc_log.txt $server $config_file >> $stdout 2>> $stderr &]
     } else {
-        set pid [exec $server $config_file > $stdout 2> $stderr &]
+        set pid [exec $server $config_file >> $stdout 2>> $stderr &]
     }
     set srv {}
     dict set srv "pid" $pid
@@ -499,4 +516,5 @@ proc start_server_by_config {config_file config host port stdout stderr wait cod
         set ::tags [lrange $::tags 0 end-[llength $tags]]
         set _ $srv
     }
+    remove_disabled_port $port
 }

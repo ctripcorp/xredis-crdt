@@ -117,7 +117,7 @@ start_server {
         $master crdt.setOfflineGid 2 3 4 5
         $master config rewrite
         # restart server
-        catch {$master shutdown} error 
+        shutdown_will_restart_redis $master 
         start_server_by_config $master_config_file $master_config $master_host $master_port $master_stdout $master_stderr 1 {
             set master [redis $master_host $master_port]
             $master select 9

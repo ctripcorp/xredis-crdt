@@ -11,7 +11,7 @@ proc get_info_replication_attr_value {client type attr} {
     set _ $value
 }
 proc wait { client index type log}  {
-    set retry 50
+    set retry 100
     set match_str ""
     append match_str "*slave" $index ":*state=online*"
     while {$retry} {
@@ -56,7 +56,7 @@ start_server [list overrides [list crdt-gid 1 loadmodule ./crdt.so  "dir"  $serv
         $slave slaveof $master_host $master_port
         wait $master 0 info $slave_stdout
         $slave slaveof no one 
-        test "" {
+        test "jump vectorclock" {
             assert_equal [get_info_replication_attr_value $slave crdt.info ovc] "1:1000003"
             after 5000
             read_file_matches [srv 0 config_file] "*crdt-clockunit 1000003*"

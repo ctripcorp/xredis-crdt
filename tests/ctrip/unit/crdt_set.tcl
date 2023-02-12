@@ -114,7 +114,7 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
 
 
         
-        wait_for_peer_sync $master
+        
         test "sadd" {
             test {SADD, SCARD, SISMEMBER, SMEMBERS basics - intset} {
                 assert_equal 1 [$master sadd myset1 16]

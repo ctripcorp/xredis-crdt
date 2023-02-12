@@ -87,7 +87,7 @@ start_server {tags {"backstreaming, can't  write and read"} overrides {crdt-gid 
             # puts $config_file
             # puts [$master config get peerof] 
             # puts [srv 0 stdout]
-            catch {$master shutdown}
+            shutdown_will_restart_redis $master 
             after 1000
             $peer crdt.set key v1 1 1000 1:1 
             $peer crdt.set key2 v2 1 1002 1:2
@@ -138,7 +138,7 @@ start_server {tags {"load rdb master"} overrides {crdt-gid 1} config {crdt.conf}
         $master bgsave 
         waitForBgsave $master 
         # puts [read_file $master_stdout]
-        catch {$master shutdown} error
+        shutdown_will_restart_redis $master 
         set server_path [tmpdir "server.restart1"]
         set dbfile [dict get $master_config dbfilename]
         set rdb_path [format "%s/%s" [dict get $master_config dir] $dbfile]
@@ -197,7 +197,7 @@ start_server {tags {"slave load rdb"} overrides {crdt-gid 1} config {crdt.conf} 
             wait_for_sync $slave 
             $slave bgsave
             waitForBgsave $slave 
-            catch {$slave shutdown} error
+            shutdown_will_restart_redis $slave 
             set server_path [tmpdir "server.slave_restart1"]
             set dbfile [dict get $slave_config dbfilename]
             set rdb_path [format "%s/%s" [dict get $slave_config dir] $dbfile]
@@ -253,7 +253,7 @@ start_server {tags {"slave load rdb.conf"} overrides {crdt-gid 2} config {crdt.c
             assert_match "*slaveof 127.0.0.1*" $config_file
             $peer crdt.set key v1 1 1000 1:1 
             $peer crdt.set key2 v2 1 1002 1:2
-            catch {$slave shutdown} error
+            shutdown_will_restart_redis $slave 
             $master set kkkk a
             assert_equal [$peer get kkkk] {}
             $master config set repl-diskless-sync yes
@@ -312,7 +312,7 @@ start_server {tags {"slave load rdb.conf"} overrides {crdt-gid 2} config {crdt.c
             assert_match "*slaveof 127.0.0.1*" $config_file
             $peer crdt.set key v1 1 1000 1:1 
             $peer crdt.set key2 v2 1 1002 1:2
-            catch {$slave shutdown} error
+            shutdown_will_restart_redis $slave 
             $master set kkkk a
             assert_equal [$peer get kkkk] {}
             $master config set repl-diskless-sync no
@@ -367,7 +367,7 @@ start_server {tags {"slave full-sync after to master no backstream"} overrides {
             assert_match "*slaveof 127.0.0.1*" $config_file
             $peer crdt.set key v1 1 1000 1:1 
             $peer crdt.set key2 v2 1 1002 1:2
-            catch {$slave shutdown} error
+            shutdown_will_restart_redis $slave 
             $master set kkkk a
             assert_equal [$peer get kkkk] {}
             $master config set repl-diskless-sync yes
@@ -421,7 +421,7 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt_no_save.conf} 
         set dbfile [dict get $master_config dbfilename]
         set rdb_path [format "%s/%s" [dict get $master_config dir] $dbfile]
         assert_equal [file exists $rdb_path] 1
-        catch {$master shutdown} 
+        shutdown_will_restart_redis $master
         start_server_by_config $master_config_file $master_config $master_host $master_port $master_stdout $master_stderr 0 {
             after 2000
             set master [redis $master_host $master_port]
@@ -462,7 +462,7 @@ start_server {tags {"master"} overrides {crdt-gid 1} config {crdt_no_save.conf} 
         $master set master_key a 
         $master set k a 
         $peer set k b 
-        catch {$master shutdown} 
+        shutdown_will_restart_redis $master 
         start_server_by_config $master_config_file $master_config $master_host $master_port $master_stdout $master_stderr 0 {
             after 2000
             set master [redis $master_host $master_port]

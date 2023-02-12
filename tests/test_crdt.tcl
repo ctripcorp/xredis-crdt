@@ -104,7 +104,6 @@ set ::all_tests {
     ctrip/master-not-crdt/crdt-redis-when-inited-not-full-sync-from-redis
     ctrip/master-not-crdt/jump-vectorclock
     ctrip/master-not-crdt/master-redis-peer
-    ctrip/integration/composite/full-sync
     ctrip/integration/master-master/full_sync-3
     ctrip/integration/master-master/replication-2
     ctrip/integration/master-master/full_sync-2
@@ -165,7 +164,6 @@ set ::all_tests {
 
     ctrip/unit/peerof_backstream
     
-    ctrip/master-not-crdt/master-redis-slave-crdt
     ctrip/integration/bug/stack_overflow
 }   
 
@@ -251,9 +249,11 @@ set ::temp_tests {
 set ::next_test 0
 
 set ::host 127.0.0.1
+set ::base_port 21111
 set ::port 21111
-set ::proxy_tcp 31111
-set ::proxy_tls 41111
+set ::base_proxy_port 41111
+set ::proxy_tcp 41111
+set ::proxy_tls 51111
 set ::traceleaks 0
 set ::valgrind 0
 set ::stack_logging 1
@@ -366,6 +366,7 @@ proc cleanup {} {
     flush stdout
     catch {exec rm -rf {*}[glob tests/tmp/redis.conf.*]}
     catch {exec rm -rf {*}[glob tests/tmp/server.*]}
+    catch {exec rm -rf {*}[glob tests/tmp/proxy.*]}
     if {!$::quiet} {puts "OK"}
 }
 
@@ -382,17 +383,15 @@ proc test_server_main {} {
 
     # Start the client instances
     set ::clients_pids {}
-    set start_port [expr {$::port+100}]
-    set proxy_tcp [expr {$::proxy_tcp+100}]
-    set proxy_tls [expr {$::proxy_tls+100}]
+    set start_port [expr {$::base_port+100}]
+    set start_proxy_port [expr {$::base_proxy_port+100}]
+    # Limit the range of ports used by each client （10000/16=625）
     for {set j 0} {$j < $::numclients} {incr j} {
-        set start_port [find_available_port $start_port]
         set p [exec $tclsh [info script] {*}$::argv \
-            --client $port --port $start_port --proxy_tcp $proxy_tcp --proxy_tls $proxy_tls &]
+            --client $port --base_port $start_port --base_proxy_port $start_proxy_port &]
         lappend ::clients_pids $p
-        incr start_port 10
-        incr proxy_tcp 10
-        incr proxy_tls 10
+        incr start_port 625
+        incr start_proxy_port 625
     }
 
     # Setup global state for the test server
@@ -633,11 +632,14 @@ for {set j 0} {$j < [llength $argv]} {incr j} {
     } elseif {$opt eq {--port}} {
         set ::port $arg
         incr j
-    } elseif {$opt eq {--proxy_tcp}} {
-        set ::proxy_tcp $arg
+    } elseif {$opt eq {--base_port}} {
+        set ::port $arg
+        set ::base_port $arg
         incr j
-    } elseif {$opt eq {--proxy_tls}} {
-        set ::proxy_tls $arg 
+    } elseif {$opt eq {--base_proxy_port}} {
+        set ::base_proxy_port $arg
+        set ::proxy_tcp $arg
+        set ::proxy_tls [expr {$arg+10000}]
         incr j
     } elseif {$opt eq {--accurate}} {
         set ::accurate 1

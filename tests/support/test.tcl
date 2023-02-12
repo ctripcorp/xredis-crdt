@@ -2,7 +2,7 @@ set ::num_tests 0
 set ::num_passed 0
 set ::num_failed 0
 set ::tests_failed {}
-
+set ::cur_test ""
 proc fail {msg} {
     error "assertion:$msg"
 }
@@ -64,7 +64,7 @@ proc wait_for_condition {maxtries delay e _else_ elsescript} {
     }
 }
 
-proc test {name code {okpattern undefined}} {
+proc test {name code {okpattern undefined} {options undefined}} {
     # abort if tagged with a tag to deny
     foreach tag $::denytags {
         if {[lsearch $::tags $tag] >= 0} {
@@ -89,6 +89,20 @@ proc test {name code {okpattern undefined}} {
     incr ::num_tests
     set details {}
     lappend details "$name in $::curfile"
+
+    # set a cur_test global to be logged into new servers that are spown
+    # and log the test name in all existing servers
+    set prev_test $::cur_test
+    set ::cur_test "$name in $::curfile"
+    if {!$::external} {
+        foreach srv $::servers {
+            set stdout [dict get $srv stdout]
+            set fd [open $stdout "a+"]
+            puts $fd "### Starting test $::cur_test"
+            flush $fd
+            close $fd
+        }
+    }
 
     send_data_packet $::test_server_fd testing $name
 

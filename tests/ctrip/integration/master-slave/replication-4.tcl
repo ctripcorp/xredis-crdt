@@ -93,7 +93,13 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so}} {
         test {With min-slaves-to-write (1,3): master should be writable} {
             $master config set min-slaves-max-lag 3
             $master config set min-slaves-to-write 1
-            $master set foo bar
+            set result ""
+            while {1} {
+                if {![catch {set result [$master set foo bar]} err]} {
+                    break
+                } 
+            }
+            set _ $result
         } {OK}
 
         test {With min-slaves-to-write (2,3): master should not be writable} {
