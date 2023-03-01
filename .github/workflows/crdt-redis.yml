@@ -15,7 +15,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: init-system
-      run: sudo apt-get install openjdk-8-jdk -y
+      run: sudo apt update && sudo apt-get install openjdk-8-jdk -y
     - name: make
       run: make 
     - name: make crdt-test
