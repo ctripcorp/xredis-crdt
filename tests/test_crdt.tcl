@@ -367,6 +367,7 @@ proc cleanup {} {
     catch {exec rm -rf {*}[glob tests/tmp/redis.conf.*]}
     catch {exec rm -rf {*}[glob tests/tmp/server.*]}
     catch {exec rm -rf {*}[glob tests/tmp/proxy.*]}
+    catch {exec rm -rf {*}[glob tests/tmp/*.*]}
     if {!$::quiet} {puts "OK"}
 }
 

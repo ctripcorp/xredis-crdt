@@ -1382,6 +1382,7 @@ void configGetCommand(client *c, struct redisServer *srv) {
     config_get_numerical_field("tcp-keepalive",srv->tcpkeepalive);
     config_get_numerical_field("local-clock", srv->local_clock);
     config_get_numerical_field("dict-expand-max-idle-size", getDictExpandMaxIdle());
+    config_get_numerical_field("crdt-offline-gid",srv->offline_peer_set);
     /* Bool (yes/no) values */
     config_get_bool_field("cluster-require-full-coverage",
             srv->cluster_require_full_coverage);
@@ -1525,11 +1526,6 @@ void configGetCommand(client *c, struct redisServer *srv) {
         matches += peer_num;
     }
 
-    if (stringmatch(pattern,"crdt-offline-gid",1)) {
-        addReplyBulkCString(c,"crdt-offline-gid");
-        addReplyLongLong(c,crdtServer.offline_peer_set);
-        matches++;
-    }
 
 
     if (stringmatch(pattern,"notify-keyspace-events",1)) {
