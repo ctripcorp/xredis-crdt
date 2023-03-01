@@ -109,10 +109,10 @@ start_server {
     test "load config offline gid" {
         assert_equal [$master crdt.getOfflineGid] "2 4 5"
     
-        assert_equal [lindex [$master config get crdt-offline-gid] 1] 52
+        assert_equal [lindex [$master config crdt.get crdt-offline-gid] 1] 52
     }
 
-    
+
     test "rewrite config" {
         $master crdt.setOfflineGid 2 3 4 5
         $master config rewrite
@@ -257,17 +257,17 @@ start_server {
                     wait_for_condition 100 50 {
                         [$master tombstonesize ] == 0
                     } else {
-                        assert_equal [$master tombstonesize ] 0
+                        fail "master gc fail"
                     }
                     wait_for_condition 100 50 {
                         [$slave tombstonesize ] == 0
                     } else {
-                        assert_equal [$slave tombstonesize ] 0
+                        fail "slave gc fail"
                     }
                     wait_for_condition 100 50 {
                         [$peer2 tombstonesize ] == 0
                     } else {
-                        assert_equal [$peer2 tombstonesize ] 0
+                        fail [format "peer gc fail: %s" [$peer2 crdt.info replication]]
                     }
                 }
 
@@ -291,17 +291,17 @@ start_server {
                     wait_for_condition 100 50 {
                         [$peer2 tombstoneSize] == 0
                     } else {
-                        assert_equal [$peer2 tombstoneSize] 0
+                        fail "peer gc fail"
                     }
                     wait_for_condition 100 50 {
                         [$master get add_key2] == ""
                     } else {
-                        assert_equal [$master get add_key2] ""
+                        fail "master sync del command fail"
                     }
                     wait_for_condition 100 50 {
                         [$master tombstoneSize] == 0
                     } else {
-                        assert_equal [$master tombstoneSize] 0
+                        fail "master gc fail"
                     }
                 }
 
