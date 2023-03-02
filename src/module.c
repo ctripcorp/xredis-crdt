@@ -280,10 +280,18 @@ static size_t module_memory = 0;
 
 void* RM_GetSharedBuffer(size_t bytes) {
     if (bytes <= SHARED_BUFFER_SIZE) {
-        return shared.buffer;
+        serverAssert(shared.buffer->refcount == 1);
+        incrRefCount(shared.buffer);
+        return shared.buffer->ptr;
     } else {
         return NULL;
     }
+}
+
+void RM_ReturnSharedBuffer(void* ptr) {
+    serverAssert(ptr == shared.buffer->ptr);
+    serverAssert(shared.buffer->refcount == 2);
+    decrRefCount(shared.buffer);
 }
 void *RM_Alloc(size_t bytes) {
     size_t old_size = zmalloc_used_memory();
@@ -4718,6 +4726,7 @@ size_t moduleCount(void) {
 void moduleRegisterCoreAPI(void) {
     server.moduleapi = dictCreate(&moduleAPIDictType,NULL);
     REGISTER_API(GetSharedBuffer);
+    REGISTER_API(ReturnSharedBuffer);
     REGISTER_API(Alloc);
     REGISTER_API(ModuleMemory);
     REGISTER_API(UsedMemory);
