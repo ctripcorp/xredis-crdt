@@ -150,6 +150,7 @@ typedef struct RedisModuleTypeMethods {
 #define REDISMODULE_API_FUNC(x) (*x)
 
 void *REDISMODULE_API_FUNC(RedisModule_GetSharedBuffer)(size_t bytes);
+void *REDISMODULE_API_FUNC(RedisModule_ReturnSharedBuffer)(void* ptr);
 void *REDISMODULE_API_FUNC(RedisModule_Alloc)(size_t bytes);
 void *REDISMODULE_API_FUNC(RedisModule_Realloc)(void *ptr, size_t bytes);
 void REDISMODULE_API_FUNC(RedisModule_Free)(void *ptr);
@@ -333,6 +334,7 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     void *getapifuncptr = ((void**)ctx)[0];
     RedisModule_GetApi = (int (*)(const char *, void *)) (unsigned long)getapifuncptr;
     REDISMODULE_GET_API(GetSharedBuffer);
+    REDISMODULE_GET_API(ReturnSharedBuffer);
     REDISMODULE_GET_API(Alloc);
     REDISMODULE_GET_API(ModuleMemory);
     REDISMODULE_GET_API(UsedMemory);
