@@ -277,6 +277,7 @@ set ::active_servers {} ; # Pids of active Redis instances.
 # the appropriate exit code depending on the test outcome.
 set ::client 0
 set ::numclients 16
+set ::loop_wait_fail 0
 
 proc execute_tests name {
     set path "tests/$name.tcl"
@@ -534,6 +535,9 @@ proc signal_idle_client fd {
         send_data_packet $fd run [lindex $::all_tests $::next_test]
         lappend ::active_clients $fd
         incr ::next_test
+        if {[llength $::failed_tests] == 0 && $::loop_wait_fail && $::next_test == [llength $::all_tests]} {
+            set ::next_test 0
+        }
     } else {
         lappend ::idle_clients $fd
         if {[llength $::active_clients] == 0} {
@@ -667,6 +671,8 @@ for {set j 0} {$j < [llength $argv]} {incr j} {
     } elseif {$opt eq {--help}} {
         print_help_screen
         exit 0
+    } elseif {$opt eq {--loop_wait_fail}} {
+        set ::loop_wait_fail 1
     } else {
         puts "Wrong argument: $opt"
         exit 1

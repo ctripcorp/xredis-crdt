@@ -1326,6 +1326,8 @@ struct redisServer {
     long long start_time;
     int multi_process_sync;
     int restart_lazy_peerof_time; 
+    long long stat_gc_hits;   /* Number of successful gc */
+    long long stat_gc_misses; /* Number of failed gc  */
 };
 
 typedef struct pubsubPattern {
