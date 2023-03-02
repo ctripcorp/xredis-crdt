@@ -1946,6 +1946,8 @@ void resetServerStats(struct redisServer *srv) {
     srv->crdt_set_del_conflict = 0;
     srv->crdt_modify_conflict = 0;
     srv->crdt_merge_conflict = 0;
+    srv->stat_gc_misses = 0;
+    srv->stat_gc_hits = 0;
     srv->stat_sync_partial_ok = 0;
     srv->stat_sync_partial_err = 0;
     for (j = 0; j < STATS_METRIC_COUNT; j++) {
@@ -3486,7 +3488,9 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                             "latest_fork_usec:%lld\r\n"
                             "crdt_conflict:type=%lld,set=%lld,del=%lld,set_del=%lld\r\n"
                             "crdt_conflict_op:modify=%lld,merge=%lld\r\n"
-                            "evicted_tombstones:%lld\r\n",
+                            "evicted_tombstones:%lld\r\n"
+                            "stat_gc_hits:%lld\r\n"
+                            "stat_gc_misses:%lld\r\n",
                             crdtServer.stat_sync_full,
                             crdtServer.stat_sync_backstream,
                             crdtServer.stat_sync_partial_ok,
@@ -3499,7 +3503,9 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                             crdtServer.crdt_set_del_conflict,
                             crdtServer.crdt_modify_conflict,
                             crdtServer.crdt_merge_conflict,
-                            crdtServer.stat_evictedtombstones);
+                            crdtServer.stat_evictedtombstones,
+                            crdtServer.stat_gc_hits,
+                            crdtServer.stat_gc_misses);
     }
 
     /* CRDT Replication */

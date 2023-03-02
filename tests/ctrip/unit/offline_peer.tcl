@@ -253,7 +253,10 @@ start_server {
 
                 test "offline gid (gc), step 5 (master/peer2) crdt.setOfflineGid 3" {
                     $master crdt.setOfflineGid 3 
+                    set before_gc_hits [crdt_stats $peer2 stat_gc_hits]
+                    set before_gc_misses [crdt_stats $peer2 stat_gc_misses]
                     $peer2 crdt.setOfflineGid 3
+                    
                     wait_for_condition 100 50 {
                         [$master tombstonesize ] == 0
                     } else {
@@ -267,7 +270,7 @@ start_server {
                     wait_for_condition 100 50 {
                         [$peer2 tombstonesize ] == 0
                     } else {
-                        fail [format "peer gc fail: %s" [$peer2 crdt.info replication]]
+                        fail [format "peer gc fail: before(%s,%s) now(%s,%s)" $before_gc_hits $before_gc_misses  [crdt_stats $peer2 stat_gc_hits] [crdt_stats $peer2 stat_gc_misses]]
                     }
                 }
 

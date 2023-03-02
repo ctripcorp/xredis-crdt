@@ -220,10 +220,12 @@ int activeGcCycleTryGc(dict *d, dictEntry *de) {
         serverLog(LL_WARNING, "no gc method");
         return 0;
     }
-
+    
     if(!method->gc(tombstone, crdtServer.gcVectorClock)) {
+        crdtServer.stat_gc_misses++;
         return 0;
     }
+    crdtServer.stat_gc_hits++;
     sds key = dictGetKey(de);
     #if defined(DEBUG) 
         serverLog(LL_WARNING, "[gc]key: %s",key);
