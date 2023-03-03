@@ -535,13 +535,20 @@ proc signal_idle_client fd {
         send_data_packet $fd run [lindex $::all_tests $::next_test]
         lappend ::active_clients $fd
         incr ::next_test
-        if {[llength $::failed_tests] == 0 && $::loop_wait_fail && $::next_test == [llength $::all_tests]} {
-            set ::next_test 0
-        }
     } else {
         lappend ::idle_clients $fd
         if {[llength $::active_clients] == 0} {
-            the_end
+            if {[llength $::failed_tests] == 0 && $::loop_wait_fail} {
+                cleanup
+                set ::next_test 0
+                foreach client $::idle_clients {
+                    signal_idle_client $client
+                }
+                set ::idle_clients {}
+            } else {
+                the_end
+            }
+            
         }
     }
 }
