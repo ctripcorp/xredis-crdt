@@ -115,6 +115,7 @@ void setOfflineGidCommand(client *c) {
         addReplyBulkCString(c,"OK,but save config fail");
         return;
     } 
+    serverLog(LL_WARNING, "setOfflineGid  (%d)", crdtServer.offline_peer_set);
     addReply(c,shared.ok);
 }
 

@@ -787,6 +787,11 @@ void RM_UpdateOvc(int gid, VectorClock vc) {
         if(!isNullVectorClock(old_vc)) {
             freeVectorClock(old_vc);
         }
+        {//debug
+            sds a = vectorClockToSds(new_vc);
+            serverLog(LL_WARNING, "[update ovc] gid : %d, vc(%s)", gid, a);
+            sdsfree(a);
+        }
     } else {
         serverLog(LL_WARNING, "[update ovc] can't find CRDT_Master_Instance ,gid : %d", gid);
     }
