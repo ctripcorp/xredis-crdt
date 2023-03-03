@@ -227,6 +227,10 @@ start_server {
                 }
                 set ts 1
                 test "offline gid (gc), step 3 (peer3) slaveof 127.0.0.1 0" {
+                    
+                    assert_equal [$master dbsize ] [$peer3 dbsize]
+                    assert_equal [$slave dbsize ] [$peer3 dbsize]
+                    assert_equal [$peer2 dbsize ] [$peer3 dbsize]
                     $peer3 slaveof 127.0.0.1 0
                     # puts [$peer3 crdt.info replication] 
                     # puts [$master crdt.info replication]
@@ -274,7 +278,10 @@ start_server {
                         set fp [open $peer2_log r]
                         set content [read $fp]
                         close $fp
-                        fail [format "peer gc fail: before(%s,%s) now(%s,%s)\n ====== info\n%s\n  =====crdt.info replication\n%s\n ====== log\n%s\n" $before_gc_hits $before_gc_misses  [crdt_stats $peer2 stat_gc_hits] [crdt_stats $peer2 stat_gc_misses] [$peer2 info] [$peer2 crdt.info replication] $content]
+                        set fp [open $master_stdout r]
+                        set content1 [read $fp]
+                        close $fp
+                        fail [format "peer gc fail:  dbsize (%s)(%s) before(%s,%s) now(%s,%s)\n ====== info\n%s\n  =====peer2 crdt.info replication\n%s\n ====== peer2 log\n%s\n ====== master crdt.info replication \n%s\n ====== master log \n%s\n " [$peer2 dbsize] [$master dbsize] $before_gc_hits $before_gc_misses  [crdt_stats $peer2 stat_gc_hits] [crdt_stats $peer2 stat_gc_misses] [$peer2 info] [$peer2 crdt.info replication] $content [$master crdt.info replication] $content1]
                     }
                 }
 
