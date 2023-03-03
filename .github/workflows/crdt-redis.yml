@@ -20,3 +20,5 @@ jobs:
       run: make 
     - name: make crdt-test
       run: make crdt-test
+    - name: loop test
+      run: ./runtest-crdt --loop_wait_fail

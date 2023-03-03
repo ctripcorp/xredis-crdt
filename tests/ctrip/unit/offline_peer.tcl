@@ -168,6 +168,7 @@ start_server {
             set peer2 [srv 0 client]
             set peer2_host [srv 0 host]
             set peer2_port [srv 0 port]
+            set peer2_log [srv 0 stdout]
             $peer2 config crdt.set repl-ping-slave-period 1
             start_server {
                 tags {"peer3"}
@@ -269,8 +270,11 @@ start_server {
                     }
                     wait_for_condition 100 50 {
                         [$peer2 tombstonesize ] == 0
-                    } else {
-                        fail [format "peer gc fail: before(%s,%s) now(%s,%s)" $before_gc_hits $before_gc_misses  [crdt_stats $peer2 stat_gc_hits] [crdt_stats $peer2 stat_gc_misses]]
+                    } else {    
+                        set fp [open $peer2_log r]
+                        set content [read $fp]
+                        close $fp
+                        fail [format "peer gc fail: before(%s,%s) now(%s,%s)\n ====== info\n%s\n  =====crdt.info replication\n%s\n ====== log\n%s\n" $before_gc_hits $before_gc_misses  [crdt_stats $peer2 stat_gc_hits] [crdt_stats $peer2 stat_gc_misses] [$peer2 info] [$peer2 crdt.info replication] $content]
                     }
                 }
 
