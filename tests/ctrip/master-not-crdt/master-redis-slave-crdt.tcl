@@ -11,6 +11,24 @@ proc print_log_file {log} {
     close $fp
     puts $content
 }
+proc assert_equal_wait_for_condition {expected value {detail ""} {maxtries 100}} {
+    wait_for_condition $maxtries 50 {
+        $expected == $value 
+    } else {
+        if {$detail ne ""} {
+            set detail " (detail: $detail)"
+        }
+        error "assertion:Expected '$value' to be equal to '$expected'$detail"
+    }
+}
+
+proc assert_wait_for_condition {condition {maxtries 100}} {
+    wait_for_condition $maxtries 50 {
+        [uplevel 1 [list expr $condition]]
+    } else {
+        error "assertion:Expected condition '$condition' to be true ([uplevel 1 [list subst -nocommands $condition]])"
+    }
+}
 proc get_info_replication_attr_value {client type attr} {
     set info [$client $type replication]
     set regstr [format "\r\n%s:(.*?)\r\n" $attr]
@@ -65,8 +83,9 @@ cp_crdt_so $server_path
 proc run {script level} {
     catch [uplevel $level $script ] result opts
 }
-proc replace_client { str client } {
+proc replace_client { str client test_name} {
     regsub -all {\$redis} $str $client str
+    regsub -all {\$test_name}  $str $test_name str
     return $str
 }
 proc replace { str argv } {
@@ -163,22 +182,22 @@ set adds(0) {
     }
 }
 set checks(0) {
-    test "kv" {
-        assert_equal [$redis get key] value
-        assert_equal [$redis get rc1] 10
-        assert_equal [$redis get rc2] 0
-        assert_equal [$redis get rc3] 5
-        assert_equal [$redis get 1000] value
-        assert_equal [$redis get 1001] 1
+    test "kv-$test_name" {
+        assert_equal_wait_for_condition [$redis get key] value
+        assert_equal_wait_for_condition [$redis get rc1] 10
+        assert_equal_wait_for_condition [$redis get rc2] 0
+        assert_equal_wait_for_condition [$redis get rc3] 5
+        assert_equal_wait_for_condition [$redis get 1000] value
+        assert_equal_wait_for_condition [$redis get 1001] 1
         for {set i 0} {$i < 256} {incr i} {
             set a [i2b $i] 
-            assert_equal [$redis get $a] $a 
-            assert_equal [$redis hget hash_binary $a] $a
+            assert_equal_wait_for_condition [$redis get $a] $a 
+            assert_equal_wait_for_condition [$redis hget hash_binary $a] $a
         }
         for {set i 0} {$i < 256} {incr i} {
             set argv  [lindex set_argvs $i]
-            assert_equal [$redis get [lindex $argv 0]] [lindex $argv 1]
-            assert_equal [$redis hget hash_random [lindex $argv 0]] [lindex $argv 1]
+            assert_equal_wait_for_condition [$redis get [lindex $argv 0]] [lindex $argv 1]
+            assert_equal_wait_for_condition [$redis hget hash_random [lindex $argv 0]] [lindex $argv 1]
         }
     } 
 }
@@ -190,23 +209,23 @@ set adds(1) {
     
 }
 set checks(1) {
-    test "hash" {
-        assert_equal [$redis hget hash k1] v1
-        assert_equal [$redis hget hash k2] v2
-        assert_equal [$redis hget hash1 k0] v0
-        assert_equal [$redis hget hash1 k1] v1
-        assert_equal [$redis hget hash1 k2] v2
-        assert_equal [$redis hget hash1 k3] v3
-        assert_equal [$redis hget hash1 k4] v4
-        assert_equal [$redis hget hash1 k5] v5
-        assert_equal [$redis hget hash1 k6] v6
-        assert_equal [$redis hget hash1 k7] v7
-        assert_equal [$redis hget hash1 k8] v8
-        assert_equal [$redis hget hash1 k9] v9
-        assert_equal [$redis hget 10000 1] 2
-        assert_equal [$redis hget 10000 k1] v1
-        assert_equal [$redis hget 10000 2] v2
-        assert_equal [$redis hget 10000 k2] 1
+    test "hash-$test_name" {
+        assert_equal_wait_for_condition [$redis hget hash k1] v1
+        assert_equal_wait_for_condition [$redis hget hash k2] v2
+        assert_equal_wait_for_condition [$redis hget hash1 k0] v0
+        assert_equal_wait_for_condition [$redis hget hash1 k1] v1
+        assert_equal_wait_for_condition [$redis hget hash1 k2] v2
+        assert_equal_wait_for_condition [$redis hget hash1 k3] v3
+        assert_equal_wait_for_condition [$redis hget hash1 k4] v4
+        assert_equal_wait_for_condition [$redis hget hash1 k5] v5
+        assert_equal_wait_for_condition [$redis hget hash1 k6] v6
+        assert_equal_wait_for_condition [$redis hget hash1 k7] v7
+        assert_equal_wait_for_condition [$redis hget hash1 k8] v8
+        assert_equal_wait_for_condition [$redis hget hash1 k9] v9
+        assert_equal_wait_for_condition [$redis hget 10000 1] 2
+        assert_equal_wait_for_condition [$redis hget 10000 k1] v1
+        assert_equal_wait_for_condition [$redis hget 10000 2] v2
+        assert_equal_wait_for_condition [$redis hget 10000 k2] 1
     }
 }
 set adds(2) {
@@ -216,13 +235,13 @@ set adds(2) {
     $redis expire hash2 10000000
 }
 set checks(2) {
-    test "expire" {
-        assert_equal [$redis hget hash2 k]  v
-        assert {[$redis ttl hash2] <= 10000000}
-        assert {[$redis ttl hash2] > 0}
-        assert_equal [$redis get key2] v
-        assert {[$redis ttl key2] <= 10000000}
-        assert {[$redis ttl key2] > 0}
+    test "expire-$test_name" {
+        assert_equal_wait_for_condition [$redis hget hash2 k]  v
+        assert_wait_for_condition {[$redis ttl hash2] <= 10000000}
+        assert_wait_for_condition {[$redis ttl hash2] > 0}
+        assert_equal_wait_for_condition [$redis get key2] v
+        assert_wait_for_condition {[$redis ttl key2] <= 10000000}
+        assert_wait_for_condition {[$redis ttl key2] > 0}
     }
 }
 set adds(3) {
@@ -232,12 +251,12 @@ set adds(3) {
     $redis set key5 1
 }
 set checks(3) {
-    test "del" {
-        assert_equal [$redis get key3]  v
-        assert {[$redis ttl key3] <= 10000000}
-        assert {[$redis ttl key3] > 0}
-        assert_equal [$redis get key4]  {}
-        assert_equal [$redis get key5]  1
+    test "del-$test_name" {
+        assert_equal_wait_for_condition [$redis get key3]  v
+        assert_wait_for_condition {[$redis ttl key3] <= 10000000}
+        assert_wait_for_condition {[$redis ttl key3] > 0}
+        assert_equal_wait_for_condition [$redis get key4]  {}
+        assert_equal_wait_for_condition [$redis get key5]  1
     }
 }
 set adds(4) {
@@ -252,16 +271,16 @@ set adds(4) {
     $redis sadd 40000 1
 }
 set checks(4) {
-    test "set" {
-        assert_equal [$redis SISMEMBER key6 s1] 1
-        assert_equal [$redis SISMEMBER key7 s1] 1
-        assert_equal [$redis SISMEMBER key7 s2] 1
-        assert_equal [$redis SISMEMBER key8 s1] 0
-        assert_equal [$redis SISMEMBER key8 s2] 1
-        assert_equal [$redis SISMEMBER key9 s1] 0
-        assert_equal [$redis SISMEMBER key10 1] 1
-        assert_equal [$redis SISMEMBER 40000 s1] 1
-        assert_equal [$redis SISMEMBER 40000 1] 1
+    test "set-$test_name" {
+        assert_equal_wait_for_condition [$redis SISMEMBER key6 s1] 1
+        assert_equal_wait_for_condition [$redis SISMEMBER key7 s1] 1
+        assert_equal_wait_for_condition [$redis SISMEMBER key7 s2] 1
+        assert_equal_wait_for_condition [$redis SISMEMBER key8 s1] 0
+        assert_equal_wait_for_condition [$redis SISMEMBER key8 s2] 1
+        assert_equal_wait_for_condition [$redis SISMEMBER key9 s1] 0
+        assert_equal_wait_for_condition [$redis SISMEMBER key10 1] 1
+        assert_equal_wait_for_condition [$redis SISMEMBER 40000 s1] 1
+        assert_equal_wait_for_condition [$redis SISMEMBER 40000 1] 1
     }
 }
 
@@ -283,19 +302,19 @@ set adds(5) {
     $redis zadd 50000 1 2 
 }
 set checks(5) {
-    test "zset" {
-        assert_equal [$redis zscore myzset1 a] 1
-        assert_equal [$redis zscore myzset2 a] 1
-        assert_equal [$redis zscore myzset2 b] 2
-        assert_equal [$redis zscore myzset3 a] {}
-        assert_equal [$redis zscore myzset3 b] 2
-        assert_equal [$redis zscore myzset4 a] {}
-        assert_equal [$redis zscore myzset4 b] {}
-        assert_equal [$redis zscore myzset5 a] 3
-        assert_equal [$redis zscore myzset6 a] 3
-        assert_equal [$redis zscore myzset7 1] 1
-        assert_equal [$redis zscore 50000 f1] 1
-        assert_equal [$redis zscore 50000 2] 1
+    test "zset-$test_name" {
+        assert_equal_wait_for_condition [$redis zscore myzset1 a] 1 "myzset1"
+        assert_equal_wait_for_condition [$redis zscore myzset2 a] 1 "myzset2"
+        assert_equal_wait_for_condition [$redis zscore myzset2 b] 2
+        assert_equal_wait_for_condition [$redis zscore myzset3 a] {}
+        assert_equal_wait_for_condition [$redis zscore myzset3 b] 2
+        assert_equal_wait_for_condition [$redis zscore myzset4 a] {}
+        assert_equal_wait_for_condition [$redis zscore myzset4 b] {}
+        assert_equal_wait_for_condition [$redis zscore myzset5 a] 3
+        assert_equal_wait_for_condition [$redis zscore myzset6 a] 3
+        assert_equal_wait_for_condition [$redis zscore myzset7 1] 1 "myzset7"
+        assert_equal_wait_for_condition [$redis zscore 50000 f1] 1 "50000 f1"
+        assert_equal_wait_for_condition [$redis zscore 50000 2] 1 "50000 2"
     }
 }
 
@@ -311,8 +330,8 @@ proc full-sync {add check server_path dbfile} {
         set master_port [srv 0 port]
         set master_stdout [srv 0 stdout]
         $master config set repl-diskless-sync-delay 1
-        run [replace_client $add {$master}]  1
-        run [replace_client $check {$master}] 1
+        run [replace_client $add {$master} {full-sync}]  1
+        run [replace_client $check {$master} {full-sync-master}] 1
         start_server {tags {"slave"} config {crdt.conf} overrides {crdt-gid 1 repl-diskless-sync-delay 1} module {crdt.so}} {
             set slave [srv 0 client]
             set slave_host [srv 0 host]
@@ -321,7 +340,7 @@ proc full-sync {add check server_path dbfile} {
             $slave slaveof $master_host $master_port
             wait $master 0 info $slave_stdout
             after 1000
-            run [replace_client $check {$slave}]  1
+            run [replace_client $check {$slave} {full-sync-slave}]  1
             # puts [print_log_file $slave_stdout] 
             is_not_slave $master $slave
             start_server {tags {"crdt-slave"} config {crdt.conf} overrides {crdt-gid 1 repl-diskless-sync-delay 1} module {crdt.so}} {
@@ -332,7 +351,7 @@ proc full-sync {add check server_path dbfile} {
                 $crdt_slave slaveof $slave_host $slave_port
                 wait $slave 0 info $slave_stdout
                 test "full-sync" {
-                    run [replace_client $check {$crdt_slave}]  1
+                    run [replace_client $check {$crdt_slave} {full-sync-crdt-slave}]  1
                     # puts [print_log_file $slave_stdout] 
                     assert  {
                         [ get_info_replication_attr_value  $slave info master_replid] 
@@ -385,10 +404,10 @@ proc add-sync {add check server_path dbfile} {
                 $crdt_slave slaveof $slave_host $slave_port
                 wait $slave 0 info $slave_stdout
                 test "add-sync" {
-                    run [replace_client $add {$master}]  1
+                    run [replace_client $add {$master} {add-sync}]  1
                     after 1000
-                    run [replace_client $check {$slave}]  1
-                    run [replace_client $check {$crdt_slave}]  1
+                    run [replace_client $check {$slave} {add-sync-slave}]  1
+                    run [replace_client $check {$crdt_slave} {add-sync-crdt-slave}]  1
                     # puts [print_log_file $slave_stdout] 
                     check_slave $slave $crdt_slave
                 } 
@@ -421,8 +440,8 @@ proc check_all {client} {
     assert_equal [$client hget add-hash k1] v1
     assert_equal [$client hget add-hash k2] v2
     assert_equal [$client get add-exp] v
-    assert {[$client ttl add-exp] <= 10000}
-    assert {[$client ttl add-exp] > 0}
+    assert_wait_for_condition {[$client ttl add-exp] <= 10000}
+    assert_wait_for_condition {[$client ttl add-exp] > 0}
 }
 proc full-and-add-sync {add check server_path dbfile} {
     start_redis [list overrides [list repl-diskless-sync-delay 1 "dir"  $server_path ]] {
@@ -452,10 +471,10 @@ proc full-and-add-sync {add check server_path dbfile} {
                 wait $slave 0 info $slave_stdout
                 check_all $crdt_slave
                 test "full-and-add-sync" {
-                    run [replace_client $add {$master}]  1
+                    run [replace_client $add {$master} {full-and-add-sync}]  1
                     after 1000
-                    run [replace_client $check {$slave}]  1
-                    run [replace_client $check {$crdt_slave}]  1
+                    run [replace_client $check {$slave} {full-and-add-sync-slave}]  1
+                    run [replace_client $check {$crdt_slave} {full-and-add-sync-crdt-slave}]  1
                     # puts [print_log_file $slave_stdout] 
                     check_slave $slave $crdt_slave
                 } 
@@ -491,7 +510,7 @@ proc before-add-after-full {add check server_path dbfile} {
             set slave_stdout [srv 0 stdout]
             $slave slaveof $master_host $master_port
             wait $master 0 info $slave_stdout
-            run [replace_client $add {$master}]  1
+            run [replace_client $add {$master} {before-add-after-full}]  1
             # puts [print_log_file $slave_stdout] 
             is_not_slave $master $slave
 
@@ -505,8 +524,8 @@ proc before-add-after-full {add check server_path dbfile} {
                 
                 test "master-slave" {
                     after 1000
-                    run [replace_client $check {$slave}]  1
-                    run [replace_client $check {$crdt_slave}]  1
+                    run [replace_client $check {$slave} {before-add-after-full-slave}]  1
+                    run [replace_client $check {$crdt_slave} {before-add-after-full-crdt-slave}]  1
                     # puts [print_log_file $slave_stdout] 
                     check_slave $slave $crdt_slave
                 } 
@@ -542,7 +561,7 @@ proc slaves-full-sync {add check server_path dbfile} {
             set slave_port [srv 0 port]
             set slave_stdout [srv 0 stdout]
             
-            run [replace_client $add {$master}]  1
+            run [replace_client $add {$master} {slaves-full-sync}]  1
             # puts [print_log_file $slave_stdout] 
             is_not_slave $master $slave
 
@@ -556,10 +575,10 @@ proc slaves-full-sync {add check server_path dbfile} {
                 $slave slaveof $master_host $master_port
                 wait $master 0 info $slave_stdout
                 test "master-slave" {
-                    run [replace_client $check {$slave}]  1
+                    run [replace_client $check {$slave} {slaves-full-sync-slave}]  1
                     wait $slave 0 info $slave_stdout
                     # print_log_file $slave_stdout 
-                    run [replace_client $check {$crdt_slave}]  1
+                    run [replace_client $check {$crdt_slave} {slaves-full-sync-crdt-slave}]  1
                     # print_log_file $slave_stdout 
                     check_slave $slave $crdt_slave 
                 } 
