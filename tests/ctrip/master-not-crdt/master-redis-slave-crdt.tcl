@@ -303,7 +303,12 @@ set adds(5) {
 }
 set checks(5) {
     test "zset-$test_name" {
-        assert_equal_wait_for_condition [$redis zscore myzset1 a] 1 "myzset1"
+        # assert_equal_wait_for_condition [$redis zscore myzset1 a] 1 "myzset1"
+        wait_for_condition 100 50 {
+            [$redis zscore myzset1 a] == 1
+        } else {
+            error [format "myzset1 %s" [$redis crdt.info replication]]
+        }
         assert_equal_wait_for_condition [$redis zscore myzset2 a] 1 "myzset2"
         assert_equal_wait_for_condition [$redis zscore myzset2 b] 2
         assert_equal_wait_for_condition [$redis zscore myzset3 a] {}
