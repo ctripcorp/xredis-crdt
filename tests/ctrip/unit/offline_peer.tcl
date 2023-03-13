@@ -200,13 +200,14 @@ start_server {
                 }
 
                 test "offline gid (gc), step 2 write data" {
-                    $peer3 set peer3_string peer3 
-                    $master set master_string master 
-                    $peer2  set peer2_string peer2 
                     
                     $peer2 set k v1
                     $peer3 set k v2 
                     $master set k v3
+
+                    $peer3 set peer3_string peer3 
+                    $master set master_string master 
+                    $peer2  set peer2_string peer2 
                     
                     wait_for_condition 100 50 {
                         [$master get k ] == "v3"
@@ -223,9 +224,39 @@ start_server {
                     } else {
                         assert_equal [$peer3 get k ] "v3"
                     }
+
+                    wait_for_condition 100 50 {
+                        [$slave get k ] == "v3"
+                    } else {
+                        assert_equal [$slave get k ] "v3"
+                    }
                 }
                 set ts 1
                 test "offline gid (gc), step 3 (peer3) slaveof 127.0.0.1 0" {
+                    wait_for_condition 100 50 {
+                        [$master  dbsize] == 4
+                    } else {
+                        fail "master sync data fail"
+                    }
+
+                    wait_for_condition 100 50 {
+                        [$slave  dbsize] == 4
+                    } else {
+                        fail "slave sync data fail"
+                    }
+
+                    wait_for_condition 100 50 {
+                        [$peer2  dbsize] == 4
+                    } else {
+                        fail "peer2 sync data fail"
+                    }
+
+                    wait_for_condition 100 50 {
+                        [$peer3  dbsize] == 4
+                    } else {
+                        fail "peer3 sync data fail"
+                    }
+                    
                     $peer3 slaveof 127.0.0.1 0
                     # puts [$peer3 crdt.info replication] 
                     # puts [$master crdt.info replication]
