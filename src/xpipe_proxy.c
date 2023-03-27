@@ -255,12 +255,13 @@ int xpipeProxyConnect(void* p, char* host, int port) {
                                               point->host,
                                               point->port, NULL);
     // sdsfree(point.host);
-    if(fd == -1) {
-        sds point_info = getPointInfo(point) ;
-        serverLog(LL_WARNING, "[XPIPE-PROXY] connect %s fail", point_info);
-        sdsfree(point_info);
-        return fd;
+    sds point_info = getPointInfo(point) ;
+    if(fd == -1) {  
+        serverLog(LL_WARNING, "[XPIPE-PROXY] connect proxy %s fail: %s", point_info, strerror(errno));
+    } else {
+        serverLog(LL_WARNING, "[XPIPE-PROXY] connecting proxy %s", point_info);
     }
+    sdsfree(point_info);
     return fd;
 }
 
