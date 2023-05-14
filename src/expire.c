@@ -57,7 +57,7 @@ int activeExpireCycleTryExpire(redisDb *db, dictEntry *de, long long now) {
         sds key = dictGetKey(de);
         robj *keyobj = createStringObject(key,sdslen(key));
 
-        if(crdtPropagateExpire(db,keyobj,server.lazyfree_lazy_expire, t) != C_OK) {
+        if(crdtPropagateExpire(db,keyobj,server.lazyfree_lazy_expire, t, 1) != C_OK) {
             decrRefCount(keyobj);
             return 0;
         }

@@ -1118,14 +1118,14 @@ int isDelayExpire(sds key) {
     return get_gid(*c) != crdtServer.crdt_gid;
 }
 #define DELAYEXPIRETIME 500
-int crdtPropagateExpire(redisDb *db, robj *key, int lazy, long long expireTime) {
+int crdtPropagateExpire(redisDb *db, robj *key, int lazy, long long expireTime, int lazy_expire) {
     void *mk = NULL;
     dictEntry *entry = dictFind(db->dict, key->ptr);
     if(entry != NULL) {
          robj *val = dictGetVal(entry);
          if(val != NULL) {
             if(isModuleCrdt(val) == C_OK) {
-                if(expireTime != -1 && isDelayExpire((sds)key->ptr)) {
+                if(expireTime != -1 && lazy_expire && isDelayExpire((sds)key->ptr)) {
                     long long now = mstime();
                     if(expireTime + DELAYEXPIRETIME - now > 0) { 
                         return C_ERR;
@@ -1140,7 +1140,7 @@ int crdtPropagateExpire(redisDb *db, robj *key, int lazy, long long expireTime) 
                         serverLog(LL_WARNING, "[crdtPropagateExpire]key %s can't find method", (sds)key->ptr);
                         return C_ERR;
                     }
-                    method->propagateDel(db->id, key, mk, obj);
+                    method->propagateDel(db->id, key, mk, obj, expireTime);
                     closeModuleKey(mk);
                 }
                 crdtServer.stat_expiredkeys++;
@@ -1188,7 +1188,7 @@ int expireIfNeeded(redisDb *db, robj *key) {
 
     /* Delete the key */
     // server.stat_expiredkeys++;
-    if(crdtPropagateExpire(db,key,server.lazyfree_lazy_expire, when) != C_OK) {
+    if(crdtPropagateExpire(db,key,server.lazyfree_lazy_expire, when, 0) != C_OK) {
         return 0;
     }
     notifyKeyspaceEvent(NOTIFY_EXPIRED,
