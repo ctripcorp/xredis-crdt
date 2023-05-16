@@ -399,6 +399,12 @@ void loadServerConfigFromString(char *config) {
                 err = "restart_lazy_peerof_time must be 1 or greater";
                 goto loaderr;
             }
+        } else if (!strcasecmp(argv[0],"non-last-write-delay-expire-time") && argc == 2) {
+            server.non_last_write_delay_expire_time = atoi(argv[1]);
+            if (server.non_last_write_delay_expire_time <= 0) {
+                err = "non-last-write-delay-expire-time must be 1 or greater";
+                goto loaderr;
+            }
         } else if (!strcasecmp(argv[0], "crdt-offline-gid") && argc == 2) {
             setOfflinePeerSet(atoi(argv[1]));
         } else if (!strcasecmp(argv[0],"repl-ping-slave-period") && argc == 2) {
@@ -1218,6 +1224,8 @@ void configSetCommand(client *c, struct redisServer *srv) {
             enableWatchdog(ll);
         else
             disableWatchdog();
+    } config_set_numerical_field(
+        "non-last-write-delay-expire-time", srv->non_last_write_delay_expire_time, 0, LLONG_MAX) {
 
     /* Memory fields.
      * config_set_memory_field(name,var) */
@@ -1383,6 +1391,7 @@ void configGetCommand(client *c, struct redisServer *srv) {
     config_get_numerical_field("local-clock", srv->local_clock);
     config_get_numerical_field("dict-expand-max-idle-size", getDictExpandMaxIdle());
     config_get_numerical_field("crdt-offline-gid",srv->offline_peer_set);
+    config_get_numerical_field("non-last-write-delay-expire-time",srv->non_last_write_delay_expire_time);
     /* Bool (yes/no) values */
     config_get_bool_field("cluster-require-full-coverage",
             srv->cluster_require_full_coverage);
@@ -2234,6 +2243,7 @@ int rewriteConfig(char *path) {
     rewriteConfigYesNoOption(state,"slave-lazy-flush",server.repl_slave_lazy_flush,CONFIG_DEFAULT_SLAVE_LAZY_FLUSH);
     rewriteConfigYesNoOption(state, "multi-process-sync",server.multi_process_sync,CONFIG_DEFAULT_MULTI_PROCESS_SYNC);
     // rewriteConfigNumericalOption(state,"crdt-gid", crdtServer.crdt_gid, CONFIG_DEFAULT_GID);
+    rewriteConfigNumericalOption(state,"non-last-write-delay-expire-time",server.non_last_write_delay_expire_time,CONFIG_DEFAULT_NON_LAST_WRITE_DELAY_EXPIRE_TIME);
     rewriteConfigNameSpaceOption(state);
     rewriteConfigVectorUnit(state);
     

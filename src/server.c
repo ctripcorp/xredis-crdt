@@ -1576,6 +1576,7 @@ void initServerConfig(struct redisServer *srv) {
     srv->restart_lazy_peerof_time = CONFIG_DEFAULT_RESTART_LAZY_PEEROF_TIME;
     srv->offline_peer_set = 0;
     srv->peer_set = 0;
+    srv->non_last_write_delay_expire_time = CONFIG_DEFAULT_NON_LAST_WRITE_DELAY_EXPIRE_TIME; // 15min
     unsigned int lruclock = getLRUClock();
     atomicSet(srv->lruclock,lruclock);
     resetServerSaveParams(srv);

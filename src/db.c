@@ -1110,14 +1110,30 @@ void propagateExpire(redisDb *db, robj *key, int lazy) {
     decrRefCount(argv[1]);
 }
 
-int isDelayExpire(sds key) {
+int modGidByKey(sds key) {
     int len = get_len(crdtServer.vectorClock);
     int key_len = sdslen(key);
     int index = (key[0] + key[key_len/2] + key[key_len-1])% len;
     clk* c = get_clock_unit_by_index(&crdtServer.vectorClock, index);
-    return get_gid(*c) != crdtServer.crdt_gid;
+    return get_gid(*c) ;
 }
-#define DELAYEXPIRETIME 500
+
+int isNeedDelayExpire(CrdtDataMethod* method ,sds key, CrdtObject* obj) {
+    // non crdt sync command (undelay expire)
+    if (server.current_client != NULL && !(server.current_client->flags & CLIENT_CRDT_MASTER)) {
+        return 0;
+    }
+    if (method->getLastGid != NULL) {
+        if (method->getLastGid(obj) == crdtServer.crdt_gid) {
+            serverLog(LL_WARNING, "isNeedDelayExpire key %s getLastGid", key);
+            return 0;
+        } 
+    } else if (modGidByKey(key) == crdtServer.crdt_gid) {
+        serverLog(LL_WARNING, "isNeedDelayExpire key %s modGidByKey", key);
+        return 0;
+    }
+    return 1;
+}
 int crdtPropagateExpire(redisDb *db, robj *key, int lazy, long long expireTime) {
     void *mk = NULL;
     dictEntry *entry = dictFind(db->dict, key->ptr);
@@ -1125,24 +1141,23 @@ int crdtPropagateExpire(redisDb *db, robj *key, int lazy, long long expireTime) 
          robj *val = dictGetVal(entry);
          if(val != NULL) {
             if(isModuleCrdt(val) == C_OK) {
-                if(expireTime != -1 && isDelayExpire((sds)key->ptr)) {
-                    long long now = mstime();
-                    if(expireTime + DELAYEXPIRETIME - now > 0) { 
-                        return C_ERR;
-                    }
-                }
                 struct moduleValue* rm = (struct moduleValue*)val->ptr;
                 CrdtObject* obj = ((CrdtObject*)(rm->value));
                 mk = getModuleKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE | REDISMODULE_NO_TOUCH_KEY, 1);
-                if(mk != NULL) {
-                    CrdtDataMethod* method = getCrdtDataMethod(obj);
-                    if(method == NULL) {
-                        serverLog(LL_WARNING, "[crdtPropagateExpire]key %s can't find method", (sds)key->ptr);
+                if(mk == NULL) {
+                    return C_ERR;
+                }
+                CrdtDataMethod* method = getCrdtDataMethod(obj);
+                if (isNeedDelayExpire(method, (sds)key->ptr, obj)) {
+                    long long now = mstime();
+                    if (expireTime + server.non_last_write_delay_expire_time - now > 0) {
+                        closeModuleKey(mk);
                         return C_ERR;
                     }
-                    method->propagateDel(db->id, key, mk, obj);
-                    closeModuleKey(mk);
                 }
+                method->propagateDel(db->id, key, mk, obj);
+                closeModuleKey(mk);
+
                 crdtServer.stat_expiredkeys++;
                 server.stat_expiredkeys++;
                 return C_OK;
