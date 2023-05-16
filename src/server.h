@@ -170,6 +170,7 @@ long long get_min_backstream_vcu();
 #define CONFIG_DEFAULT_PROTO_MAX_BULK_LEN (512ll*1024*1024) /* Bulk request max size */
 #define CONFIG_DEFAULT_GID -1
 #define CONFIG_DEFAULT_VECTORCLOCK_UNIT -1
+#define CONFIG_DEFAULT_NON_LAST_WRITE_DELAY_EXPIRE_TIME (15*60*1000) /* delay expire 15min */
 
 #define ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP 20 /* Loopkups per loop. */
 #define ACTIVE_EXPIRE_CYCLE_FAST_DURATION 1000 /* Microseconds */
@@ -1328,6 +1329,7 @@ struct redisServer {
     int restart_lazy_peerof_time; 
     long long stat_gc_hits;   /* Number of successful gc */
     long long stat_gc_misses; /* Number of failed gc  */
+    int non_last_write_delay_expire_time;  /* last write gid expire=>del, other gid after N milliseconds of expire */
 };
 
 typedef struct pubsubPattern {
