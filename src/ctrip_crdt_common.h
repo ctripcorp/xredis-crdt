@@ -43,7 +43,7 @@ typedef struct CrdtObject {
 int check_gid(int gid);
 typedef void *(*crdtMergeFunc)(void *curVal, void *value);
 // RM_CrdtMultiWrappedReplicate should be called during this
-typedef int (*crdtPropagateDelFunc)(int db_id, void *keyRobj, void *key, void *crdtObj);
+typedef int (*crdtPropagateDelFunc)(int db_id, void *keyRobj, void *key, void *crdtObj, long long deltime);
 typedef CrdtObject** (*crdtFilterSplitFunc)(CrdtObject* obj,int gid, long long logic_time, long long maxsize, int* length);
 typedef CrdtObject** (*crdtFilterSplitFunc2)(CrdtObject* obj,int gid, VectorClock min_vc, long long maxsize, int* length);
 typedef void (*crdtFreeFilterResultFunc)(CrdtObject** obj, int length);

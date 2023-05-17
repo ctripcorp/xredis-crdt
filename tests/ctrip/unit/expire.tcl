@@ -839,3 +839,132 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
         assert_equal [expr {$after_crdt_expired_keys - $before_crdt_expired_keys}] 1
     }
 }
+
+start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
+    set peer1 [srv 0 client]
+    set peer1_gid 1
+    set peer1_host [srv 0 host]
+    set peer1_port [srv 0 port]
+    $peer1 config set non-last-write-delay-expire-time 500
+    assert_equal [$peer1 config get non-last-write-delay-expire-time] "non-last-write-delay-expire-time 500"
+    start_server {tags {"repl"} overrides {crdt-gid 2} module {crdt.so} } {
+        set peer2 [srv 0 client]
+        set peer2_gid 2
+        set peer2_host [srv 0 host]
+        set peer2_port [srv 0 port]
+        $peer2 config set non-last-write-delay-expire-time 500
+        assert_equal [$peer2 config get non-last-write-delay-expire-time] "non-last-write-delay-expire-time 500"
+        
+        $peer1 peerof $peer2_gid $peer2_host $peer2_port
+        $peer2 peerof $peer1_gid $peer1_host $peer1_port
+
+        wait_for_peer_sync $peer1 
+        wait_for_peer_sync $peer2
+
+        test "miss1" {
+            test "string miss data" {
+                $peer1 del key 
+                after 500
+                assert_equal [$peer1 type key] none
+                assert_equal [$peer2 type key] none
+                $peer1 set key v 
+                $peer1 expire key 2
+                after 2000
+                assert_equal [$peer1 get key] {}
+                $peer1 set key v1
+                after 500
+                assert_equal [$peer1 get key] v1
+                assert_equal [$peer2 get key] v1 
+            }
+
+            test "string2 miss data" {
+                $peer1 del key 
+                after 500
+                assert_equal [$peer1 type key] none
+                assert_equal [$peer2 type key] none
+                $peer1 setex key 2 v 
+                after 2000
+                assert_equal [$peer1 get key] {}
+                $peer1 set key v1
+                after 500
+                assert_equal [$peer1 get key] v1
+                assert_equal [$peer2 get key] v1 
+            }
+
+            test "hash miss data" {
+                $peer1 del key 
+                after 500
+                assert_equal [$peer1 type key] none
+                assert_equal [$peer2 type key] none
+                $peer1 hset key k v 
+                $peer1 expire key 2
+                after 2000
+                assert_equal [$peer1 hget key k] {}
+                $peer1 hset key k v1 
+                after 500
+                assert_equal [$peer1 hget key k] v1 
+                assert_equal [$peer2 hget key k] v1 
+            }
+
+            test "set miss data" {
+                $peer1 del key 
+                after 500
+                assert_equal [$peer1 type key] none
+                assert_equal [$peer2 type key] none
+                $peer1 sadd key k  
+                $peer1 expire key 2
+                after 2000
+                assert_equal [$peer1 SISMEMBER key k] 0
+                $peer1 sadd key k1
+                after 500
+                assert_equal [$peer1 SISMEMBER key k1] 1
+                assert_equal [$peer2 SISMEMBER key k1] 1
+            }
+
+            test "zset miss data" {
+                $peer1 del key 
+                after 500
+                assert_equal [$peer1 type key] none
+                assert_equal [$peer2 type key] none
+                $peer1 zadd key 10 k  
+                $peer1 expire key 2
+                after 2000
+                assert_equal [$peer1 zscore key k] ""
+                $peer1 zadd key 10 k1
+                after 500
+                assert_equal [$peer1 zscore key k1] 10
+                assert_equal [$peer2 zscore key k1] 10
+            }
+
+            test "count miss data" {
+                $peer1 del key 
+                after 500
+                assert_equal [$peer1 type key] none
+                assert_equal [$peer2 type key] none
+                $peer1 set key 10  
+                $peer1 expire key 2
+                after 2000
+                assert_equal [$peer1 get key] {}
+                $peer1 set key 20
+                after 500
+                assert_equal [$peer1 get key] 20
+                assert_equal [$peer2 get key] 20
+            }
+
+            test "count2 miss data" {
+                $peer1 del key 
+                after 500
+                assert_equal [$peer1 type key] none
+                assert_equal [$peer2 type key] none
+                $peer1 setex key 2 10  
+                after 2000
+                assert_equal [$peer1 get key] {}
+                $peer1 set key 20
+                after 500
+                assert_equal [$peer1 get key] 20
+                assert_equal [$peer2 get key] 20
+            }
+        }
+
+    }
+}
