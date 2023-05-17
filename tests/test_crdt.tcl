@@ -33,6 +33,8 @@ set ::ci_failed_tests {
 }
 
 set ::all_tests {
+    ctrip/integration/bug/hash-datamiss
+    ctrip/unit/delay_expire
     ctrip/unit/offline_peer
     ctrip/api/result_diff
     ctrip/proxy/config

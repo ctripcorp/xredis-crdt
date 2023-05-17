@@ -1119,9 +1119,15 @@ int modGidByKey(sds key) {
 }
 
 int isNeedDelayExpire(CrdtDataMethod* method ,sds key, CrdtObject* obj) {
-    // non crdt sync command (undelay expire)
-    if (server.current_client != NULL && !(server.current_client->flags & CLIENT_CRDT_MASTER)) {
-        return 0;
+    if (server.current_client != NULL ) {
+        if (!(server.current_client->flags & CLIENT_CRDT_MASTER)) {
+            //user command (undelay expire)
+            return 0;
+        } else {
+            //sync command undel  
+            //bottom line plan: delay expire
+            return 1;
+        }
     }
     if (method->getLastGid != NULL) {
         if (method->getLastGid(obj) == crdtServer.crdt_gid) {
@@ -1155,7 +1161,7 @@ int crdtPropagateExpire(redisDb *db, robj *key, int lazy, long long expireTime) 
                         return C_ERR;
                     }
                 }
-                method->propagateDel(db->id, key, mk, obj);
+                method->propagateDel(db->id, key, mk, obj, expireTime);
                 closeModuleKey(mk);
 
                 crdtServer.stat_expiredkeys++;

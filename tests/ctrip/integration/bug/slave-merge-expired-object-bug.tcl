@@ -75,6 +75,7 @@ start_redis [list overrides [list repl-diskless-sync-delay 1 "dir"  $server_path
                 after 5000
                 assert_equal [[lindex $peers 0] get key] ""
                 assert_equal [[lindex $peers 0] hget hash key] ""
+                assert_equal [[lindex $peers 0] get tombstone] ""
                 assert_equal [[lindex $peers 0] dbsize] 0
 
             }
