@@ -968,3 +968,34 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
 
     }
 }
+
+
+start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
+    set master [srv 0 client]
+    set master_gid 1
+    set master_host [srv 0 host]
+    set master_port [srv 0 port]
+    start_server {tags {"repl"} overrides {crdt-gid 2} module {crdt.so} } {
+        set peer [srv 0 client]
+        set peer_gid 2
+        set peer_host [srv 0 host]
+        set peer_port [srv 0 port]
+
+        test "expire" {
+            $master peerof $peer_gid $peer_host $peer_port
+            $peer peerof $master_gid $master_host $master_port
+
+            wait_for_peer_sync $master 
+            wait_for_peer_sync $peer 
+
+            $master set k v 
+            $master expire  k 1000
+            $master expire  k 100
+            assert {[$peer ttl k] > 100}
+        }
+
+        test "PERSIST" {
+            $master PERSIST asdasdasd 
+        }
+    }
+}

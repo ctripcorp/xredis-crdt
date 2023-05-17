@@ -31,7 +31,6 @@ set ::ci_failed_tests {
     ctrip/unit/memefficiency
     ctrip/unit/merge_different_type
 }
-
 set ::all_tests {
     ctrip/integration/bug/hash-datamiss
     ctrip/unit/delay_expire

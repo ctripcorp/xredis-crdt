@@ -126,7 +126,7 @@ proc test_delay_expire {type val_is_num set_func get_func } {
         set master_log [srv 0 stdout]
         $master config set loglevel "debug"
         $master config set non-last-write-delay-expire-time 2000
-            assert_equal [$master config get non-last-write-delay-expire-time] "non-last-write-delay-expire-time 2000"
+        assert_equal [$master config get non-last-write-delay-expire-time] "non-last-write-delay-expire-time 2000"
         start_server {tags {"repl"} overrides {crdt-gid 2} module {crdt.so} } {
             set peer [srv 0 client]
             set peer_host [srv 0 host]

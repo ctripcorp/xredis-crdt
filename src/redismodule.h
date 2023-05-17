@@ -241,6 +241,7 @@ char *REDISMODULE_API_FUNC(RedisModule_StringDMA)(RedisModuleKey *key, size_t *l
 int REDISMODULE_API_FUNC(RedisModule_StringTruncate)(RedisModuleKey *key, size_t newlen);
 mstime_t REDISMODULE_API_FUNC(RedisModule_GetExpire)(RedisModuleKey *key);
 int REDISMODULE_API_FUNC(RedisModule_SetExpire)(RedisModuleKey *key, mstime_t expire);
+int REDISMODULE_API_FUNC(RedisModule_SetExpireAt)(RedisModuleKey *key, mstime_t expire);
 void REDISMODULE_API_FUNC(RedisModule_SaveRobj)(void* rdb, void* value);
 void REDISMODULE_API_FUNC(RedisModule_SaveInt)(void* rdb, int value);
 int REDISMODULE_API_FUNC(RedisModule_ZsetAdd)(RedisModuleKey *key, double score, RedisModuleString *ele, int *flagsptr);
@@ -430,9 +431,9 @@ static int RedisModule_Init(RedisModuleCtx *ctx, const char *name, int ver, int 
     REDISMODULE_GET_API(StringTruncate);
     REDISMODULE_GET_API(GetExpire);
     REDISMODULE_GET_API(SetExpire);
+    REDISMODULE_GET_API(SetExpireAt);
     REDISMODULE_GET_API(SaveRobj);
     REDISMODULE_GET_API(SaveInt);
-    REDISMODULE_GET_API(SetExpire);
     REDISMODULE_GET_API(ZsetAdd);
     REDISMODULE_GET_API(ZsetIncrby);
     REDISMODULE_GET_API(ZsetScore);
