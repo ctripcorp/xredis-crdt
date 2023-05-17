@@ -23,6 +23,12 @@ start_redis {overrides {repl-diskless-sync-delay 1}} {
                     set slaveB_host [srv 0 host]
                     set slaveB_port [srv 0 port]
                     set is_debug 0
+                    if {$is_debug} {
+                        $masterA config set loglevel debug
+                        $masterB config set loglevel debug
+                        $slaveA  config set loglevel debug
+                        $slaveA config set loglevel debug
+                    }
 
                     test "deploy" {
                         assert_equal [$redis_not_crdt PING] PONG

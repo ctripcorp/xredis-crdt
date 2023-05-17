@@ -2139,6 +2139,14 @@ int RM_SetExpire(RedisModuleKey *key, mstime_t expire) {
     }
     return REDISMODULE_OK;
 }
+
+
+int RM_SetExpireAt(RedisModuleKey *key, mstime_t expire) {
+    if (!(key->mode & REDISMODULE_WRITE) || key->value == NULL)
+        return REDISMODULE_ERR;
+    setExpire(key->ctx->client,key->db,key->key,expire);
+    return REDISMODULE_OK;
+}
 int dictSetRobj(RedisModuleKey *key, dict* db, moduleType *mt ,struct CrdtObject* expire) {
     if (expire != NULL) {
         robj *o = createModuleObject(mt,expire);
@@ -4815,6 +4823,7 @@ void moduleRegisterCoreAPI(void) {
     REGISTER_API(StringDMA);
     REGISTER_API(StringTruncate);
     REGISTER_API(SetExpire);
+    REGISTER_API(SetExpireAt);
     REGISTER_API(GetExpire);
     REGISTER_API(ZsetAdd);
     REGISTER_API(ZsetIncrby);
