@@ -1131,11 +1131,9 @@ int isNeedDelayExpire(CrdtDataMethod* method ,sds key, CrdtObject* obj) {
     }
     if (method->getLastGid != NULL) {
         if (method->getLastGid(obj) == crdtServer.crdt_gid) {
-            serverLog(LL_WARNING, "isNeedDelayExpire key %s getLastGid", key);
             return 0;
         } 
     } else if (modGidByKey(key) == crdtServer.crdt_gid) {
-        serverLog(LL_WARNING, "isNeedDelayExpire key %s modGidByKey", key);
         return 0;
     }
     return 1;
