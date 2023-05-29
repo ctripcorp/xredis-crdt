@@ -966,6 +966,106 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
             }
         }
 
+        test "expire and add" {
+            test "string expire and add" {
+                $peer1 del key 
+                after 500
+                assert_equal [$peer1 type key] none
+                assert_equal [$peer2 type key] none
+                $peer1 set key v 
+                $peer1 expire key 2
+                $peer1 peerof $peer2_gid 127.0.0.1 1 
+                $peer2 peerof $peer1_gid 127.0.0.1 1
+                after 2000
+                $peer2 set key v1 
+                assert_equal [$peer1 get key] {}
+                $peer1 peerof $peer2_gid $peer2_host $peer2_port
+                $peer2 peerof $peer1_gid $peer1_host $peer1_port
+                wait_for_peer_sync $peer1 
+                wait_for_peer_sync $peer2 
+                assert_equal [$peer1 get key] v1
+            }
+
+            test "count expire and add" {
+                $peer1 del key 
+                after 500
+                assert_equal [$peer1 type key] none
+                assert_equal [$peer2 type key] none
+                $peer1 incr key 
+                $peer1 expire key 2
+                $peer1 peerof $peer2_gid 127.0.0.1 1 
+                $peer2 peerof $peer1_gid 127.0.0.1 1
+                after 2000
+                $peer2 incrby key 3 
+                assert_equal [$peer1 get key] {}
+                $peer1 peerof $peer2_gid $peer2_host $peer2_port
+                $peer2 peerof $peer1_gid $peer1_host $peer1_port
+                wait_for_peer_sync $peer1 
+                wait_for_peer_sync $peer2 
+                assert_equal [$peer1 get key] 3
+            }
+
+            test "hash expire and add" {
+                $peer1 del key 
+                after 500
+                assert_equal [$peer1 type key] none
+                assert_equal [$peer2 type key] none
+                $peer1 hset key k1 v1 
+                $peer1 expire key 2
+                $peer1 peerof $peer2_gid 127.0.0.1 1 
+                $peer2 peerof $peer1_gid 127.0.0.1 1
+                after 2000
+                $peer2 hset key k2 v2 
+                assert_equal [$peer1 hget key k1] {}
+                assert_equal [$peer1 hget key k2] {}
+                $peer1 peerof $peer2_gid $peer2_host $peer2_port
+                $peer2 peerof $peer1_gid $peer1_host $peer1_port
+                wait_for_peer_sync $peer1 
+                wait_for_peer_sync $peer2 
+                assert_equal [$peer1 hget key k2] v2
+            }
+
+            test "set expire and add" {
+                $peer1 del key 
+                after 500
+                assert_equal [$peer1 type key] none
+                assert_equal [$peer2 type key] none
+                $peer1 sadd key k1  
+                $peer1 expire key 2
+                $peer1 peerof $peer2_gid 127.0.0.1 1 
+                $peer2 peerof $peer1_gid 127.0.0.1 1
+                after 2000
+                $peer2 sadd key k2  
+                assert_equal [$peer1 SISMEMBER key k1] 0
+                assert_equal [$peer1 SISMEMBER key k2] 0
+                $peer1 peerof $peer2_gid $peer2_host $peer2_port
+                $peer2 peerof $peer1_gid $peer1_host $peer1_port
+                wait_for_peer_sync $peer1 
+                wait_for_peer_sync $peer2 
+                assert_equal [$peer1 SISMEMBER key k2] 1
+            }
+
+            test "zset expire and add" {
+                $peer1 del key 
+                after 500
+                assert_equal [$peer1 type key] none
+                assert_equal [$peer2 type key] none
+                $peer1 zadd key 10 k1  
+                $peer1 expire key 2
+                $peer1 peerof $peer2_gid 127.0.0.1 1 
+                $peer2 peerof $peer1_gid 127.0.0.1 1
+                after 2000
+                $peer2 zadd key 20 k2  
+                assert_equal [$peer1 zscore key k1] {}
+                assert_equal [$peer1 zscore key k2] {}
+                $peer1 peerof $peer2_gid $peer2_host $peer2_port
+                $peer2 peerof $peer1_gid $peer1_host $peer1_port
+                wait_for_peer_sync $peer1 
+                wait_for_peer_sync $peer2 
+                assert_equal [$peer1 zscore key k2] 20
+            }
+        }
+
     }
 }
 

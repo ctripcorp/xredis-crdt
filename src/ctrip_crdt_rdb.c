@@ -688,6 +688,7 @@ int rdbLoadCrdtData(rio* rdb, redisDb* db, long long current_expire_time, LoadCr
     moduleKey = createModuleKey(db, key, REDISMODULE_WRITE | REDISMODULE_TOMBSTONE | REDISMODULE_NO_TOUCH_KEY, NULL, NULL);
     if(load(db, key, rdb, moduleKey) == C_ERR) goto eoferr;
     //use dictFind function for compatibility(version1.0.3) when rdb has expire but no data
+    serverLog(LL_WARNING, "key(%s) - timespace %lld", (sds)key->ptr, current_expire_time);
     if(dictFind(db->dict,key->ptr) != NULL && current_expire_time != -1) {
         setExpire(NULL, db, key, current_expire_time);
     }
