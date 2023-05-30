@@ -1118,16 +1118,17 @@ int modGidByKey(sds key) {
     return get_gid(*c) ;
 }
 
+
+/**
+ * 0 direct execution
+ * 1 delay execution
+ * -1 error (unexecution)
+*/
 int isNeedDelayExpire(CrdtDataMethod* method ,sds key, CrdtObject* obj) {
     if (server.current_client != NULL ) {
-        if (!(server.current_client->flags & CLIENT_CRDT_MASTER)) {
-            //user command (undelay expire)
-            return 0;
-        } else {
-            //sync command undel  
-            //bottom line plan: delay expire
-            return 1;
-        }
+        //non sync command
+        serverAssert(!(server.current_client->flags & CLIENT_CRDT_MASTER));
+        return 0;
     }
     if (method->getLastGid != NULL) {
         if (method->getLastGid(obj) == crdtServer.crdt_gid) {
@@ -1140,6 +1141,11 @@ int isNeedDelayExpire(CrdtDataMethod* method ,sds key, CrdtObject* obj) {
 }
 int crdtPropagateExpire(redisDb *db, robj *key, int lazy, long long expireTime) {
     void *mk = NULL;
+    if (server.current_client != NULL && 
+        server.current_client->flags & CLIENT_CRDT_MASTER) {
+        //sync command dont expire
+        return C_ERR;
+    }
     dictEntry *entry = dictFind(db->dict, key->ptr);
     if(entry != NULL) {
          robj *val = dictGetVal(entry);
