@@ -869,8 +869,11 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
                 assert_equal [$peer2 type key] none
                 $peer1 set key v 
                 $peer1 expire key 2
-                after 2000
-                assert_equal [$peer1 get key] {}
+                wait_for_condition 21 100 {
+                    [$peer1 get key] == {}
+                } else {
+                    fail "string expire error"
+                }
                 $peer1 set key v1
                 after 500
                 assert_equal [$peer1 get key] v1
@@ -883,7 +886,11 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
                 assert_equal [$peer1 type key] none
                 assert_equal [$peer2 type key] none
                 $peer1 setex key 2 v 
-                after 2000
+                wait_for_condition 21 100 {
+                    [$peer1 get key] == {}
+                } else {
+                    fail "string2 expire error"
+                }
                 assert_equal [$peer1 get key] {}
                 $peer1 set key v1
                 after 500
@@ -898,8 +905,11 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
                 assert_equal [$peer2 type key] none
                 $peer1 hset key k v 
                 $peer1 expire key 2
-                after 2000
-                assert_equal [$peer1 hget key k] {}
+                wait_for_condition 21 100 {
+                    [$peer1 hget key k] == {}
+                } else {
+                    fail "hash expire error"
+                }
                 $peer1 hset key k v1 
                 after 500
                 assert_equal [$peer1 hget key k] v1 
@@ -913,8 +923,11 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
                 assert_equal [$peer2 type key] none
                 $peer1 sadd key k  
                 $peer1 expire key 2
-                after 2000
-                assert_equal [$peer1 SISMEMBER key k] 0
+                wait_for_condition 21 100 {
+                    [$peer1 SISMEMBER key k] == 0
+                } else {
+                    fail "set expire error"
+                }
                 $peer1 sadd key k1
                 after 500
                 assert_equal [$peer1 SISMEMBER key k1] 1
@@ -928,8 +941,11 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
                 assert_equal [$peer2 type key] none
                 $peer1 zadd key 10 k  
                 $peer1 expire key 2
-                after 2000
-                assert_equal [$peer1 zscore key k] ""
+                wait_for_condition 21 100 {
+                    [$peer1 zscore key k] == {}
+                } else {
+                    fail "zset expire error"
+                }
                 $peer1 zadd key 10 k1
                 after 500
                 assert_equal [$peer1 zscore key k1] 10
@@ -943,8 +959,11 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
                 assert_equal [$peer2 type key] none
                 $peer1 set key 10  
                 $peer1 expire key 2
-                after 2000
-                assert_equal [$peer1 get key] {}
+                wait_for_condition 21 100 {
+                    [$peer1 get key] == {}
+                } else {
+                    fail "count expire error"
+                }
                 $peer1 set key 20
                 after 500
                 assert_equal [$peer1 get key] 20
@@ -957,8 +976,11 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
                 assert_equal [$peer1 type key] none
                 assert_equal [$peer2 type key] none
                 $peer1 setex key 2 10  
-                after 2000
-                assert_equal [$peer1 get key] {}
+                wait_for_condition 21 100 {
+                    [$peer1 get key] == {}
+                } else {
+                    fail "count2 expire error"
+                }
                 $peer1 set key 20
                 after 500
                 assert_equal [$peer1 get key] 20
@@ -1091,6 +1113,11 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
             $master set k v 
             $master expire  k 1000
             $master expire  k 100
+            wait_for_condition 10 100 {
+                [$peer get k] == "v"
+            } else {
+                fail "sync fail"
+            }
             assert {[$peer ttl k] > 100}
         }
 
