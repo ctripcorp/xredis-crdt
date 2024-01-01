@@ -784,33 +784,52 @@ void updateDictResizePolicy(void) {
 }
 
 /* ======================= Cron: called every 100 ms ======================== */
-
 /* Add a sample to the operations per second array of samples. */
-void trackInstantaneousMetric(int metric, long long current_reading) {
-    long long t = mstime() - server.inst_metric[metric].last_sample_time;
+void baseTrackInstantaneousMetric(struct redisServer *srv, int metric, long long current_reading) {
+    long long t = mstime() - srv->inst_metric[metric].last_sample_time;
     long long ops = current_reading -
-                    server.inst_metric[metric].last_sample_count;
+                    srv->inst_metric[metric].last_sample_count;
     long long ops_sec;
 
     ops_sec = t > 0 ? (ops*1000/t) : 0;
 
-    server.inst_metric[metric].samples[server.inst_metric[metric].idx] =
+    srv->inst_metric[metric].samples[server.inst_metric[metric].idx] =
         ops_sec;
-    server.inst_metric[metric].idx++;
-    server.inst_metric[metric].idx %= STATS_METRIC_SAMPLES;
-    server.inst_metric[metric].last_sample_time = mstime();
-    server.inst_metric[metric].last_sample_count = current_reading;
+    srv->inst_metric[metric].idx++;
+    srv->inst_metric[metric].idx %= STATS_METRIC_SAMPLES;
+    srv->inst_metric[metric].last_sample_time = mstime();
+    srv->inst_metric[metric].last_sample_count = current_reading;
 }
 
+/* Add a sample to the operations per second array of samples. */
+void trackInstantaneousMetric(int metric, long long current_reading) {
+    baseTrackInstantaneousMetric(&server, metric, current_reading);
+}
+
+void crdtTrackInstantaneousMetric(int metric, long long current_reading) {
+    baseTrackInstantaneousMetric(&crdtServer, metric, current_reading);
+}
+
+
 /* Return the mean of all the samples. */
-long long getInstantaneousMetric(int metric) {
+long long getBaseInstantaneousMetric(struct redisServer *srv, int metric) {
     int j;
     long long sum = 0;
 
     for (j = 0; j < STATS_METRIC_SAMPLES; j++)
-        sum += server.inst_metric[metric].samples[j];
+        sum += srv->inst_metric[metric].samples[j];
     return sum / STATS_METRIC_SAMPLES;
 }
+
+/* Return the mean of all the samples. */
+long long getInstantaneousMetric(int metric) {
+    return getBaseInstantaneousMetric(&server, metric);
+}
+
+long long getCrdtInstantaneousMetric(int metric) {
+    return getBaseInstantaneousMetric(&crdtServer, metric);
+}
+
 long long getQps() {
     return getInstantaneousMetric(STATS_METRIC_COMMAND);
 }
@@ -1018,6 +1037,7 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
                 server.stat_net_input_bytes);
         trackInstantaneousMetric(STATS_METRIC_NET_OUTPUT,
                 server.stat_net_output_bytes);
+        crdtTrackInstantaneousMetric(STATS_METRIC_GC, crdtServer.stat_gc_hits);
     }
 
     /* We have just LRU_BITS bits per object for LRU information.
@@ -3491,7 +3511,8 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                             "crdt_conflict_op:modify=%lld,merge=%lld\r\n"
                             "evicted_tombstones:%lld\r\n"
                             "stat_gc_hits:%lld\r\n"
-                            "stat_gc_misses:%lld\r\n",
+                            "stat_gc_misses:%lld\r\n"
+                            "gc_per_sec:%lld\r\n",
                             crdtServer.stat_sync_full,
                             crdtServer.stat_sync_backstream,
                             crdtServer.stat_sync_partial_ok,
@@ -3506,7 +3527,8 @@ sds genRedisInfoString(char *section, struct redisServer *srv) {
                             crdtServer.crdt_merge_conflict,
                             crdtServer.stat_evictedtombstones,
                             crdtServer.stat_gc_hits,
-                            crdtServer.stat_gc_misses);
+                            crdtServer.stat_gc_misses,
+                            getCrdtInstantaneousMetric(STATS_METRIC_GC));
     }
 
     /* CRDT Replication */

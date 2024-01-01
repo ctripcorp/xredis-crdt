@@ -341,8 +341,10 @@ void Gc(int type, unsigned int *current_db,int *timelimit_exit, long long *last_
 
                 if ((de = dictGetRandomKey(d)) == NULL) break;
 
-                if (activeGcCycleTryGc(d,de)) deleted++;
-
+                if (activeGcCycleTryGc(d,de)) {
+                    deleted++;
+                    crdtServer.stat_numcommands++;
+                }
             }
 
             /* We can't block forever here even if there are many keys to
@@ -357,7 +359,7 @@ void Gc(int type, unsigned int *current_db,int *timelimit_exit, long long *last_
             }
             /* We don't repeat the cycle if there are less than 25% of keys
              * found deleted in the current DB. */
-        } while (deleted > ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP/4);
+        } while (deleted > ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP/10);
     }
     elapsed = ustime()-start;
     latencyAddSampleIfNeeded((char *)name,elapsed/1000);

@@ -185,6 +185,7 @@ long long get_min_backstream_vcu();
 #define STATS_METRIC_COMMAND 0      /* Number of commands executed. */
 #define STATS_METRIC_NET_INPUT 1    /* Bytes read to network .*/
 #define STATS_METRIC_NET_OUTPUT 2   /* Bytes written to network. */
+#define STATS_METRIC_GC 0    /* Number of tombstone executed */
 #define STATS_METRIC_COUNT 3
 
 /* Protocol and I/O related defines */
