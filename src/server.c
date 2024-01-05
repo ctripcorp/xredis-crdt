@@ -1577,6 +1577,9 @@ void initServerConfig(struct redisServer *srv) {
     srv->offline_peer_set = 0;
     srv->peer_set = 0;
     srv->non_last_write_delay_expire_time = CONFIG_DEFAULT_NON_LAST_WRITE_DELAY_EXPIRE_TIME; // 15min
+    srv->active_gc_cycle_non_gc_perc = CONFIG_DEFAULT_ACTIVE_GC_CYCLE_NON_GC_PERC;
+    srv->active_gc_cycle_lookups_per_loop = ACTIVE_GC_CYCLE_LOOKUPS_PER_LOOP;
+    srv->active_gc_cycle_slow_time_perc = ACTIVE_GC_CYCLE_SLOW_TIME_PERC;
     unsigned int lruclock = getLRUClock();
     atomicSet(srv->lruclock,lruclock);
     resetServerSaveParams(srv);

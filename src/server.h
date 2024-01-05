@@ -171,10 +171,18 @@ long long get_min_backstream_vcu();
 #define CONFIG_DEFAULT_GID -1
 #define CONFIG_DEFAULT_VECTORCLOCK_UNIT -1
 #define CONFIG_DEFAULT_NON_LAST_WRITE_DELAY_EXPIRE_TIME (15*60*1000) /* delay expire 15min */
+#define CONFIG_DEFAULT_ACTIVE_GC_CYCLE_NON_GC_PERC 25
+#define CONFIG_MAX_ACTIVE_GC_CYCLE_NON_GC_PERC 100
+#define CONFIG_MIN_ACTIVE_GC_CYCLE_NON_GC_PERC 0
+#define CONFIG_MAX_ACTIVE_GC_CYCLE_SLOW_TIME_PERC 100
+#define CONFIG_MIN_ACTIVE_GC_CYCLE_SLOW_TIME_PERC 0
 
 #define ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP 20 /* Loopkups per loop. */
 #define ACTIVE_EXPIRE_CYCLE_FAST_DURATION 1000 /* Microseconds */
 #define ACTIVE_EXPIRE_CYCLE_SLOW_TIME_PERC 25 /* CPU max % for keys collection */
+#define ACTIVE_GC_CYCLE_LOOKUPS_PER_LOOP 20 /* Loopkups per loop. */
+#define ACTIVE_GC_CYCLE_FAST_DURATION 1000 /* Microseconds */
+#define ACTIVE_GC_CYCLE_SLOW_TIME_PERC 25 /* CPU max % for keys collection */
 #define ACTIVE_EXPIRE_CYCLE_SLOW 0
 #define ACTIVE_EXPIRE_CYCLE_FAST 1
 #define ACTIVE_GC_CYCLE_SLOW 0
@@ -1329,7 +1337,10 @@ struct redisServer {
     int restart_lazy_peerof_time; 
     long long stat_gc_hits;   /* Number of successful gc */
     long long stat_gc_misses; /* Number of failed gc  */
-    int non_last_write_delay_expire_time;  /* last write gid expire=>del, other gid after N milliseconds of expire */
+    int non_last_write_delay_expire_time;  /* last write gid expire=>del, other gid after N milliseconds of expire */     
+    int active_gc_cycle_lookups_per_loop;  /* gc Loopkups per loop. */
+    int active_gc_cycle_slow_time_perc;   /* gc CPU max % for keys collection */
+    int active_gc_cycle_non_gc_perc;  /* We don't repeat the cycle if there are less than max % of keys*/
 };
 
 typedef struct pubsubPattern {
