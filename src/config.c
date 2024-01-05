@@ -814,7 +814,17 @@ void loadServerConfigFromString(char *config) {
             }
         } else if(!strcasecmp(argv[0], "dict-expand-max-idle-size")) {
             setDictExpandMaxIdle(atoll(argv[1]));
-        }else {
+        } else if (!strcasecmp(argv[0],"active-gc-cycle-lookups-per-loop") && argc == 2) {
+            server.active_gc_cycle_lookups_per_loop = atoi(argv[1]);
+        } else if (!strcasecmp(argv[0],"active-gc-cycle-slow-time-perc") && argc == 2) {
+            server.active_gc_cycle_slow_time_perc = atoi(argv[1]);
+            if (server.active_gc_cycle_slow_time_perc > CONFIG_MAX_ACTIVE_GC_CYCLE_SLOW_TIME_PERC) server.active_gc_cycle_slow_time_perc = CONFIG_MAX_ACTIVE_GC_CYCLE_SLOW_TIME_PERC;
+            if (server.active_gc_cycle_slow_time_perc < CONFIG_MIN_ACTIVE_GC_CYCLE_SLOW_TIME_PERC) server.active_gc_cycle_slow_time_perc = CONFIG_MIN_ACTIVE_GC_CYCLE_SLOW_TIME_PERC;
+        } else if (!strcasecmp(argv[0],"active-gc-cycle-non-gc-perc") && argc == 2) {
+            server.active_gc_cycle_non_gc_perc = atoi(argv[1]);
+            if (server.active_gc_cycle_non_gc_perc > CONFIG_MAX_ACTIVE_GC_CYCLE_NON_GC_PERC) server.active_gc_cycle_non_gc_perc = CONFIG_MAX_ACTIVE_GC_CYCLE_NON_GC_PERC;
+            if (server.active_gc_cycle_non_gc_perc < CONFIG_MIN_ACTIVE_GC_CYCLE_NON_GC_PERC) server.active_gc_cycle_non_gc_perc = CONFIG_MIN_ACTIVE_GC_CYCLE_NON_GC_PERC;
+        } else {
             err = "Bad directive or wrong number of arguments"; goto loaderr;
         }
         sdsfreesplitres(argv,argc);
@@ -1226,7 +1236,15 @@ void configSetCommand(client *c, struct redisServer *srv) {
             disableWatchdog();
     } config_set_numerical_field(
         "non-last-write-delay-expire-time", srv->non_last_write_delay_expire_time, 0, LLONG_MAX) {
-
+    } config_set_numerical_field(
+        "active-gc-cycle-lookups-per-loop", srv->active_gc_cycle_lookups_per_loop, 0, LLONG_MAX) {
+    } config_set_numerical_field(
+        "active-gc-cycle-slow-time-perc", srv->active_gc_cycle_slow_time_perc, 0, LLONG_MAX) {
+        if (srv->active_gc_cycle_slow_time_perc < CONFIG_MIN_ACTIVE_GC_CYCLE_SLOW_TIME_PERC) srv->active_gc_cycle_slow_time_perc = CONFIG_MIN_ACTIVE_GC_CYCLE_SLOW_TIME_PERC;
+        if (srv->active_gc_cycle_slow_time_perc > CONFIG_MAX_ACTIVE_GC_CYCLE_SLOW_TIME_PERC) srv->active_gc_cycle_slow_time_perc = CONFIG_MAX_ACTIVE_GC_CYCLE_SLOW_TIME_PERC;
+    } config_set_numerical_field("active-gc-cycle-non-gc-perc", srv->active_gc_cycle_non_gc_perc, 0, LLONG_MAX) {
+        if (srv->active_gc_cycle_non_gc_perc < CONFIG_MIN_ACTIVE_GC_CYCLE_NON_GC_PERC) srv->active_gc_cycle_non_gc_perc = CONFIG_MIN_ACTIVE_GC_CYCLE_NON_GC_PERC;
+        if (srv->active_gc_cycle_non_gc_perc > CONFIG_MAX_ACTIVE_GC_CYCLE_NON_GC_PERC) srv->active_gc_cycle_non_gc_perc = CONFIG_MAX_ACTIVE_GC_CYCLE_NON_GC_PERC;
     /* Memory fields.
      * config_set_memory_field(name,var) */
     } config_set_memory_field("maxmemory",srv->maxmemory) {
@@ -1392,6 +1410,9 @@ void configGetCommand(client *c, struct redisServer *srv) {
     config_get_numerical_field("dict-expand-max-idle-size", getDictExpandMaxIdle());
     config_get_numerical_field("crdt-offline-gid",srv->offline_peer_set);
     config_get_numerical_field("non-last-write-delay-expire-time",srv->non_last_write_delay_expire_time);
+    config_get_numerical_field("active-gc-cycle-lookups-per-loop",srv->active_gc_cycle_lookups_per_loop);
+    config_get_numerical_field("active-gc-cycle-slow-time-perc",srv->active_gc_cycle_slow_time_perc);
+    config_get_numerical_field("active-gc-cycle-non-gc-perc",srv->active_gc_cycle_non_gc_perc);
     /* Bool (yes/no) values */
     config_get_bool_field("cluster-require-full-coverage",
             srv->cluster_require_full_coverage);
@@ -2246,6 +2267,9 @@ int rewriteConfig(char *path) {
     rewriteConfigNumericalOption(state,"non-last-write-delay-expire-time",server.non_last_write_delay_expire_time,CONFIG_DEFAULT_NON_LAST_WRITE_DELAY_EXPIRE_TIME);
     rewriteConfigNameSpaceOption(state);
     rewriteConfigVectorUnit(state);
+    rewriteConfigNumericalOption(state,"active-gc-cycle-non-gc-perc",server.active_gc_cycle_non_gc_perc,CONFIG_DEFAULT_ACTIVE_GC_CYCLE_NON_GC_PERC);
+    rewriteConfigNumericalOption(state,"active-gc-cycle-lookups-per-loop",server.active_gc_cycle_lookups_per_loop, ACTIVE_GC_CYCLE_LOOKUPS_PER_LOOP);
+    rewriteConfigNumericalOption(state,"active-gc-cycle-slow-time-perc",server.active_gc_cycle_slow_time_perc, ACTIVE_GC_CYCLE_SLOW_TIME_PERC);
     
     /* Rewrite Sentinel config if in Sentinel mode. */
     if (server.sentinel_mode) rewriteConfigSentinelOption(state);

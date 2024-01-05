@@ -257,7 +257,7 @@ int activeGcCycleTryGc(dict *d, dictEntry *de) {
  *
  * If type is ACTIVE_EXPIRE_CYCLE_SLOW, that normal expire cycle is
  * executed, where the time limit is a percentage of the REDIS_HZ period
- * as specified by the ACTIVE_EXPIRE_CYCLE_SLOW_TIME_PERC define. */
+ * as specified by the ACTIVE_GC_CYCLE_SLOW_TIME_PERC define. */
 
 
 typedef dict* (*getDictFunc)(redisDb *db);
@@ -278,7 +278,7 @@ void Gc(int type, unsigned int *current_db,int *timelimit_exit, long long *last_
          * for time limt. Also don't repeat a fast cycle for the same period
          * as the fast cycle total duration itself. */
         if (!*timelimit_exit) return;
-        if (start < *last_fast_cycle + ACTIVE_EXPIRE_CYCLE_FAST_DURATION*2) return;
+        if (start < *last_fast_cycle + ACTIVE_GC_CYCLE_FAST_DURATION*2) return;
         *last_fast_cycle = start;
     }
     /* We usually should test CRON_DBS_PER_CALL per iteration, with
@@ -291,16 +291,16 @@ void Gc(int type, unsigned int *current_db,int *timelimit_exit, long long *last_
     if (dbs_per_call > server.dbnum || *timelimit_exit)
         dbs_per_call = server.dbnum;
 
-    /* We can use at max ACTIVE_EXPIRE_CYCLE_SLOW_TIME_PERC percentage of CPU time
+    /* We can use at max ACTIVE_GC_CYCLE_SLOW_TIME_PERC percentage of CPU time
      * per iteration. Since this function gets called with a frequency of
      * server.hz times per second, the following is the max amount of
      * microseconds we can spend in this function. */
-    timelimit = 1000000*ACTIVE_EXPIRE_CYCLE_SLOW_TIME_PERC/server.hz/100;
+    timelimit = 1000000*server.active_gc_cycle_slow_time_perc/server.hz/100;
     *timelimit_exit = 0;
     if (timelimit <= 0) timelimit = 1;
 
     if (type == ACTIVE_GC_CYCLE_FAST)
-        timelimit = ACTIVE_EXPIRE_CYCLE_FAST_DURATION; /* in microseconds. */
+        timelimit = ACTIVE_GC_CYCLE_FAST_DURATION; /* in microseconds. */
 
     for (j = 0; j < dbs_per_call && *timelimit_exit == 0; j++) {
         int deleted;
@@ -333,8 +333,8 @@ void Gc(int type, unsigned int *current_db,int *timelimit_exit, long long *last_
              * with an delete set, checking for deleted ones. */
             deleted = 0;
 
-            if (num > ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP)
-                num = ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP;
+            if (num > server.active_gc_cycle_lookups_per_loop)
+                num = server.active_gc_cycle_lookups_per_loop;
 
             while (num--) {
                 dictEntry *de;
@@ -355,9 +355,9 @@ void Gc(int type, unsigned int *current_db,int *timelimit_exit, long long *last_
                     break;
                 }
             }
-            /* We don't repeat the cycle if there are less than 25% of keys
+            /* We don't repeat the cycle if there are less than {server.non_gc_perc}% of keys
              * found deleted in the current DB. */
-        } while (deleted > ACTIVE_EXPIRE_CYCLE_LOOKUPS_PER_LOOP/4);
+        } while (deleted > server.active_gc_cycle_lookups_per_loop * server.active_gc_cycle_non_gc_perc/100 );
     }
     elapsed = ustime()-start;
     latencyAddSampleIfNeeded((char *)name,elapsed/1000);
