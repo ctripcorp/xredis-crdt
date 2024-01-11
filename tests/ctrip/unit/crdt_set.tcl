@@ -547,3 +547,68 @@ start_server {tags {"crdt-set"} overrides {crdt-gid 1} config {crdt.conf} module
     
 }
 
+start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
+    set master [srv 0 client]
+    set master_host [srv 0 host]
+    set master_port [srv 0 port]
+    set master_log [srv 0 stdout]
+    $master config set hz 100
+    
+    start_server {tags {"repl"} overrides {crdt-gid 2} module {crdt.so} } {
+        set peer [srv 0 client]
+        set peer_host [srv 0 host]
+        set peer_port [srv 0 port]
+        set peer_log [srv 0 stdout]
+        $peer config set hz 100
+        $peer config crdt.set repl-timeout 120
+        $peer peerof 1 $master_host $master_port
+        $master peerof 2 $peer_host $peer_port
+        wait_for_peer_sync $peer 
+        wait_for_peer_sync $master
+        set peer_data_info [$peer crdt.datainfo s]
+        set master_data_info [$master crdt.datainfo s]
+        $master srem s f 
+        if {[$master tombstonesize] == 1} {
+            #only test gc old null tombstone
+            set try 10
+            while  {$try > 0} {
+                if {[$master tombstonesize] == 0} {
+                    break;
+                }
+                after 500
+                set try [expr {$try-1}]
+            }
+            assert {$try > 0}
+        } else {
+            assert {[$peer crdt.datainfo s] == $peer_data_info}
+            assert {[$master crdt.datainfo s] == $master_data_info}
+        }
+
+        $master sadd s a 
+        while 1 {
+            if {[$peer sismember s a] == 1} {
+                break;
+            }
+        }
+
+        set peer_data_info [$peer crdt.datainfo s]
+        set master_data_info [$master crdt.datainfo s]
+        $master crdt.debug_gc set 0
+        $master srem s f 
+        if {[$master tombstonesize] == 1} {
+            #only test gc old null tombstone
+            set try 10
+            while  {$try > 0} {
+                if {[$master tombstonesize] == 0} {
+                    break;
+                }
+                after 500
+                set try [expr {$try-1}]
+            }
+            assert {$try > 0}
+        } else {
+            assert {[$peer crdt.datainfo s] == $peer_data_info}
+            assert {[$master crdt.datainfo s] == $master_data_info}
+        }
+    }
+}
