@@ -571,9 +571,11 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
         $peer peerof 1 $master_host $master_port
         $master peerof 2 $peer_host $peer_port
         wait_for_peer_sync $peer 
-        wait_for_peer_sync $master 
+        wait_for_peer_sync $master
+        set peer_ovc [crdt_repl $peer ovc] 
         $master hdel h k
         if {[$master tombstonesize] == 1} {
+            #only test gc old null tombstone
             set try 10
             while  {$try > 0} {
                 if {[$master tombstonesize] == 0} {
@@ -583,12 +585,21 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
                 set try [expr {$try-1}]
             }
             assert {$try > 0}
+        } else {
+            assert {[crdt_repl $peer ovc] == $peer_ovc}
         }
         
 
         $master hset h k v 
+        while 1 {
+            if {[$peer hget h k] == "v"} {
+                break;
+            }
+        }
+        set peer_ovc [crdt_repl $peer ovc]
         $master hdel h k1 
         if {[$master tombstonesize] == 1} {
+            #only test gc old null tombstone
             set try 10
             while  {$try > 0} {
                 if {[$master tombstonesize] == 0} {
@@ -598,6 +609,8 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
                 set try [expr {$try-1}]
             }
             assert {$try > 0}
+        } elseif {[$master tombstonesize] == 0} {
+            assert {[crdt_repl $peer ovc] == $peer_ovc}
         }
     }
 }
