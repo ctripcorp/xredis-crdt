@@ -16,7 +16,8 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
         $master peerof 2 $peer_host $peer_port
         wait_for_peer_sync $peer 
         wait_for_peer_sync $master
-        set peer_ovc [crdt_repl $peer ovc] 
+        set peer_data_info [$peer crdt.datainfo z]
+        set master_data_info [$master crdt.datainfo z]
         $master zrem z f 
         if {[$master tombstonesize] == 1} {
             #only test gc old null tombstone
@@ -30,9 +31,27 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
             }
             assert {$try > 0}
         } else {
-            assert {[crdt_repl $peer ovc] == $peer_ovc}
+            assert {[$peer crdt.datainfo z] == $peer_data_info}
+            assert {[$master crdt.datainfo z] == $master_data_info}
         }
         
+        assert_equal [$master zremrangebyrank z 10 -1] 0
+        assert {[$master crdt.datainfo z] == $master_data_info}
+        after 1000
+        assert {[$peer crdt.datainfo z] == $peer_data_info}
+
+
+        assert_equal [$master zremrangebyscore z 1 11] 0
+        assert {[$master crdt.datainfo z] == $master_data_info}
+        after 1000
+        assert {[$peer crdt.datainfo z] == $peer_data_info}
+
+       
+        assert_equal [$master zremrangebylex z "\[a" "\[z"] 0
+        assert {[$master crdt.datainfo z] == $master_data_info}
+        after 1000
+        assert {[$peer crdt.datainfo z] == $peer_data_info}
+        #add zset key
 
         $master zadd z 10 f 
         while 1 {
@@ -40,7 +59,8 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
                 break;
             }
         }
-        set peer_ovc [crdt_repl $peer ovc]
+        set peer_data_info [$peer crdt.datainfo z]
+        set master_data_info [$master crdt.datainfo z]
         $master zrem z f1 
         if {[$master tombstonesize] == 1} {
             #only test gc old null tombstone
@@ -54,7 +74,28 @@ start_server {tags {"repl"} overrides {crdt-gid 1} module {crdt.so} } {
             }
             assert {$try > 0}
         } elseif {[$master tombstonesize] == 0} {
-            assert {[crdt_repl $peer ovc] == $peer_ovc}
+            assert {[$peer crdt.datainfo z] == $peer_data_info}
+            assert {[$master crdt.datainfo z] == $master_data_info}
         }
+
+        $master crdt.debug_gc zset 0
+        assert_equal [$master zremrangebyrank z 1 -1] 0
+        
+        assert_equal [$master tombstonesize] 0
+        assert {[$master crdt.datainfo z] == $master_data_info}
+        after 1000
+        assert {[$peer crdt.datainfo z] == $peer_data_info}
+
+        assert_equal [$master zremrangebyscore z 11 15] 0
+        assert_equal [$master tombstonesize] 0
+        assert {$master_data_info == [$master crdt.datainfo z]}
+        after 1000
+        assert {[$peer crdt.datainfo z] == $peer_data_info}
+        
+        assert_equal [$master zremrangebylex z "\[g" "\[z"] 0
+        assert_equal [$master tombstonesize] 0
+        assert {[$master crdt.datainfo z] == $master_data_info}
+        after 1000
+        assert {[$peer crdt.datainfo z] == $peer_data_info}
     }
 }
