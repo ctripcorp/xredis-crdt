@@ -10,6 +10,11 @@ HIGH:     There is a critical bug that may affect a subset of users. Upgrade!
 CRITICAL: There is a critical bug affecting MOST USERS. Upgrade ASAP.
 --------------------------------------------------------------------------------
 ================================================================================
+XRedis-CRDT 1.0.20 Released Thu Jan 25 11:13:23 CST 2024
+================================================================================
+Upgrade urgency HIGH:Compared with the previous version, there are some improvements, mainly:
+* [hotfix] Use the hdel command to delete non-existent keys. The generated tombstone cannot be gc
+================================================================================
 XRedis-CRDT 1.0.19 Released Tue May 30 20:29:27 CST 2023
 ================================================================================
 Upgrade urgency HIGH: Compared with the previous version, there are some improvements, mainly:
