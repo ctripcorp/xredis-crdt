@@ -415,6 +415,11 @@ start_server {tags {"string"} config {crdt.conf} overrides {crdt-gid 1 repl-disk
         assert {$ttl <= 10 && $ttl > 5}
     }
 
+    test {"setex time error"} {
+        catch { r setex key -1000 value } error
+        set _ $error
+    } {*ERR invalid expire time in set*}
+
     # test {GETRANGE with huge ranges, Github issue #1844} {
     #     r set foo bar
     #     r getrange foo 0 4294967297
