@@ -10,6 +10,10 @@ HIGH:     There is a critical bug that may affect a subset of users. Upgrade!
 CRITICAL: There is a critical bug affecting MOST USERS. Upgrade ASAP.
 --------------------------------------------------------------------------------
 ================================================================================
+XRedis-CRDT 1.0.21 Released Mon Apr  1 08:26:47 CST 2024
+================================================================================
+* [hotfix] Fixed the problem of returning an error when the time is a negative number in the setex command
+================================================================================
 XRedis-CRDT 1.0.20 Released Thu Jan 25 11:13:23 CST 2024
 ================================================================================
 Upgrade urgency HIGH:Compared with the previous version, there are some improvements, mainly:
