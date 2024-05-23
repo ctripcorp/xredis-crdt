@@ -32,6 +32,7 @@ set ::ci_failed_tests {
     ctrip/unit/merge_different_type
 }
 set ::all_tests {
+    ctrip/unit/xpipe_appiler
     ctrip/integration/bug/hash-datamiss
     ctrip/unit/delay_expire
     ctrip/unit/offline_peer
