@@ -10,7 +10,10 @@ HIGH:     There is a critical bug that may affect a subset of users. Upgrade!
 CRITICAL: There is a critical bug affecting MOST USERS. Upgrade ASAP.
 --------------------------------------------------------------------------------
 ================================================================================
-XRedis-CRDT 1.0.21 Released Mon Apr  1 08:26:47 CST 2024
+
+================================================================================
+XRedis-CRDT 1.0.22 Released Sun Jun 23 10:32:40 AM CST 2024
+* [feature] crdt.zincrby, crdt.counter add protocol attributes (data results) to support migration of crdt data to ordinary redis
 ================================================================================
 * [hotfix] Fixed the problem of returning an error when the time is a negative number in the setex command
 ================================================================================
